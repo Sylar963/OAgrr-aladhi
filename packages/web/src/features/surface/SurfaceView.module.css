@@ -102,7 +102,7 @@
   font-size: 12px;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .view {
     padding: var(--space-3);
   }

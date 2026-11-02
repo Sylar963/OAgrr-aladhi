@@ -301,3 +301,15 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+/* Keeps a value like -12.3% from being cut by its equal-width column on the narrowest phones. */
+@media (max-width: 389px) {
+  .side {
+    padding-inline: 5px;
+  }
+
+  .sideRow {
+    grid-template-columns: minmax(0, 1fr) minmax(max-content, 1fr) minmax(0, 1fr);
+    gap: 2px;
+  }
+}

@@ -395,7 +395,7 @@ function scannerVenues(venues: string[]): VenueId[] {
 }
 
 function formatQuantity(value: number): string {
-  return value >= 100 ? value.toFixed(0) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return value >= 100 ? value.toFixed(0) : value.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
 const HEDGE_STORAGE_KEY = 'alpha-put-hedge-v1';
@@ -907,7 +907,7 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
             <div className={styles.presetRow}>
               {PREMIUM_PRESETS.map((value) => (
                 <button type="button" key={value} data-active={premiumCap === value} onClick={() => setPremiumCap(value)}>
-                  ${value.toLocaleString()}
+                  ${value.toLocaleString('en-US')}
                 </button>
               ))}
             </div>

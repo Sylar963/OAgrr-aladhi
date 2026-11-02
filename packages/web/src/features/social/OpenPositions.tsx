@@ -221,7 +221,7 @@ function LegRow({ leg, pnlScale }: { leg: PublicPositionDto; pnlScale: number })
       </span>
       <span className={styles.legQty}>{Math.abs(leg.netQuantity)}</span>
       <span className={styles.legStrike}>
-        {leg.strike.toLocaleString()}
+        {leg.strike.toLocaleString('en-US')}
         <span className={styles.right} data-right={leg.optionRight}>
           {leg.optionRight === 'call' ? 'C' : 'P'}
         </span>

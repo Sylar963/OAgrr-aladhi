@@ -357,7 +357,7 @@ function trimTrailingZeros(value: string): string {
 
 function fmtNumber(value: number, digits = 4): string {
   const abs = Math.abs(value);
-  if (abs >= 1_000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (abs >= 1_000) return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
   if (abs >= 10) return trimTrailingZeros(value.toFixed(1));
   if (abs >= 1) return trimTrailingZeros(value.toFixed(2));
   if (abs === 0) return '0';
@@ -373,7 +373,7 @@ function fmtSignedNumber(value: number, digits = 4): string {
 function fmtUsd(value: number): string {
   const abs = Math.abs(value);
   const digits = usdDigits(abs);
-  return `${value >= 0 ? '+' : '-'}$${abs.toLocaleString(undefined, {
+  return `${value >= 0 ? '+' : '-'}$${abs.toLocaleString('en-US', {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })}`;
@@ -385,14 +385,14 @@ function usdDigits(abs: number): number {
 
 function fmtAxisUsd(value: number, digits: number): string {
   if (value === 0) return '$0';
-  return `${value > 0 ? '+' : '-'}$${Math.abs(value).toLocaleString(undefined, {
+  return `${value > 0 ? '+' : '-'}$${Math.abs(value).toLocaleString('en-US', {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })}`;
 }
 
 function fmtStrike(value: number): string {
-  return value.toLocaleString(undefined, {
+  return value.toLocaleString('en-US', {
     maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
   });
 }

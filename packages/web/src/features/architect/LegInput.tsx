@@ -71,8 +71,8 @@ export default function LegInput({
         setShowSuggestions(false);
       }
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('pointerdown', handleClick);
+    return () => document.removeEventListener('pointerdown', handleClick);
   }, []);
 
   function handleSelectStrike(strike: number) {
@@ -156,10 +156,10 @@ export default function LegInput({
             placeholder={
               isPerp
                 ? perpReference
-                  ? Math.round(perpReference).toLocaleString()
+                  ? Math.round(perpReference).toLocaleString('en-US')
                   : t('entry')
                 : atmStrike
-                  ? atmStrike.toLocaleString()
+                  ? atmStrike.toLocaleString('en-US')
                   : t('strike')
             }
             title={isPerp ? t('entry') : t('strike')}
@@ -186,7 +186,7 @@ export default function LegInput({
                   data-atm={s === atmStrike || undefined}
                   onClick={() => handleSelectStrike(s)}
                 >
-                  {s.toLocaleString()}
+                  {s.toLocaleString('en-US')}
                   {s === atmStrike && <span className={styles.strikeSuggestionMeta}>ATM</span>}
                 </button>
               ))}

@@ -13,12 +13,13 @@ import {
 } from 'lightweight-charts';
 import { z } from 'zod';
 
+import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fetchJson } from '@lib/http';
+import { spotChartCandlesKey, spotChartCandlesPath } from '@lib/spot-chart-candles';
 import { defineMessages, useT } from '@lib/i18n';
 import type {
   SpotCandleCurrency,
   SpotCandleResolutionSec,
-  SpotCandlesResponse,
 } from '@shared/common';
 import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import type { GexWallHistoryResponse } from '@oggregator/protocol';
@@ -47,7 +48,7 @@ const TIMEFRAMES: Record<Timeframe, TimeframeSpec> = {
 const DEFAULT_TIMEFRAME: Timeframe = '3d';
 const EMPTY_WALLS = { callWall: null, putWall: null, gammaFlip: null };
 const CandleResponseSchema = z.object({
-  currency: z.enum(['BTC', 'ETH', 'HYPE']),
+  currency: z.string(),
   resolution: z.union([z.literal(60), z.literal(300), z.literal(900), z.literal(1800), z.literal(3600), z.literal(14400), z.literal(86400)]),
   count: z.number().int().nonnegative(),
   candles: z.array(z.object({
@@ -56,6 +57,7 @@ const CandleResponseSchema = z.object({
     high: z.number().positive(),
     low: z.number().positive(),
     close: z.number().positive(),
+    volume: z.number().nonnegative().optional(),
   }).refine(c => c.low <= Math.min(c.open, c.close) && c.high >= Math.max(c.open, c.close))),
 });
 
@@ -72,14 +74,14 @@ function useGexSpotCandles(
   buckets: number,
 ) {
   return useQuery({
-    queryKey: ['spot-candles', currency, resolution, buckets],
+    queryKey: spotChartCandlesKey(currency, resolution, buckets),
     queryFn: async () =>
-      CandleResponseSchema.parse(await fetchJson<unknown>(
-        `/spot-candles?currency=${currency}&resolution=${resolution}&buckets=${buckets}`,
-      )),
+      CandleResponseSchema.parse(
+        await fetchJson<unknown>(spotChartCandlesPath(currency, resolution, buckets)),
+      ),
     staleTime: 30_000,
     refetchInterval: 60_000,
-    placeholderData: (prev: SpotCandlesResponse | undefined) => prev,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -269,6 +271,15 @@ export default function GexBandsChart({
     };
   }, []);
 
+  useLiveSpotOverlay({
+    chartRef,
+    seriesRef,
+    currency,
+    resolutionSec: tfSpec.resolution,
+    candles: candleData?.candles,
+    ready: !candlesStale,
+  });
+
   // Re-fit the visible range when currency/timeframe changes.
   useEffect(() => {
     didFitRef.current = false;
@@ -342,7 +353,7 @@ export default function GexBandsChart({
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: `${Math.round(spotPrice).toLocaleString()} SPOT`,
+        title: `${Math.round(spotPrice).toLocaleString('en-US')} SPOT`,
       });
     }
   }, [spotPrice]);

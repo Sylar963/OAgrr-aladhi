@@ -177,6 +177,7 @@
 
 .plot {
   cursor: ns-resize;
+  touch-action: pan-y;
 }
 
 .plot[data-dragging='true'] {

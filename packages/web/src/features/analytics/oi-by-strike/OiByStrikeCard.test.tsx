@@ -7,6 +7,7 @@ import type { ReactElement } from 'react';
 import OiByStrikeCard from './OiByStrikeCard';
 
 // Stub lightweight-charts so the canvas chart never tries to mount in jsdom.
+vi.mock('@hooks/useLiveSpotOverlay', () => ({ useLiveSpotOverlay: () => {} }));
 vi.mock('lightweight-charts', () => ({
   createChart: () => ({
     addSeries: () => ({

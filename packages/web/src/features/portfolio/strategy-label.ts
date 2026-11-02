@@ -93,13 +93,13 @@ export function strategyLabel(group: StrategyGroup, t: LabelT): string {
 }
 
 function fmtQty(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return value.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
 export function legSummary(group: StrategyGroup): string {
   const strikes = [...group.legs]
     .sort((a, b) => a.strike - b.strike)
-    .map((l) => `${l.strike.toLocaleString(undefined, { maximumFractionDigits: 2 })}${l.optionRight === 'call' ? 'C' : 'P'}`)
+    .map((l) => `${l.strike.toLocaleString('en-US', { maximumFractionDigits: 2 })}${l.optionRight === 'call' ? 'C' : 'P'}`)
     .join(' / ');
   const qty = Math.abs(group.legs[0]?.size ?? 0);
   return `${strikes} × ${fmtQty(qty)}`;

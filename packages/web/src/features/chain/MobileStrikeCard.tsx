@@ -3,6 +3,7 @@ import { fmtDelta, fmtUsd } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
+import { memo } from 'react';
 import { FlashingPrice } from './FlashingPrice';
 import styles from './MobileStrikeCard.module.css';
 import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
@@ -144,7 +145,13 @@ function ExpandedVenueDetail({
   );
 }
 
-export default function MobileStrikeCard({
+function distanceLabel(strike: number, indexPrice: number | null): string | null {
+  if (indexPrice == null || indexPrice === 0) return null;
+  const distance = (strike - indexPrice) / indexPrice;
+  return `${distance >= 0 ? '+' : ''}${(distance * 100).toFixed(1)}%`;
+}
+
+function MobileStrikeCard({
   strike,
   isAtm,
   indexPrice,
@@ -160,16 +167,13 @@ export default function MobileStrikeCard({
   const callItm = indexPrice != null && strike.strike < indexPrice;
   const putItm = indexPrice != null && strike.strike > indexPrice;
   const venues = Object.keys(strike.call.venues).filter((v) => activeVenues.includes(v));
-  const distLabel =
-    indexPrice != null && indexPrice !== 0
-      ? `${(strike.strike - indexPrice) / indexPrice >= 0 ? '+' : ''}${(((strike.strike - indexPrice) / indexPrice) * 100).toFixed(1)}%`
-      : null;
+  const distLabel = distanceLabel(strike.strike, indexPrice);
 
   return (
     <div className={styles.card} data-atm={isAtm} data-expanded={isExpanded}>
       <button className={styles.cardHeader} onClick={onToggle}>
         <div className={styles.strikeInfo}>
-          <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
+          <span className={styles.strikeNum}>{strike.strike.toLocaleString('en-US')}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
         <span className={styles.chevron} data-expanded={isExpanded}>
@@ -227,3 +231,23 @@ export default function MobileStrikeCard({
     </div>
   );
 }
+
+// The phone list renders every strike, and the index moves on every push. A card only reads the
+// index through its rounded distance label, whose sign also decides ITM shading, so comparing the
+// label spares the whole list a re-render. `onToggle` only closes over this card's strike number.
+function isSameCard(prev: MobileStrikeCardProps, next: MobileStrikeCardProps): boolean {
+  return (
+    prev.strike === next.strike &&
+    prev.isAtm === next.isAtm &&
+    prev.activeVenues === next.activeVenues &&
+    prev.isExpanded === next.isExpanded &&
+    prev.freshnessNow === next.freshnessNow &&
+    prev.underlying === next.underlying &&
+    prev.expiry === next.expiry &&
+    prev.chartOverride === next.chartOverride &&
+    distanceLabel(prev.strike.strike, prev.indexPrice) ===
+      distanceLabel(next.strike.strike, next.indexPrice)
+  );
+}
+
+export default memo(MobileStrikeCard, isSameCard);

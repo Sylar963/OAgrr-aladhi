@@ -352,19 +352,24 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
             fill="transparent"
             className={styles.plot}
             data-dragging={dragging ? "true" : undefined}
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
+              // A vertical drag on touch has to stay a page scroll, so touch only inspects.
+              if (event.pointerType !== 'mouse') {
+                onMove(event);
+                return;
+              }
               dragRef.current = { startY: event.clientY, domain: [yMin, yMax] };
               setDragging(true);
             }}
-            onMouseUp={() => {
+            onPointerUp={() => {
               dragRef.current = null;
               setDragging(false);
             }}
-            onMouseMove={onMove}
-            onMouseLeave={() => {
+            onPointerMove={onMove}
+            onPointerLeave={(event) => {
               dragRef.current = null;
               setDragging(false);
-              setHover(null);
+              if (event.pointerType === 'mouse') setHover(null);
             }}
             onDoubleClick={() => setZoom(null)}
           />

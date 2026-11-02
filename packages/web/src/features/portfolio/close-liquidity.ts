@@ -66,7 +66,7 @@ export type CloseEstimate =
     };
 
 function legLabel(leg: StrategyGroupLeg): string {
-  const strike = leg.strike.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const strike = leg.strike.toLocaleString('en-US', { maximumFractionDigits: 2 });
   return `${strike}${leg.optionRight === 'call' ? 'C' : 'P'}`;
 }
 

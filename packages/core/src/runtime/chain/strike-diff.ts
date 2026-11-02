@@ -20,6 +20,18 @@ function hasRemovedKey(prev: PlainRecord, next: PlainRecord): boolean {
   return false;
 }
 
+// Quotes carry computed floats like 77.0130196685822, and a live frame holds thousands of them.
+// Eight significant digits is finer than any venue tick, keeps frames much smaller, and drops
+// "changes" that exist only past that precision. Integers (timestamps, sizes) are left whole.
+function compactNumber<T>(value: T): T {
+  if (typeof value !== 'number' || Number.isInteger(value)) return value;
+  return Number(value.toPrecision(8)) as T;
+}
+
+function isSameValue(before: unknown, after: unknown): boolean {
+  return before === after || compactNumber(before) === compactNumber(after);
+}
+
 // Returns the changed top-level keys, diffing one level into nested records (fees, execution).
 // `null` means "send the whole quote with replace: true": a merge cannot express a removed key.
 function diffQuote(prev: PlainRecord, next: PlainRecord): PlainRecord | null | undefined {
@@ -29,18 +41,20 @@ function diffQuote(prev: PlainRecord, next: PlainRecord): PlainRecord | null | u
   for (const key of Object.keys(next)) {
     const before = prev[key];
     const after = next[key];
-    if (before === after) continue;
+    if (isSameValue(before, after)) continue;
 
     if (isPlainRecord(before) && isPlainRecord(after)) {
       if (hasRemovedKey(before, after)) return null;
       let nested: PlainRecord | undefined;
       for (const nestedKey of Object.keys(after)) {
-        if (before[nestedKey] !== after[nestedKey]) (nested ??= {})[nestedKey] = after[nestedKey];
+        if (!isSameValue(before[nestedKey], after[nestedKey])) {
+          (nested ??= {})[nestedKey] = compactNumber(after[nestedKey]);
+        }
       }
       if (nested != null) (out ??= {})[key] = nested;
       continue;
     }
-    (out ??= {})[key] = after;
+    (out ??= {})[key] = compactNumber(after);
   }
   return out;
 }

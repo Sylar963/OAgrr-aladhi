@@ -171,7 +171,7 @@ export default function TradfiGexBandsChart({ underlying, gex, gexProfile, spotP
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: `${Math.round(price).toLocaleString()} SPOT`,
+        title: `${Math.round(price).toLocaleString('en-US')} SPOT`,
       });
     }
   }, []);

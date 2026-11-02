@@ -85,7 +85,7 @@ export default function TradfiChainView() {
         {isLoading && !chain && <Spinner size="lg" label={t('loading')} />}
         {error && !chain && (
           <EmptyState
-            icon="⚠"
+            icon="⚠︎"
             title={t('failed')}
             detail={
               error instanceof Error ? error.message : t('serviceHint')

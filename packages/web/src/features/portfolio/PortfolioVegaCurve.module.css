@@ -508,7 +508,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .header {
     padding: 14px;
   }

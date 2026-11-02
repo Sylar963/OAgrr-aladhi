@@ -418,7 +418,7 @@
   line-height: 1.45;
 }
 
-@media (max-width: 760px) {
+@media (--mobile) {
   .header,
   .controls,
   .decisionStack,

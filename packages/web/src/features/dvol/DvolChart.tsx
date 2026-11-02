@@ -162,7 +162,7 @@ export default function DvolChart() {
     return (
       <div className={styles.view}>
         <EmptyState
-          icon="⚠"
+          icon="⚠︎"
           title={t('unavailable')}
           detail={t('unavailableDetail')}
         />

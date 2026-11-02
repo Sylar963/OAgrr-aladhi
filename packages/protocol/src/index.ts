@@ -411,6 +411,7 @@ export {
   type VenueQuoteDiff,
   type ServerWsMessage,
   ServerWsMessageSchema,
+  ChainDiffEnvelopeSchema,
   type SnapshotMeta,
   SnapshotMetaSchema,
   VENUE_IDS,
@@ -535,6 +536,15 @@ export {
   isSpotCandleUnderlying,
   SPOT_CANDLE_UNDERLYINGS,
   type SpotCandleUnderlying,
+  AGGREGATED_SPOT_UNDERLYINGS,
+  AggregatedSpotCandleSchema,
+  AggregatedSpotCandlesResponseSchema,
+  isAggregatedSpotUnderlying,
+  SpotCandleWsMessageSchema,
+  type AggregatedSpotCandle,
+  type AggregatedSpotCandlesResponse,
+  type AggregatedSpotUnderlying,
+  type SpotCandleWsMessage,
 } from './spot-candles.js';
 export {
   VOL_HEATMAP_BUCKET,

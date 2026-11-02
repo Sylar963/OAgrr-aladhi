@@ -90,10 +90,10 @@ export default function VenueHealth() {
     const onEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('pointerdown', onClickOutside);
     document.addEventListener('keydown', onEsc);
     return () => {
-      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('pointerdown', onClickOutside);
       document.removeEventListener('keydown', onEsc);
     };
   }, [open]);

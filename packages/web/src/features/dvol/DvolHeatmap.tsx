@@ -384,7 +384,7 @@ export default function DvolHeatmap() {
         {!isLoading && (error != null || columns.length === 0) && (
           <div className={styles.chartOverlay}>
             <EmptyState
-              icon={error != null ? '⚠' : '◌'}
+              icon={error != null ? '⚠︎' : '◌'}
               title={error != null ? t('unavailable') : t('collecting')}
               detail={
                 error != null ? t('unavailableDetail') : t('collectingDetail')

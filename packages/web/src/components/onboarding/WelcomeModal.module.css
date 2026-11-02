@@ -124,7 +124,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .actions {
     flex-direction: column-reverse;
   }

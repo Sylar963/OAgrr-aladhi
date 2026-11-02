@@ -245,7 +245,7 @@ function fmtVolPoints(value: number | null | undefined): string {
 }
 function fmtUsd(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 function fmtCashFlow(value: number | null): string {

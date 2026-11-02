@@ -14,6 +14,7 @@ import {
 } from 'lightweight-charts';
 
 import { Spinner } from '@components/ui';
+import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import type { HedgeLeg, Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
 import { dteDays, fmtUsd } from '@lib/format';
@@ -62,6 +63,8 @@ const rgba = (rgb: string, a: number) => `rgba(${rgb},${a})`;
 
 interface PayoffChartV2Props {
   candles: SpotCandle[];
+  /** Set only while the chart shows live crypto candles, not a snapshot. */
+  liveSpotCurrency?: string | null;
   breakevens: number[];
   spotPrice: number;
   legs: Leg[];
@@ -197,6 +200,7 @@ function buildZones(
 
 export default function PayoffChartV2({
   candles,
+  liveSpotCurrency = null,
   breakevens,
   spotPrice,
   legs,
@@ -313,6 +317,14 @@ export default function PayoffChartV2({
       lastGhostFitKeyRef.current = '';
     };
   }, []);
+
+  useLiveSpotOverlay({
+    chartRef: chartApiRef,
+    seriesRef,
+    currency: liveSpotCurrency,
+    resolutionSec,
+    candles,
+  });
 
   // Only fit-content when the history window changes so refreshes preserve any
   // zoom or pan the user has applied.

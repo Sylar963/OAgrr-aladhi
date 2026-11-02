@@ -414,14 +414,14 @@ export default function FlowChartsView({
                 <div className={styles.stat}>
                   <span className={styles.statLabel}>{t('notional')}</span>
                   <span className={styles.statValue}>
-                    ${Math.round(stats.totalNotional).toLocaleString()}
+                    ${Math.round(stats.totalNotional).toLocaleString('en-US')}
                   </span>
                 </div>
                 <div className={styles.stat}>
                   <span className={styles.statLabel}>{t('last')}</span>
                   <span className={styles.statValue}>
                     {stats.lastPrice != null
-                      ? `$${stats.lastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                      ? `$${stats.lastPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
                       : '–'}
                   </span>
                 </div>
@@ -489,7 +489,7 @@ export default function FlowChartsView({
                     {(() => {
                       const p = optionPremiumUsd(hoverTrade);
                       return p != null
-                        ? `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                        ? `$${p.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
                         : '–';
                     })()}
                   </span>
@@ -504,7 +504,7 @@ export default function FlowChartsView({
                   <span className={styles.tooltipLabel}>{t('premium')}</span>
                   <span className={styles.tooltipValue}>
                     {hoverTrade.premiumUsd != null
-                      ? `$${Math.round(hoverTrade.premiumUsd).toLocaleString()}`
+                      ? `$${Math.round(hoverTrade.premiumUsd).toLocaleString('en-US')}`
                       : '–'}
                   </span>
                 </div>

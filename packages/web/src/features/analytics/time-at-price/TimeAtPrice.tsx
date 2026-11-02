@@ -266,8 +266,10 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
                       row.containsSpot ? `${cardStyles.row} ${styles.spotRow}` : cardStyles.row
                     }
                     data-active={hovered === row.price || undefined}
-                    onMouseEnter={() => setHovered(row.price)}
-                    onMouseLeave={() => setHovered(null)}
+                    onPointerEnter={() => setHovered(row.price)}
+                    onPointerLeave={(event) => {
+                      if (event.pointerType === 'mouse') setHovered(null);
+                    }}
                   >
                     <td className={styles.priceCell}>
                       {fmtCompact(row.price)}–{fmtCompact(row.price + data.volBinSize)}

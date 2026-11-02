@@ -99,7 +99,7 @@
   --level-color: var(--color-profit);
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .grid {
     grid-template-columns: repeat(2, 1fr);
   }

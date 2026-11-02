@@ -2,8 +2,16 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import { resolve } from 'node:path';
 
+import { deviceGuards } from './postcss-device-guards';
+
 export default defineConfig({
   plugins: [react()],
+
+  css: {
+    postcss: {
+      plugins: [deviceGuards()],
+    },
+  },
 
   test: {
     environment: 'jsdom',

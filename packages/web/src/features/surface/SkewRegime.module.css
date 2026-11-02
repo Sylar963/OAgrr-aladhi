@@ -44,7 +44,7 @@
 .share { font-size: 9px; color: var(--text-dim); white-space: nowrap; }
 .takeaway { font-size: 11px; color: var(--text-secondary); }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .controlLabel { display: none; }
   .scope { margin-left: 0; }
   .foot { flex-direction: column; align-items: flex-start; gap: 2px; }

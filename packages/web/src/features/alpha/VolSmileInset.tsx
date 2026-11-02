@@ -251,8 +251,12 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
         className={styles.svg}
         role="img"
         aria-label={tr('aria')}
-        onMouseMove={handleMove}
-        onMouseLeave={() => setHoverX(null)}
+        style={{ touchAction: 'pan-y' }}
+        onPointerDown={handleMove}
+        onPointerMove={handleMove}
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') setHoverX(null);
+        }}
       >
         {layout.yTicks.map((t) => (
           <g key={`y-${t}`}>

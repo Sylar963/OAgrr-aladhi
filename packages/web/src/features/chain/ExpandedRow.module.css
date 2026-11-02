@@ -328,7 +328,7 @@
 
 /* ── Mobile ──────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .venueTable {
     display: block;
     overflow-x: auto;

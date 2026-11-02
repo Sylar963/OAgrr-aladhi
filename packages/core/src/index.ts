@@ -172,6 +172,18 @@ export {
   type PerpTickerRuntimeOptions,
   type PerpTickerSnapshot,
 } from './runtime/spot/index.js';
+export {
+  AggregatedSpotRuntime,
+  type AggregatedBar,
+  type AggregatedSpotCandles,
+  type AggregatedSpotListener,
+  type AggregatedSpotRuntimeOptions,
+  type SpotLeg,
+  type SpotStreamEvent,
+  type SpotStreamTransport,
+  type SpotVenue,
+  spotLegs,
+} from './runtime/spot-aggregate/index.js';
 
 export {
   IndexPriceRuntime,

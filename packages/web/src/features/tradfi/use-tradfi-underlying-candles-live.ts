@@ -1,3 +1,4 @@
+import { onConnectionResume } from '@lib/connection-resume';
 import { tradfiWsUrl } from '@lib/tradfi-http';
 import type { InstrumentCandleInterval } from '@oggregator/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -117,7 +118,14 @@ export function useTradfiUnderlyingCandlesLive(args: {
       return;
     }
     connect();
-    return () => disconnect();
+    const stopResume = onConnectionResume(() => {
+      disconnect();
+      connect();
+    });
+    return () => {
+      stopResume();
+      disconnect();
+    };
   }, [enabled, underlying, interval, connect, disconnect]);
 
   return { connectionState };

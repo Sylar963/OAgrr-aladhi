@@ -131,7 +131,7 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
         context.stroke();
         context.fillStyle = level.color;
         context.fillText(
-          `${Math.round(price).toLocaleString()} ${labels[level.key]}`,
+          `${Math.round(price).toLocaleString('en-US')} ${labels[level.key]}`,
           x1 - 6 * hpr,
           yb - 4 * vpr,
         );

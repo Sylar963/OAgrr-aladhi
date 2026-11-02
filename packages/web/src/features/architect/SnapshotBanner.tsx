@@ -20,8 +20,12 @@ const messages = defineMessages(
     emptyUpstream: 'upstream returned empty data',
     switching: 'Switching live window…',
     windowCandles: '{window} window · {interval} candles',
-    refreshing: 'Refreshing Deribit perp history…',
-    active: 'Deribit perp history active',
+    refreshingSpot: 'Refreshing spot aggregated across venues…',
+    activeSpot: 'Spot aggregated across venues',
+    refreshingPerp: 'Refreshing Hyperliquid perp history…',
+    activePerp: 'Hyperliquid perp history active',
+    refreshingTradfi: 'Refreshing live history…',
+    activeTradfi: 'Live history active',
     windowCandlesSync: '{window} window · {interval} candles · sync {age}',
   },
   {
@@ -39,13 +43,26 @@ const messages = defineMessages(
     emptyUpstream: 'la fuente devolvió datos vacíos',
     switching: 'Cambiando ventana en vivo…',
     windowCandles: 'ventana {window} · velas {interval}',
-    refreshing: 'Actualizando historial del perp de Deribit…',
-    active: 'Historial del perp de Deribit activo',
+    refreshingSpot: 'Actualizando spot agregado entre venues…',
+    activeSpot: 'Spot agregado entre venues',
+    refreshingPerp: 'Actualizando historial del perp de Hyperliquid…',
+    activePerp: 'Historial del perp de Hyperliquid activo',
+    refreshingTradfi: 'Actualizando historial en vivo…',
+    activeTradfi: 'Historial en vivo activo',
     windowCandlesSync: 'ventana {window} · velas {interval} · sinc. {age}',
   },
 );
 
+export type SnapshotCandleSource = 'spot' | 'perp' | 'tradfi';
+
+const SOURCE_LABELS = {
+  spot: { refreshing: 'refreshingSpot', active: 'activeSpot' },
+  perp: { refreshing: 'refreshingPerp', active: 'activePerp' },
+  tradfi: { refreshing: 'refreshingTradfi', active: 'activeTradfi' },
+} as const;
+
 interface SnapshotBannerProps {
+  source: SnapshotCandleSource;
   dataUpdatedAt: number;
   hasData: boolean;
   isFetching: boolean;
@@ -66,6 +83,7 @@ function formatAge(seconds: number, t: Translate<typeof messages.en>): string {
 }
 
 export default function SnapshotBanner({
+  source,
   dataUpdatedAt,
   hasData,
   isFetching,
@@ -176,7 +194,8 @@ export default function SnapshotBanner({
 
   const elapsed = dataUpdatedAt ? Date.now() - dataUpdatedAt : 0;
   const seconds = Math.floor(elapsed / 1000);
-  const livePrimary = isFetching ? t('refreshing') : t('active');
+  const labels = SOURCE_LABELS[source];
+  const livePrimary = t(isFetching ? labels.refreshing : labels.active);
 
   return (
     <div className={styles.snapshotBanner} data-state={isFetching ? 'loading' : 'fresh'}>

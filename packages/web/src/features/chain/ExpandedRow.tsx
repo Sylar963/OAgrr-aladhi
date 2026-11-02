@@ -393,7 +393,7 @@ export default function ExpandedRow({
       {atmConsensusForward != null && atmStrike != null && (
         <div className={styles.consensusLine}>
           {t('consensus', {
-            strike: atmStrike.toLocaleString(),
+            strike: atmStrike.toLocaleString('en-US'),
             forward: fmtUsd(atmConsensusForward),
           })}
         </div>
@@ -430,7 +430,7 @@ export default function ExpandedRow({
           <div className={styles.strikeChannelHeader}>
             {isAtm && <span className={styles.strikeAtmBadge}>ATM</span>}
             <span className={styles.strikeChannelNum} data-atm={isAtm || undefined}>
-              {strike.toLocaleString()}
+              {strike.toLocaleString('en-US')}
             </span>
           </div>
         </div>

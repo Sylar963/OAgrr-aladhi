@@ -357,7 +357,7 @@ function downloadCsv(data: AlphaLottoScannerResponse): void {
 }
 
 function formatQuantity(value: number): string {
-  return value >= 100 ? value.toFixed(0) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return value >= 100 ? value.toFixed(0) : value.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
 interface MetricTipProps {

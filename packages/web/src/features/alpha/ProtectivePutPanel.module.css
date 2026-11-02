@@ -54,7 +54,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (--mobile) {
   .controls {
     grid-template-columns: 1fr 1fr;
   }

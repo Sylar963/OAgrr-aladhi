@@ -682,7 +682,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (--mobile) {
   .header,
   .controls,
   .footer {

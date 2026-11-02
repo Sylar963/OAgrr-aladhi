@@ -279,7 +279,7 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .trigger {
     width: 100%;
     justify-content: space-between;

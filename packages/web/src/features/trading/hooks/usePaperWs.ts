@@ -1,5 +1,6 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { createWebSocketTicket } from '@lib/account-session-api';
+import { onConnectionResume } from '@lib/connection-resume';
 import { wsUrl } from '@lib/http';
 import type { PaperOverviewDto, PaperWsServerMessage } from '@oggregator/protocol';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,17 +26,19 @@ export function usePaperWs(accountScope?: string | null, enabled = true): PaperC
   useEffect(() => {
     if (!enabled || accountSession.status !== 'ready' || defaultAccountId == null) return;
     let disposed = false;
+    let connectAttempt = 0;
 
     const connect = async () => {
       if (disposed) return;
+      const attempt = ++connectAttempt;
       let ticket: string;
       try {
         ticket = await createWebSocketTicket();
       } catch {
-        scheduleReconnect();
+        if (attempt === connectAttempt) scheduleReconnect();
         return;
       }
-      if (disposed) return;
+      if (disposed || attempt !== connectAttempt) return;
       const params = new URLSearchParams({ ticket });
       const acct = accountScope ?? getPaperAccountScope();
       if (acct) params.set('accountId', acct);
@@ -128,8 +131,23 @@ export function usePaperWs(accountScope?: string | null, enabled = true): PaperC
 
     void connect();
 
+    const stopResume = onConnectionResume(() => {
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+        reconnectRef.current = null;
+      }
+      retryCountRef.current = 0;
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      void connect();
+    });
+
     return () => {
       disposed = true;
+      stopResume();
       retryCountRef.current = 0;
       if (reconnectRef.current) {
         clearTimeout(reconnectRef.current);

@@ -96,7 +96,7 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
           )}
           {maxPain != null && (
             <div className={styles.maxPainBadge}>
-              {t('maxPainBadge')} <strong>{maxPain.toLocaleString()}</strong>
+              {t('maxPainBadge')} <strong>{maxPain.toLocaleString('en-US')}</strong>
             </div>
           )}
         </div>

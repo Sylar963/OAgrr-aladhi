@@ -1,6 +1,5 @@
+import { MOBILE_QUERY } from '@lib/breakpoints';
 import { useSyncExternalStore } from 'react';
-
-const MOBILE_BREAKPOINT = 768;
 
 type LegacyMediaQueryList = MediaQueryList & {
   addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
@@ -8,7 +7,7 @@ type LegacyMediaQueryList = MediaQueryList & {
 };
 
 function subscribe(callback: () => void): () => void {
-  const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`) as LegacyMediaQueryList;
+  const mql = window.matchMedia(MOBILE_QUERY) as LegacyMediaQueryList;
   const listener = () => callback();
 
   if (typeof mql.addEventListener === 'function') {
@@ -21,7 +20,7 @@ function subscribe(callback: () => void): () => void {
 }
 
 function getSnapshot(): boolean {
-  return window.innerWidth <= MOBILE_BREAKPOINT;
+  return window.matchMedia(MOBILE_QUERY).matches;
 }
 
 function getServerSnapshot(): boolean {

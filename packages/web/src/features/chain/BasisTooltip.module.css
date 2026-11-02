@@ -139,7 +139,7 @@
 
 /* ── Mobile ──────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .panel {
     width: min(320px, calc(100vw - 24px));
   }

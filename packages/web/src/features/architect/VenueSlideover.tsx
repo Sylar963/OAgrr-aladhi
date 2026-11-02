@@ -334,7 +334,7 @@ export default function VenueSlideover({
                 {(() => {
                   const wl = legs.find((l) => l.id === strategy.worstLeg!.legId);
                   if (!wl) return strategy.worstLeg.legId;
-                  return `${wl.direction === 'buy' ? 'B' : 'S'} ${wl.strike.toLocaleString()} ${wl.type === 'call' ? 'C' : 'P'} / ${VENUES[strategy.worstLeg.venue]?.label ?? strategy.worstLeg.venue}`;
+                  return `${wl.direction === 'buy' ? 'B' : 'S'} ${wl.strike.toLocaleString('en-US')} ${wl.type === 'call' ? 'C' : 'P'} / ${VENUES[strategy.worstLeg.venue]?.label ?? strategy.worstLeg.venue}`;
                 })()}
               </span>{' '}
               = {t('perBaseUnit', { value: fmtUsd(strategy.worstLeg.roundTripPerBase ?? 0) })}{' '}
@@ -449,7 +449,7 @@ export default function VenueSlideover({
                 <span className={styles.legBlockQty}>
                   {t('baseQty', { n: leg.quantity * (leg.contractMultiplier ?? 1) })}
                 </span>
-                <span className={styles.legBlockStrike}>{leg.strike.toLocaleString()}</span>
+                <span className={styles.legBlockStrike}>{leg.strike.toLocaleString('en-US')}</span>
                 <span data-type={leg.type} className={styles.legBlockType}>
                   {leg.type === 'call' ? 'C' : 'P'}
                 </span>
@@ -505,7 +505,7 @@ export default function VenueSlideover({
                       </span>
                       <span className={styles.legCellSize}>
                         {fmtSize(q.askSize)}
-                        {q.slippageWarning && <span className={styles.slipFlag}>⚠</span>}
+                        {q.slippageWarning && <span className={styles.slipFlag}>⚠︎</span>}
                       </span>
                       <span className={styles.legCellRt} data-class={q.classification ?? undefined}>
                         {q.roundTripUsd != null ? fmtUsd(q.roundTripUsd) : '—'}

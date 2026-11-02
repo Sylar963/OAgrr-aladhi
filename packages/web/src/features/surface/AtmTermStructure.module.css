@@ -219,7 +219,7 @@
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .header {
     flex-wrap: wrap;
     row-gap: var(--space-2);

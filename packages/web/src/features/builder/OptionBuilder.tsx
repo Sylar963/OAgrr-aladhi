@@ -150,7 +150,7 @@ function ExecutionCard({ exec, rank, bestCost, orderSide }: ExecutionCardProps) 
       <div className={styles.execFooter}>
         {exec.sizeAvailable != null && (
           <span className={exec.fillable ? styles.sizeOk : styles.sizeWarn}>
-            {exec.fillable ? '✓' : '⚠'} {t('avail', { size: exec.sizeAvailable.toFixed(1) })}
+            {exec.fillable ? '✓' : '⚠︎'} {t('avail', { size: exec.sizeAvailable.toFixed(1) })}
           </span>
         )}
         {exec.slippageWarning && <span className={styles.slippageWarn}>{t('slippageRisk')}</span>}
@@ -191,7 +191,7 @@ export default function OptionBuilder({
         <div className={styles.headerLeft}>
           <span className={styles.title}>{t('execution')}</span>
           <span className={styles.contract}>
-            {underlying} · {strike.toLocaleString()} · {formatExpiry(expiry, locale)}
+            {underlying} · {strike.toLocaleString('en-US')} · {formatExpiry(expiry, locale)}
           </span>
         </div>
         <button className={styles.closeBtn} onClick={onClose}>

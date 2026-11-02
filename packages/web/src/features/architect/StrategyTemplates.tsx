@@ -354,7 +354,7 @@ function describeMissingLeg(spec: LegSpec, locale: Locale): string {
     {
       verb: translate(messages, spec.direction === 'buy' ? 'verbBuy' : 'verbSell', undefined, locale),
       type: spec.type,
-      strike: spec.strike.toLocaleString(),
+      strike: spec.strike.toLocaleString('en-US'),
       side: spec.direction === 'buy' ? 'ask' : 'bid',
     },
     locale,

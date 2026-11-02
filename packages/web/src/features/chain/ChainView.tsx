@@ -171,7 +171,7 @@ export default function ChainView() {
             {showLoading && <Spinner size="lg" label={t('loading')} />}
             {error && !displayChain && (
               <EmptyState
-                icon="⚠"
+                icon="⚠︎"
                 title={t('failed')}
                 detail={
                   error instanceof Error ? error.message : t('checkConnection')
@@ -255,7 +255,7 @@ export default function ChainView() {
           {showLoading && <Spinner size="lg" label={t('loading')} />}
           {error && !displayChain && (
             <EmptyState
-              icon="⚠"
+              icon="⚠︎"
               title={t('failed')}
               detail={
                 error instanceof Error ? error.message : t('checkConnection')

@@ -163,7 +163,7 @@ function isTaUnderlying(value: string | null): value is TaUnderlying {
 
 function fmtPrice(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return value.toLocaleString(undefined, {
+  return value.toLocaleString('en-US', {
     minimumFractionDigits: value >= 100 ? 0 : 2,
     maximumFractionDigits: value >= 100 ? 0 : 2,
   });
@@ -178,12 +178,12 @@ function fmtUsd(value: number | null | undefined): string {
   const rounded = Math.round(value);
   if (rounded === 0) return '$0';
   const sign = rounded > 0 ? '+' : '-';
-  return `${sign}$${Math.abs(rounded).toLocaleString()}`;
+  return `${sign}$${Math.abs(rounded).toLocaleString('en-US')}`;
 }
 
 function fmtMoney(value: number): string {
   const rounded = Math.round(value);
-  return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString()}`;
+  return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('en-US')}`;
 }
 
 function fmtPct(value: number, digits: number): string {

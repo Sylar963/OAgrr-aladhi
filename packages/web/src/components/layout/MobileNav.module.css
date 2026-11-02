@@ -2,7 +2,7 @@
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .nav {
     display: flex;
     align-items: stretch;
@@ -63,7 +63,7 @@
   }
 
   .icon {
-    font-size: 20px;
+    display: flex;
     line-height: 1;
   }
 
@@ -84,5 +84,13 @@
     border-radius: 2px;
     background: var(--color-profit);
     color: var(--bg-base);
+  }
+}
+
+/* Landscape phones have ~390px of height to share: keep the nav to a single icon row. */
+@media (max-height: 500px) and (pointer: coarse) {
+  .label,
+  .badge {
+    display: none;
   }
 }

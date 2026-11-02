@@ -27,13 +27,13 @@ function loadRange(): EquityHistoryRange {
 }
 
 function fmtUsd(value: number): string {
-  return `$${Math.round(value).toLocaleString()}`;
+  return `$${Math.round(value).toLocaleString('en-US')}`;
 }
 
 function fmtSignedUsd(value: number): string {
   const rounded = Math.round(value);
   if (rounded === 0) return '$0';
-  return `${rounded > 0 ? '+' : '-'}$${Math.abs(rounded).toLocaleString()}`;
+  return `${rounded > 0 ? '+' : '-'}$${Math.abs(rounded).toLocaleString('en-US')}`;
 }
 
 interface Props {

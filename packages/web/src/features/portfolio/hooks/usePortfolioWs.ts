@@ -1,5 +1,6 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { createWebSocketTicket } from '@lib/account-session-api';
+import { onConnectionResume } from '@lib/connection-resume';
 import { wsUrl } from '@lib/http';
 
 import { PortfolioWsServerMessageSchema } from '@oggregator/protocol';
@@ -39,18 +40,20 @@ export function usePortfolioWs(
       return;
     }
     let disposed = false;
+    let openAttempt = 0;
 
     const open = async () => {
       if (disposed) return;
+      const attempt = ++openAttempt;
       setConnectionState('connecting');
       let ticket: string;
       try {
         ticket = await createWebSocketTicket();
       } catch {
-        scheduleReconnect();
+        if (attempt === openAttempt) scheduleReconnect();
         return;
       }
-      if (disposed) return;
+      if (disposed || attempt !== openAttempt) return;
       const params = new URLSearchParams();
       params.set('ticket', ticket);
       params.set('source', source);
@@ -108,7 +111,7 @@ export function usePortfolioWs(
       });
 
       ws.addEventListener('close', () => {
-        if (disposed) return;
+        if (disposed || wsRef.current !== ws) return;
         wsRef.current = null;
         scheduleReconnect();
       });
@@ -131,8 +134,21 @@ export function usePortfolioWs(
 
     void open();
 
+    const stopResume = onConnectionResume(() => {
+      if (reconnectTimerRef.current != null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      retryRef.current = 0;
+      const stale = wsRef.current;
+      wsRef.current = null;
+      stale?.close();
+      void open();
+    });
+
     return () => {
       disposed = true;
+      stopResume();
       if (reconnectTimerRef.current != null) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;

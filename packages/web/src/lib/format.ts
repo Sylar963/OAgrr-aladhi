@@ -5,11 +5,25 @@ import { getLocale, type Locale } from '@lib/i18n';
 // A zero bid/ask means "no market", not "free". Greeks CAN be legitimately zero
 // (delta=0 for deep OTM) so they use separate formatters that preserve zero.
 
+// toLocaleString builds a new formatter on every call. Live chains format thousands of prices a
+// second, and that construction was the largest single JS cost on phones.
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+function numberFormat(maximumFractionDigits: number, minimumFractionDigits = 0): Intl.NumberFormat {
+  const key = `${minimumFractionDigits}:${maximumFractionDigits}`;
+  let format = numberFormats.get(key);
+  if (format == null) {
+    format = new Intl.NumberFormat('en-US', { minimumFractionDigits, maximumFractionDigits });
+    numberFormats.set(key, format);
+  }
+  return format;
+}
+
 export function fmtUsd(v: number | null | undefined): string {
   if (v == null || v === 0) return '–';
   const sign = v < 0 ? '-' : '';
   const abs = Math.abs(v);
-  if (abs >= 100) return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  if (abs >= 100) return `${sign}$${numberFormat(0).format(abs)}`;
   if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
   if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;
   return `${sign}$${abs.toFixed(6)}`;
@@ -32,7 +46,7 @@ function priceDecimals(abs: number): number {
 /** An underlying price or level (spot, breakeven, target) without a currency sign. */
 export function fmtPrice(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '–';
-  return v.toLocaleString('en-US', { maximumFractionDigits: priceDecimals(Math.abs(v)) });
+  return numberFormat(priceDecimals(Math.abs(v))).format(v);
 }
 
 export function fmtUsdPrice(v: number | null | undefined): string {
@@ -42,7 +56,7 @@ export function fmtUsdPrice(v: number | null | undefined): string {
 
 /** Strikes are listed values, so they print exactly (0.0725, 1.175, 80,250), never rounded. */
 export function fmtStrike(v: number): string {
-  return Number(v.toPrecision(12)).toLocaleString('en-US', { maximumFractionDigits: 10 });
+  return numberFormat(10).format(Number(v.toPrecision(12)));
 }
 
 /** Card-sized strike: thousands as "80k"/"80.5k", everything below printed exactly. */
@@ -77,10 +91,7 @@ export function fmtDelta(v: number | null | undefined): string {
 
 export function fmtNum(v: number | null | undefined, decimals = 2): string {
   if (v == null) return '–';
-  return v.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  return numberFormat(decimals, decimals).format(v);
 }
 
 export function fmtCompact(v: number | null | undefined): string {

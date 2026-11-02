@@ -165,8 +165,12 @@ export default function SkewTimeline({
         height={H}
         role="img"
         aria-label={t('historyAria', { label })}
-        onMouseMove={onMove}
-        onMouseLeave={() => setHoverIdx(null)}
+        style={{ touchAction: 'pan-y' }}
+        onPointerDown={onMove}
+        onPointerMove={onMove}
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') setHoverIdx(null);
+        }}
       >
         <rect
           x={PAD_L}

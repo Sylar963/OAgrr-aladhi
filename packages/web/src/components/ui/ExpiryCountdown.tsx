@@ -59,8 +59,8 @@ export default function ExpiryCountdown() {
     const onClick = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    window.addEventListener('mousedown', onClick);
-    return () => window.removeEventListener('mousedown', onClick);
+    window.addEventListener('pointerdown', onClick);
+    return () => window.removeEventListener('pointerdown', onClick);
   }, [open]);
 
   const upcoming = useMemo<ExpiryTimestamp[]>(() => {

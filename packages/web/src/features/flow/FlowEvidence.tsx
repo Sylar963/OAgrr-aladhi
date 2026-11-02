@@ -466,5 +466,5 @@ function OiCard({ context }: { context: FlowOiContext }) {
 }
 
 function formatNumber(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 8 });
+  return value.toLocaleString('en-US', { maximumFractionDigits: 8 });
 }

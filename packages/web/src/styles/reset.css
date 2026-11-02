@@ -12,6 +12,7 @@ html {
   text-rendering: optimizeLegibility;
   font-size: 14px;
   line-height: 1.5;
+  -webkit-user-select: none;
   user-select: none;
   tab-size: 4;
   -webkit-text-size-adjust: 100%;
@@ -72,6 +73,42 @@ textarea {
   background: none;
   border: none;
   outline: none;
+}
+
+/* Safari refuses typing into a field that inherits user-select: none. */
+input,
+textarea,
+[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Prices and instruments stay copyable with a mouse. Touch keeps selection off so a long press
+   on a row doesn't start a text selection instead of the tap. */
+@media (pointer: fine) {
+  html {
+    -webkit-user-select: auto;
+    user-select: auto;
+  }
+
+  button,
+  svg,
+  canvas,
+  nav,
+  [role="tab"],
+  [role="tablist"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* iOS Safari zooms the page when a focused field is under 16px and stays zoomed after. */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 ::-webkit-scrollbar {

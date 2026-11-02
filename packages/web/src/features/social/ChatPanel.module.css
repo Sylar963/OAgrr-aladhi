@@ -151,6 +151,12 @@
   opacity: 1;
 }
 
+@media (hover: none) {
+  .delete {
+    opacity: 1;
+  }
+}
+
 .delete:hover {
   color: var(--color-loss);
 }

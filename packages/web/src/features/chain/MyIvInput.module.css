@@ -85,7 +85,7 @@
   color: var(--accent-primary);
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .hint {
     display: none;
   }

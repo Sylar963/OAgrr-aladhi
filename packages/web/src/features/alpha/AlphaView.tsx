@@ -546,7 +546,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       {isSpread && error && !chain && (
         <div className={styles.state}>
           <EmptyState
-            icon="⚠"
+            icon="⚠︎"
             title={t('failedChain')}
             detail={error instanceof Error ? error.message : t('checkConnection')}
           />

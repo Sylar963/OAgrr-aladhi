@@ -10,7 +10,7 @@ const DISMISSED_KEY = 'systemAnnouncementDismissed';
 
 export const SEVERITY_ICON: Record<SystemAnnouncementSeverity, string> = {
   info: 'ℹ',
-  notice: '⚠',
+  notice: '⚠︎',
   degraded: '◍',
   outage: '⛔',
 };

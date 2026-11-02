@@ -121,7 +121,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .view {
     padding: 10px;
     gap: 12px;

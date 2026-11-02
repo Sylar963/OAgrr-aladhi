@@ -237,7 +237,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .wrap {
     padding: 12px;
     gap: 12px;

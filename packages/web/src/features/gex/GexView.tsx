@@ -326,7 +326,7 @@ export default function GexView() {
             >
               {t('flip')}
               <span className={styles.levelValue}>
-                {walls.gammaFlip != null ? Math.round(walls.gammaFlip).toLocaleString() : '—'}
+                {walls.gammaFlip != null ? Math.round(walls.gammaFlip).toLocaleString('en-US') : '—'}
               </span>
             </span>
             <WallLevel label={t('callWall')} title={t('callWallTip')} strike={walls.callWall} flowShare={flowShareAt(walls.callWall)} />
@@ -400,7 +400,7 @@ export default function GexView() {
                       ref={isNearSpot ? spotRowRef : undefined}
                     >
                       <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
-                        {g.strike.toLocaleString()}
+                        {g.strike.toLocaleString('en-US')}
                         {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}
                       </div>
                       <div className={styles.barTrack}>
@@ -462,7 +462,7 @@ function WallLevel({
   return (
     <span className={styles.level} title={title}>
       {label}
-      <span className={styles.levelValue}>{strike != null ? strike.toLocaleString() : '—'}</span>
+      <span className={styles.levelValue}>{strike != null ? strike.toLocaleString('en-US') : '—'}</span>
       {strike != null && flowShare !== undefined && (
         <span
           className={styles.levelValue}

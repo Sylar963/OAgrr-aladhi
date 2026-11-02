@@ -148,7 +148,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .wrap {
     display: none;
   }

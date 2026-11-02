@@ -123,13 +123,18 @@
   min-width: 0;
 }
 
+/* Clipped cards otherwise shrink to almost nothing instead of letting the stack scroll. */
+.mobileStack > * {
+  flex-shrink: 0;
+}
+
 @media (max-width: 960px) {
   .grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 760px) {
+@media (--mobile) {
   .strategyBar {
     min-height: 42px;
     overflow-x: auto;
@@ -151,5 +156,12 @@
 
   .scannerWorkspace {
     padding: var(--space-3);
+  }
+}
+
+/* Below this the strategy tabs need the room; each tab scrolls under the label otherwise. */
+@media (max-width: 1023px) {
+  .venueScope {
+    display: none;
   }
 }

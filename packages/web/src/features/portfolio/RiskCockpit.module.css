@@ -531,7 +531,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .posture {
     padding: 16px;
   }

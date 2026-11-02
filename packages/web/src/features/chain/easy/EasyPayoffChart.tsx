@@ -9,6 +9,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type UTCTimestamp,
 } from 'lightweight-charts';
 
 import {
@@ -19,6 +20,7 @@ import {
   type PriceZone,
 } from '@features/architect';
 import { Spinner } from '@components/ui';
+import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fmtUsd } from '@lib/format';
 import { intlLocale, useLocale, useT, type Locale, type Translate } from '@lib/i18n';
 import { DeadlinePrimitive } from './deadline-primitive';
@@ -138,7 +140,7 @@ export default function EasyPayoffChart({
   );
   const spec = easyCandleSpec(timeframe, specLegs);
   const available = isSpotCandleCurrency(underlying);
-  const { data: candleData, isLoading, isError } = useSpotCandles(
+  const { data: candleData, isLoading, isError, isPlaceholderData } = useSpotCandles(
     underlying,
     spec.resolutionSec,
     spec.buckets,
@@ -231,6 +233,26 @@ export default function EasyPayoffChart({
       lastWindowRef.current = '';
     };
   }, []);
+
+  useLiveSpotOverlay({
+    chartRef,
+    seriesRef: candleRef,
+    currency: underlying,
+    resolutionSec: spec.resolutionSec,
+    candles: candleData?.candles,
+    ready: !isPlaceholderData,
+    futureWhitespace: true,
+    onBar: (bar) => {
+      try {
+        lineRef.current?.update({
+          time: Math.floor(bar.timestamp / 1000) as UTCTimestamp,
+          value: bar.close,
+        });
+      } catch {
+        // The just-closed bucket can arrive behind the line's last point.
+      }
+    },
+  });
 
   useEffect(() => {
     const candles = candleRef.current;

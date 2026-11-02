@@ -229,7 +229,7 @@
 
 /* ── Mobile ──────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .view {
     padding: var(--space-3);
     gap: var(--space-2);

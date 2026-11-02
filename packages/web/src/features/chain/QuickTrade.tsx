@@ -144,7 +144,7 @@ export default function QuickTrade({
           <span className={styles.direction} data-direction={direction}>
             {direction === 'buy' ? t('buy') : t('sell')}
           </span>
-          <span className={styles.strike}>{strike.toLocaleString()}</span>
+          <span className={styles.strike}>{strike.toLocaleString('en-US')}</span>
           <span className={styles.type} data-type={type}>
             {type === 'call' ? 'CALL' : 'PUT'}
           </span>

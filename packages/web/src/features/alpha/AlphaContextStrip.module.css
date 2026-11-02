@@ -1,6 +1,6 @@
 .strip {
   display: grid;
-  grid-template-columns: repeat(7, minmax(100px, 1fr));
+  grid-template-columns: repeat(8, minmax(min-content, 1fr));
   min-height: 54px;
   overflow-x: auto;
   background: var(--bg-surface);
@@ -47,8 +47,8 @@
   color: var(--color-profit);
 }
 
-@media (max-width: 760px) {
+@media (--mobile) {
   .strip {
-    grid-template-columns: repeat(7, minmax(116px, 1fr));
+    grid-template-columns: repeat(8, minmax(min-content, 1fr));
   }
 }

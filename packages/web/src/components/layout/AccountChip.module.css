@@ -511,3 +511,13 @@
 .venueMetaLink:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 429px) {
+  .chipLabel {
+    display: block;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

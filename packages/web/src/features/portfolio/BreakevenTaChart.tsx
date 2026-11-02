@@ -20,7 +20,9 @@ import {
 import type { PositionLeg, StrategyGroup } from '@oggregator/protocol';
 
 import { chainKeys } from '@features/chain';
+import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fetchJson } from '@lib/http';
+import { spotChartCandlesKey, spotChartCandlesPath } from '@lib/spot-chart-candles';
 import { formatExpiry } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import type { SpotCandleResolutionSec, SpotCandlesResponse } from '@shared/common';
@@ -112,7 +114,7 @@ const messages = defineMessages(
     netDebit: 'Net debit {v}',
     netCredit: 'Net credit {v}',
     leggedIn: 'Legged in over {v}; marked at the last leg',
-    hint: 'Break-evens are a frozen snapshot from the front (0DTE) expiry and the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. Strangles: put strike − cost and call strike + cost, using strikes nearest 25% from spot (15d/30d) or nearest 25Δ by median venue delta (0DTE). Candles: Deribit perpetual.',
+    hint: 'Break-evens are a frozen snapshot from the front (0DTE) expiry and the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. Strangles: put strike − cost and call strike + cost, using strikes nearest 25% from spot (15d/30d) or nearest 25Δ by median venue delta (0DTE). Candles: spot aggregated across venues.',
   },
   {
     atm0: '0DTE straddle ATM',
@@ -210,7 +212,7 @@ interface PlacedEntry {
 }
 
 function fmtLevel(value: number): string {
-  return Math.round(value).toLocaleString();
+  return Math.round(value).toLocaleString('en-US');
 }
 
 function fmtMovePct(level: number, spot: number): string {
@@ -284,11 +286,9 @@ function usePreloadedCandles(timeframe: Timeframe) {
   const tf = TIMEFRAMES[timeframe];
   return useQueries({
     queries: TA_UNDERLYINGS.map((underlying) => ({
-      queryKey: ['spot-candles', underlying, tf.resolution, tf.buckets],
+      queryKey: spotChartCandlesKey(underlying, tf.resolution, tf.buckets),
       queryFn: () =>
-        fetchJson<SpotCandlesResponse>(
-          `/spot-candles?currency=${underlying}&resolution=${tf.resolution}&buckets=${tf.buckets}`,
-        ),
+        fetchJson<SpotCandlesResponse>(spotChartCandlesPath(underlying, tf.resolution, tf.buckets)),
       staleTime: 30_000,
       refetchInterval: 60_000,
       // Placeholder is per underlying (fixed query index), so a timeframe switch may
@@ -437,6 +437,15 @@ export default function BreakevenTaChart({
       priceLinesRef.current = [];
     };
   }, []);
+
+  useLiveSpotOverlay({
+    chartRef,
+    seriesRef,
+    currency: underlying,
+    resolutionSec: TIMEFRAMES[timeframe].resolution,
+    candles: candleData?.candles,
+    ready: !candlesPlaceholder,
+  });
 
   useEffect(() => {
     const visible = showEntries ? placedEntries : [];
@@ -720,7 +729,7 @@ function EntryTooltip({ placed, x, y, label }: { placed: PlacedEntry; x: number;
       <div>{t('opened', { v: opened })}</div>
       <div>{t(approx ? 'spotApprox' : 'spotAtEntry', { v: fmtLevel(price) })}</div>
       {group.debitOrCredit !== 'flat' && (
-        <div>{t(net > 0 ? 'netDebit' : 'netCredit', { v: `$${Math.abs(net).toLocaleString(undefined, { maximumFractionDigits: Math.abs(net) >= 100 ? 0 : 2 })}` })}</div>
+        <div>{t(net > 0 ? 'netDebit' : 'netCredit', { v: `$${Math.abs(net).toLocaleString('en-US', { maximumFractionDigits: Math.abs(net) >= 100 ? 0 : 2 })}` })}</div>
       )}
       {entry.leggedOverMs >= 3_600_000 && <div>{t('leggedIn', { v: fmtDuration(entry.leggedOverMs) })}</div>}
     </div>

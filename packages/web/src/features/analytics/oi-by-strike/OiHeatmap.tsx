@@ -42,6 +42,7 @@ import {
   type SignificanceMode,
 } from './oi-em-utils';
 import { selectBlockBubbles, type BlockBubble } from './oi-bubble-utils';
+import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { useBlockStrikeBuckets, useSpotCandles } from './queries';
 import { oiMessages } from './i18n';
 
@@ -87,8 +88,8 @@ const LABEL_PADDING_PX = 16;
 
 function strikeLabelTitle(row: HeatRow): string {
   return row.confidence === undefined
-    ? row.strike.toLocaleString()
-    : `${row.strike.toLocaleString()} · ${Math.round(row.confidence * 100)}%`;
+    ? row.strike.toLocaleString('en-US')
+    : `${row.strike.toLocaleString('en-US')} · ${Math.round(row.confidence * 100)}%`;
 }
 
 interface Props {
@@ -125,8 +126,13 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const sessionBufferRef = useRef<Map<number, SessionPoint[]>>(new Map());
 
   const tfSpec = TIMEFRAMES[timeframe];
-  const { data: candleData, isLoading: candlesLoading, error: candlesError, refetch } =
-    useSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
+  const {
+    data: candleData,
+    isLoading: candlesLoading,
+    isPlaceholderData: candlesPlaceholder,
+    error: candlesError,
+    refetch,
+  } = useSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
   const firstCandleSec = candleData?.candles[0]
     ? Math.floor(candleData.candles[0].timestamp / 1000)
     : null;
@@ -354,6 +360,16 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   // Re-default the cone when the underlying changes (its expiry set differs).
   useEffect(() => { setConeExpiry(null); }, [currency]);
 
+  useLiveSpotOverlay({
+    chartRef,
+    seriesRef,
+    currency,
+    resolutionSec: tfSpec.resolution,
+    candles: candleData?.candles,
+    ready: !candlesPlaceholder,
+    futureWhitespace: true,
+  });
+
   // ── Push candle data + set symmetric visible range for the TF ─────
   useEffect(() => {
     const series = seriesRef.current;
@@ -442,7 +458,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: `${Math.round(spotPrice).toLocaleString()} SPOT`,
+        title: `${Math.round(spotPrice).toLocaleString('en-US')} SPOT`,
       });
     }
   }, [spotPrice]);
@@ -461,7 +477,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `${maxPain.toLocaleString()} MP`,
+        title: `${maxPain.toLocaleString('en-US')} MP`,
       });
     }
   }, [maxPain]);
@@ -679,7 +695,7 @@ function BlockTooltip({
       style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
     >
       <div className={styles.oiTooltipTitle}>
-        {t('blockFlow', { strike: bubble.strike.toLocaleString() })}
+        {t('blockFlow', { strike: bubble.strike.toLocaleString('en-US') })}
       </div>
       <div className={styles.oiTooltipZone}>
         {time} · {t(bubble.legs === 1 ? 'legs_one' : 'legs_other', { n: bubble.legs })}
@@ -723,7 +739,7 @@ function HeatTooltip({
       className={styles.oiTooltip}
       style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
     >
-      <div className={styles.oiTooltipTitle}>{data.strike.toLocaleString()}</div>
+      <div className={styles.oiTooltipTitle}>{data.strike.toLocaleString('en-US')}</div>
       <div className={styles.oiTooltipZone}>{summary}</div>
       <div className={styles.oiTooltipColumns}>
         {data.venues.length > 0 && (

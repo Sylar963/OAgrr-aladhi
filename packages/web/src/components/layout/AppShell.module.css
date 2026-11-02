@@ -13,7 +13,7 @@
   flex-direction: column;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .main {
     /* Reserve space for fixed bottom nav */
     padding-bottom: calc(var(--mobile-nav-h) + var(--safe-bottom));

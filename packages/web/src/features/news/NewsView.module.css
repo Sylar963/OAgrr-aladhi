@@ -630,7 +630,7 @@
   text-overflow: ellipsis;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .toolbar {
     padding: var(--space-3) var(--space-4);
     gap: var(--space-3);

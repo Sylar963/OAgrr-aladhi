@@ -269,8 +269,10 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
               className={styles.chip}
               data-visible={visible || undefined}
               data-focused={isPinned || undefined}
-              onMouseEnter={() => setHovered(curve.expiry)}
-              onMouseLeave={() => setHovered(null)}
+              onPointerEnter={() => setHovered(curve.expiry)}
+              onPointerLeave={(event) => {
+                if (event.pointerType === 'mouse') setHovered(null);
+              }}
             >
               <button
                 type="button"

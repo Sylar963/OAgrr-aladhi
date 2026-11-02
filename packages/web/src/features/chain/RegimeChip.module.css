@@ -191,7 +191,7 @@
 
 /* ── Mobile ──────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .cell {
     min-width: unset;
     padding: 4px 8px;

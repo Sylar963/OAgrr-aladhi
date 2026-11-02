@@ -222,7 +222,7 @@
 }
 
 /* Scrolls internally, so it can give up height to an open thesis panel in the fixed-height desktop layout. */
-@media (min-width: 769px) {
+@media (--desktop) {
   .container {
     min-height: 0;
   }

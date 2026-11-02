@@ -22,6 +22,7 @@ import {
   SpotCandleService,
   type SpotCandleCurrency,
   PerpCandleRuntime,
+  AggregatedSpotRuntime,
   PerpTickerRuntime,
   SpotRuntime,
   TradeRuntime,
@@ -113,6 +114,7 @@ export const spotService = new SpotRuntime();
 export const perpTickerService = new PerpTickerRuntime();
 export const perpCandleService = new PerpCandleRuntime();
 export const spotCandleService = new SpotCandleService();
+export const aggregatedSpotRuntime = new AggregatedSpotRuntime();
 // Rolling mark + trade buffer for venues with no REST mark-history endpoint
 // (Derive). Fed by every adapter's quote recorder and by TradeRuntime, queried
 // by the instrument-candles service when the chart panel asks for history.

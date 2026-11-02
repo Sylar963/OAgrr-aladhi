@@ -1,4 +1,5 @@
 .price {
+  position: relative;
   display: inline-block;
   border-radius: 3px;
   padding: 0 2px;
@@ -8,26 +9,32 @@
   font-variant-numeric: inherit;
 }
 
-.flash {
+/* The flash fades a separate layer's opacity. Animating the price's own background and shadow
+   repainted on every frame, which on a phone cost more than all the app's JavaScript combined. */
+.flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(255, 255, 255);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  opacity: 0;
+  pointer-events: none;
   animation: priceFlash 220ms ease-out;
 }
 
 @keyframes priceFlash {
   0% {
-    background: rgba(255, 255, 255, 0.82);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
-    color: var(--bg-base);
+    opacity: 0.82;
   }
 
   100% {
-    background: transparent;
-    box-shadow: none;
-    color: inherit;
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flash {
+  .flash::after {
     animation: none;
   }
 }

@@ -661,6 +661,7 @@
   width: 100%;
   height: 100%;
   cursor: crosshair;
+  touch-action: pan-y;
 }
 
 .dragHint {
@@ -1160,7 +1161,7 @@
 
 /* ── Mobile ──────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .view {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1550,7 +1551,7 @@
   line-height: 1.5;
 }
 
-@media (max-width: 760px) {
+@media (--mobile) {
   .frontierLegend {
     top: auto;
     right: 56px;

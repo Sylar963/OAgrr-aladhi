@@ -31,7 +31,7 @@ function ErrorFallback({
   return (
     <div className={styles.wrap} role="alert">
       <span className={styles.icon} aria-hidden>
-        ⚠
+        ⚠︎
       </span>
       <span className={styles.title}>
         {label ? t('failedToLoad', { label }) : t('somethingWrong')}

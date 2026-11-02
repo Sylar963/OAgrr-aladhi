@@ -145,7 +145,7 @@ export default function OptionCalculator({
   const displayVolPct =
     volPct !== '' ? volPct : result?.sigma != null ? (result.sigma * 100).toFixed(2) : '';
 
-  function onHeaderMouseDown(e: React.MouseEvent) {
+  function onHeaderPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('button, input')) return;
     dragRef.current = {
       startX: e.clientX,
@@ -157,7 +157,7 @@ export default function OptionCalculator({
   }
 
   useEffect(() => {
-    function onMove(e: MouseEvent) {
+    function onMove(e: PointerEvent) {
       const d = dragRef.current;
       if (!d) return;
       const maxX = window.innerWidth - PANEL_WIDTH;
@@ -169,17 +169,19 @@ export default function OptionCalculator({
     function onUp() {
       dragRef.current = null;
     }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, []);
 
   return (
     <div className={styles.panel} style={{ left: pos.x, top: pos.y }}>
-      <div className={styles.header} onMouseDown={onHeaderMouseDown}>
+      <div className={styles.header} onPointerDown={onHeaderPointerDown}>
         <span className={styles.title}>{t('title')}</span>
         <span className={styles.subtitle}>{defaultUnderlying}</span>
         <button className={styles.closeBtn} onClick={onClose} aria-label={t('close')}>

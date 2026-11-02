@@ -144,7 +144,10 @@ export default function GreekProfileChart({
     <svg
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       className={`${styles.svg} ${stale ? styles.stale : ''}`}
-      onMouseLeave={() => setHoverIndex(null)}
+      style={{ touchAction: 'pan-y' }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse') setHoverIndex(null);
+      }}
     >
       <rect
         x={PADDING.left}
@@ -255,7 +258,8 @@ export default function GreekProfileChart({
         width={plotRight - PADDING.left}
         height={plotBottom - PADDING.top}
         fill="transparent"
-        onMouseMove={handleMove}
+        onPointerDown={handleMove}
+        onPointerMove={handleMove}
       />
 
       {visibleMarkers.map((marker) => {

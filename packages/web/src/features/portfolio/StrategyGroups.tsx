@@ -141,7 +141,7 @@ const messages = defineMessages(
 type T = Translate<typeof messages.en>;
 
 function fmtAmount(abs: number): string {
-  if (abs >= 100) return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (abs >= 100) return `$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   if (abs >= 0.01) return `$${abs.toFixed(2)}`;
   return fmtUsdSigned(abs).slice(1);
 }
@@ -153,7 +153,7 @@ function fmtCashFlow(value: number): string {
 
 function fmtPnl(value: number): string {
   const sign = value <= -0.005 ? '-' : value >= 0.005 ? '+' : '';
-  return `${sign}$${Math.abs(value).toLocaleString(undefined, {
+  return `${sign}$${Math.abs(value).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -167,7 +167,7 @@ function fmtUsd(value: number | null): string {
 function fmtSpot(values: number[]): string {
   if (values.length === 0) return '—';
   return values
-    .map((v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 }))
+    .map((v) => v.toLocaleString('en-US', { maximumFractionDigits: 0 }))
     .join(' / ');
 }
 
@@ -178,7 +178,7 @@ function netSide(net: number): 'credit' | 'debit' | 'flat' {
 }
 
 function fmtPrice(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 });
+  return value.toLocaleString('en-US', { maximumFractionDigits: value >= 100 ? 0 : 2 });
 }
 
 function closeLegLine({ label, side, size, quote }: CloseLegQuote, t: T): string {

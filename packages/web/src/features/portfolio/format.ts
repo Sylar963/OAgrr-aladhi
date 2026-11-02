@@ -4,7 +4,7 @@ export function fmtUsdSigned(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   const sign = value >= 0 ? '+' : '-';
   const abs = Math.abs(value);
-  if (abs >= 100) return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (abs >= 100) return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
   if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;
   if (abs === 0) return '+$0.00';

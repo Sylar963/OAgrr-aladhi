@@ -343,7 +343,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .table {
     display: block;
     overflow-x: auto;

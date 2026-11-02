@@ -498,3 +498,19 @@ export const ServerWsMessageSchema = z.discriminatedUnion('type', [
 ]);
 
 export type ServerWsMessage = z.infer<typeof ServerWsMessageSchema>;
+
+/**
+ * The diff frame with its strikes checked only for shape. Deep validation costs ~16ms per frame on
+ * a desktop CPU, which at two frames a second eats a large share of a budget phone. Clients run the
+ * full schema on a subscription's first diff, then this one.
+ */
+export const ChainDiffEnvelopeSchema = z.object({
+  type: z.literal('diff'),
+  subscriptionId: z.string(),
+  seq: z.number(),
+  request: WsSubscriptionRequestSchema,
+  meta: SnapshotMetaSchema,
+  patch: DeltaDiffPatchSchema.extend({
+    strikes: z.array(z.object({ strike: z.number() }).passthrough()),
+  }),
+});

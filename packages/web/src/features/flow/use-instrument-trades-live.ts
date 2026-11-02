@@ -1,3 +1,4 @@
+import { onConnectionResume } from '@lib/connection-resume';
 import { wsUrl } from '@lib/http';
 import { type FlowTrade, InstrumentTradeWsServerMessageSchema } from '@oggregator/protocol';
 import { useEffect, useRef, useState } from 'react';
@@ -36,14 +37,15 @@ export function useInstrumentTradesLive(args: InstrumentTradeStreamArgs, enabled
         venue: args.venue,
         instrument: args.instrument,
       });
-      socket = new WebSocket(`${wsUrl('/ws/instrument-trades')}?${params.toString()}`);
+      const current = new WebSocket(`${wsUrl('/ws/instrument-trades')}?${params.toString()}`);
+      socket = current;
 
-      socket.addEventListener('open', () => {
+      current.addEventListener('open', () => {
         if (disposed) return;
         setConnectionState('open');
       });
 
-      socket.addEventListener('message', (event) => {
+      current.addEventListener('message', (event) => {
         if (disposed || typeof event.data !== 'string') return;
         let value: unknown;
         try {
@@ -58,21 +60,31 @@ export function useInstrumentTradesLive(args: InstrumentTradeStreamArgs, enabled
         setTrades((current) => mergeInstrumentTrades(current, incoming, MAX_LIVE_TRADES));
       });
 
-      socket.addEventListener('close', () => {
-        if (disposed) return;
+      current.addEventListener('close', () => {
+        if (disposed || socket !== current) return;
         setConnectionState('retrying');
         const delay = Math.min(1_000 * 2 ** retryRef.current + Math.random() * 500, 15_000);
         retryRef.current = Math.min(retryRef.current + 1, 5);
         retryTimer = setTimeout(open, delay);
       });
 
-      socket.addEventListener('error', () => socket?.close());
+      current.addEventListener('error', () => current.close());
     };
 
     open();
 
+    const stopResume = onConnectionResume(() => {
+      if (retryTimer != null) clearTimeout(retryTimer);
+      retryRef.current = 0;
+      const stale = socket;
+      socket = null;
+      stale?.close();
+      open();
+    });
+
     return () => {
       disposed = true;
+      stopResume();
       if (retryTimer != null) clearTimeout(retryTimer);
       socket?.close();
       retryRef.current = 0;

@@ -88,7 +88,7 @@ function parseStrikeAndType(instrument: string): { strike: string; type: string 
   const match = instrument.match(/-(\d+(?:[._d]\d+)?)-([CP])(?:-|$)/);
   if (!match) return { strike: '–', type: '–' };
   return {
-    strike: Number(match[1]!.replace(/[d_]/, '.')).toLocaleString(),
+    strike: Number(match[1]!.replace(/[d_]/, '.')).toLocaleString('en-US'),
     type: match[2] === 'C' ? 'CALL' : 'PUT',
   };
 }
@@ -413,7 +413,7 @@ export default function FlowView() {
   if (error) {
     return (
       <div className={styles.view}>
-        <EmptyState icon="⚠" title={t('failedFlow')} detail={t('failedFlowDetail')} />
+        <EmptyState icon="⚠︎" title={t('failedFlow')} detail={t('failedFlowDetail')} />
       </div>
     );
   }

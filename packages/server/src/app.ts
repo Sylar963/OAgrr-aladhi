@@ -44,6 +44,7 @@ import {
   venueIvHistoryStore,
   markHistoryBuffer,
   spotCandleService,
+  aggregatedSpotRuntime,
   spotService,
   shortStraddleSnapshotStore,
   tradeStore,
@@ -229,6 +230,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     blockFlowService.dispose();
     spotService.dispose();
     spotCandleService.dispose();
+    aggregatedSpotRuntime.dispose();
     dvolService.dispose();
     await volHeatmapRuntime?.dispose();
     unsubscribeBookAuth();

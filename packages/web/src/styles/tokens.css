@@ -79,8 +79,14 @@
   --touch-min: 44px;
 }
 
+@media (max-height: 500px) and (pointer: coarse) {
+  :root {
+    --mobile-nav-h: 36px;
+  }
+}
+
 /* ── Mobile overrides ──────────────────────────────────────────── */
-@media (max-width: 768px) {
+@media (--mobile) {
   :root {
     --text-xs: 12px;
     --text-sm: 13px;

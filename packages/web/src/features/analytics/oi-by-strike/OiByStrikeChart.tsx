@@ -41,7 +41,7 @@ function OiStrikeTooltip({
       className={styles.oiTooltip}
       style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
     >
-      <div className={styles.oiTooltipTitle}>{hovered.strike.toLocaleString()}</div>
+      <div className={styles.oiTooltipTitle}>{hovered.strike.toLocaleString('en-US')}</div>
       <div className={styles.oiTooltipColumns}>
         {hovered.venues.length > 0 && (
           <div className={styles.oiTooltipCol}>
@@ -240,12 +240,16 @@ function OiByStrikeChart({
               data-spot={isSpot || undefined}
               data-maxpain={isMaxPain || undefined}
               ref={isSpot ? spotRef : undefined}
-              onMouseEnter={(e) => handleRowMouse(d.strike, e)}
-              onMouseMove={(e) => handleRowMouse(d.strike, e)}
-              onMouseLeave={() => { setHoveredStrike(null); setTooltipPos(null); }}
+              onPointerEnter={(e) => handleRowMouse(d.strike, e)}
+              onPointerMove={(e) => handleRowMouse(d.strike, e)}
+              onPointerLeave={(e) => {
+                if (e.pointerType !== 'mouse') return;
+                setHoveredStrike(null);
+                setTooltipPos(null);
+              }}
             >
               <div className={styles.oiStrike} data-spot={isSpot || undefined} data-maxpain={isMaxPain || undefined}>
-                {d.strike.toLocaleString()}
+                {d.strike.toLocaleString('en-US')}
                 {isSpot && <span className={styles.spotTag}>{t('spotTag')}</span>}
                 {isMaxPain && !isSpot && <span className={styles.maxPainTag}>{t('mpTag')}</span>}
               </div>

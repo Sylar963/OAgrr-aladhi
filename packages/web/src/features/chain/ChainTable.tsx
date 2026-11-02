@@ -347,7 +347,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           data-atm={isAtm}
           data-moneyness={isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'}
         >
-          <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
+          <span className={styles.strikeNum}>{strike.strike.toLocaleString('en-US')}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
 
@@ -440,6 +440,7 @@ export default function NewChainTable({
   const [quickTrade, setQuickTrade] = useState<QuickTradeInfo | null>(null);
   const atmRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
 
@@ -494,6 +495,10 @@ export default function NewChainTable({
     if (!isMobile) {
       if (atmIndex < 0) return;
       rowVirtualizer.scrollToIndex(atmIndex, { align: 'center' });
+      // The table mirrors calls and puts around the strike, so centring keeps the strike on screen
+      // when a narrow window still can't fit every column.
+      const tableScroll = tableScrollRef.current;
+      if (tableScroll) tableScroll.scrollLeft = (tableScroll.scrollWidth - tableScroll.clientWidth) / 2;
       scrolledForRef.current = scrollScope;
       return;
     }
@@ -548,7 +553,7 @@ export default function NewChainTable({
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.tableScroll}>
+      <div className={styles.tableScroll} ref={tableScrollRef}>
         <div className={styles.table}>
           <div className={styles.header}>
             <span className={styles.hdrLabel}>{t('venues')}</span>

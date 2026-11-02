@@ -21,7 +21,6 @@ export interface TabDef {
   id: TabId;
   label: string;
   slug: string;
-  icon: string;
   group: TabGroup;
   badge?: 'NEW' | 'LIVE';
 }
@@ -29,18 +28,18 @@ export interface TabDef {
 export const TAB_GROUPS: readonly TabGroup[] = ['market', 'trade', 'research'];
 
 export const TABS: readonly TabDef[] = [
-  { id: 'chain', label: 'Chain', slug: 'chain', icon: '⟐', group: 'market' },
-  { id: 'surface', label: 'Volatility', slug: 'volatility', icon: '◈', group: 'market' },
-  { id: 'gex', label: 'GEX', slug: 'gex', icon: '▧', group: 'market' },
-  { id: 'flow', label: 'Flow', slug: 'flow', icon: '⚡', group: 'market', badge: 'LIVE' },
-  { id: 'sectors', label: 'Sectors', slug: 'sectors', icon: '▦', group: 'market', badge: 'NEW' },
-  { id: 'architect', label: 'Builder', slug: 'builder', icon: '⚙', group: 'trade' },
-  { id: 'trading', label: 'Paper', slug: 'paper', icon: '$', group: 'trade' },
-  { id: 'portfolio', label: 'Portfolio', slug: 'portfolio', icon: 'Σ', group: 'trade', badge: 'NEW' },
-  { id: 'social', label: 'Social', slug: 'social', icon: '☍', group: 'trade', badge: 'NEW' },
-  { id: 'alpha', label: 'Alpha', slug: 'alpha', icon: 'α', group: 'research', badge: 'NEW' },
-  { id: 'analytics', label: 'Analytics', slug: 'analytics', icon: '◎', group: 'research' },
-  { id: 'news', label: 'News', slug: 'news', icon: '▤', group: 'research', badge: 'NEW' },
+  { id: 'chain', label: 'Chain', slug: 'chain', group: 'market' },
+  { id: 'surface', label: 'Volatility', slug: 'volatility', group: 'market' },
+  { id: 'gex', label: 'GEX', slug: 'gex', group: 'market' },
+  { id: 'flow', label: 'Flow', slug: 'flow', group: 'market', badge: 'LIVE' },
+  { id: 'sectors', label: 'Sectors', slug: 'sectors', group: 'market', badge: 'NEW' },
+  { id: 'architect', label: 'Builder', slug: 'builder', group: 'trade' },
+  { id: 'trading', label: 'Paper', slug: 'paper', group: 'trade' },
+  { id: 'portfolio', label: 'Portfolio', slug: 'portfolio', group: 'trade', badge: 'NEW' },
+  { id: 'social', label: 'Social', slug: 'social', group: 'trade', badge: 'NEW' },
+  { id: 'alpha', label: 'Alpha', slug: 'alpha', group: 'research', badge: 'NEW' },
+  { id: 'analytics', label: 'Analytics', slug: 'analytics', group: 'research' },
+  { id: 'news', label: 'News', slug: 'news', group: 'research', badge: 'NEW' },
 ] as const;
 
 const tabMessages = defineMessages(

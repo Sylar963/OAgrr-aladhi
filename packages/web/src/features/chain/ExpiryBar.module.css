@@ -164,7 +164,7 @@
 
 /* ── Mobile ──────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .strip {
     flex-direction: column;
     height: auto;

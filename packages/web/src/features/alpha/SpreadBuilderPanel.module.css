@@ -10,7 +10,7 @@
   max-width: 320px;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .panel {
     min-width: 0;
     max-width: none;

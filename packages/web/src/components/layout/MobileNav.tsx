@@ -4,6 +4,8 @@ import { useAppStore } from '@stores/app-store';
 import { defineMessages, useT } from '@lib/i18n';
 import { useTabs } from '@lib/tabs';
 
+import { TabIcon } from './TabIcon';
+
 import styles from './MobileNav.module.css';
 
 const messages = defineMessages({ charts: 'Charts' }, { charts: 'Gráficos' });
@@ -34,7 +36,9 @@ export default function MobileNav() {
             data-active={isActive}
             onClick={() => setActiveTab(tab.id)}
           >
-            <span className={styles.icon}>{tab.icon}</span>
+            <span className={styles.icon}>
+              <TabIcon name={tab.id} />
+            </span>
             <span className={styles.label}>{tab.label}</span>
             {tab.badge && isActive && <span className={styles.badge}>{tab.badge}</span>}
           </button>
@@ -42,13 +46,17 @@ export default function MobileNav() {
       })}
       {aggrUrl && (
         <a className={styles.tab} href={aggrUrl} target="_blank" rel="noopener noreferrer">
-          <span className={styles.icon}>↗</span>
+          <span className={styles.icon}>
+            <TabIcon name="charts" />
+          </span>
           <span className={styles.label}>{t('charts')}</span>
         </a>
       )}
       {tradfiEnabled && (
         <button className={styles.tab} onClick={() => setAssetMode('tradfi')}>
-          <span className={styles.icon}>⇄</span>
+          <span className={styles.icon}>
+            <TabIcon name="tradfi" />
+          </span>
           <span className={styles.label}>TradFi</span>
         </button>
       )}

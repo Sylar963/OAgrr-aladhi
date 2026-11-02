@@ -5,6 +5,8 @@ import { fmtUsd } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import styles from './Architect.module.css';
 
+const TOUCH_HANDLE_RADIUS = 24;
+
 const messages = defineMessages(
   {
     price: 'Price  {value}',
@@ -445,7 +447,7 @@ export default function PayoffChart({
 
   // Check if mouse is near a leg handle
   const findHandleAtPos = useCallback(
-    (mx: number, my: number): { legId: string; strike: number } | null => {
+    (mx: number, my: number, hitRadius = 12): { legId: string; strike: number } | null => {
       const layout = getLayout();
       if (!layout) return null;
       const lg = dataRef.current.legs;
@@ -453,7 +455,7 @@ export default function PayoffChart({
       for (const leg of lg) {
         const hx = layout.toX(leg.strike);
         const hy = layout.zeroY;
-        if (Math.abs(mx - hx) < 12 && Math.abs(my - hy) < 12) {
+        if (Math.abs(mx - hx) < hitRadius && Math.abs(my - hy) < hitRadius) {
           return { legId: leg.id, strike: leg.strike };
         }
       }
@@ -462,17 +464,18 @@ export default function PayoffChart({
     [getLayout],
   );
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (!onLegStrikeDrag) return;
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
-      const handle = findHandleAtPos(mx, my);
+      const handle = findHandleAtPos(mx, my, e.pointerType === 'mouse' ? 12 : TOUCH_HANDLE_RADIUS);
       if (handle) {
         e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
         const legIdx = dataRef.current.legs.findIndex((l) => l.id === handle.legId);
         setDrag({
           legId: handle.legId,
@@ -485,8 +488,8 @@ export default function PayoffChart({
     [onLegStrikeDrag, findHandleAtPos],
   );
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const mx = e.clientX - rect.left;
@@ -525,7 +528,7 @@ export default function PayoffChart({
     [drag, findNearestStrike, findHandleAtPos, getLayout],
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handlePointerUp = useCallback(() => {
     if (
       drag &&
       onLegStrikeDrag &&
@@ -536,19 +539,26 @@ export default function PayoffChart({
     setDrag(null);
   }, [drag, onLegStrikeDrag]);
 
-  const handleMouseLeave = useCallback(() => {
-    if (!drag) setHover(null);
-  }, [drag]);
+  const handlePointerLeave = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!drag && e.pointerType === 'mouse') setHover(null);
+    },
+    [drag],
+  );
 
   return (
     <div className={styles.payoffChartArea} ref={containerRef}>
       <canvas
         ref={canvasRef}
         className={styles.payoffCanvas}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
+        onPointerDown={(e) => {
+          handlePointerDown(e);
+          handlePointerMove(e);
+        }}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => setDrag(null)}
+        onPointerLeave={handlePointerLeave}
       />
       {onLegStrikeDrag && legs.length > 0 && (
         <div className={styles.dragHint}>{t('dragHint')}</div>

@@ -41,7 +41,7 @@
   font-size: var(--text-sm);
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .wrap {
     min-height: 280px;
   }

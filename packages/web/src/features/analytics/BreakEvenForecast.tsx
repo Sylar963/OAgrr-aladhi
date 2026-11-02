@@ -276,8 +276,10 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
         key={key}
         className={styles.row}
         data-active={hovered === key || undefined}
-        onMouseEnter={() => setHovered(key)}
-        onMouseLeave={() => setHovered(null)}
+        onPointerEnter={() => setHovered(key)}
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') setHovered(null);
+        }}
       >
         <td>
           <span className={styles.swatch} style={{ background: colors.get(key) }} />

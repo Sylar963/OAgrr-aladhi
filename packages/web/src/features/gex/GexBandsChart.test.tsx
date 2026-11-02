@@ -21,6 +21,8 @@ const fetchJson = vi.fn(async (_path: string) => ({
 }));
 vi.mock('@lib/http', () => ({ fetchJson: (path: string) => fetchJson(path) }));
 
+vi.mock('@hooks/useLiveSpotOverlay', () => ({ useLiveSpotOverlay: () => {} }));
+
 const { default: GexBandsChart } = await import('./GexBandsChart');
 
 afterEach(() => { cleanup(); series.length = 0; vi.clearAllMocks(); });
@@ -36,7 +38,7 @@ describe('GexBandsChart ATR controls', () => {
   it('renders 60/3 without gamma history and switches to 130/4', async () => {
     mount();
     await waitFor(() => expect(series[1]?.setData).toHaveBeenLastCalledWith(expect.arrayContaining([{ time: 18_000, value: 106 }])));
-    expect(fetchJson.mock.calls.every(([path]) => String(path).startsWith('/spot-candles'))).toBe(true);
+    expect(fetchJson.mock.calls.every(([path]) => String(path).startsWith('/spot-aggregate-candles'))).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '130 / 4' }));
     await waitFor(() => expect(series[1]?.setData).toHaveBeenLastCalledWith(expect.arrayContaining([{ time: 39_000, value: 108 }])));
     expect(series[2]?.setData).toHaveBeenLastCalledWith(expect.arrayContaining([{ time: 39_000, value: 92 }]));

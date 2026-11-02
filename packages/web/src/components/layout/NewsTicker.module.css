@@ -192,7 +192,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .ticker {
     height: 26px;
     font-size: 11px;
@@ -202,5 +202,11 @@
   }
   .chip {
     padding: 0 12px;
+  }
+}
+
+@media (max-height: 500px) and (pointer: coarse) {
+  .ticker {
+    display: none;
   }
 }

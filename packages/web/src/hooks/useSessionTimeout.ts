@@ -6,7 +6,7 @@ const IDLE_LOGOUT_MS = 30 * 60 * 1000;
 const IDLE_WARNING_MS = 29 * 60 * 1000;
 
 /**
- * Tracks how long the tab has been hidden or unfocused, then escalates:
+ * Tracks how long the tab has been hidden, then escalates:
  *   29 minutes → idle-warning notice (with 60s countdown)
  *   30 minutes → clears the paper account id + idle-logout notice
  *
@@ -14,6 +14,9 @@ const IDLE_WARNING_MS = 29 * 60 * 1000;
  * sessions. Timers start on `visibilitychange → hidden` and are cancelled when
  * the tab becomes visible again before the warning threshold — or by the user
  * clicking "Stay active" on the warning, which bumps `sessionExtendToken`.
+ *
+ * Window focus deliberately does not count: a trader watching this app on a second monitor while
+ * typing elsewhere is not idle.
  */
 export function useSessionTimeout() {
   const setSessionNotice = useAppStore((s) => s.setSessionNotice);
@@ -81,15 +84,11 @@ export function useSessionTimeout() {
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('blur', onHidden);
-    window.addEventListener('focus', onVisible);
 
     if (document.hidden) onHidden();
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('blur', onHidden);
-      window.removeEventListener('focus', onVisible);
       clearTimers();
     };
   }, []);

@@ -80,7 +80,7 @@ export default function VenueCard({
                 <span className={styles.dir} data-direction={d.direction}>
                   {d.direction === 'buy' ? t('buy') : t('sell')}
                 </span>
-                <span className={styles.strike}>{d.strike.toLocaleString()}</span>
+                <span className={styles.strike}>{d.strike.toLocaleString('en-US')}</span>
                 <span className={styles.type} data-type={d.type}>
                   {d.type === 'call' ? 'CALL' : 'PUT'}
                 </span>

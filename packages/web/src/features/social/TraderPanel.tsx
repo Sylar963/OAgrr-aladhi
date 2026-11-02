@@ -182,7 +182,7 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
                     <tr key={trade.id}>
                       <td>
                         {trade.underlying} {formatExpiry(trade.expiry)}{' '}
-                        {trade.strike.toLocaleString()}
+                        {trade.strike.toLocaleString('en-US')}
                         <span className={styles.right} data-right={trade.optionRight}>
                           {trade.optionRight === 'call' ? 'C' : 'P'}
                         </span>

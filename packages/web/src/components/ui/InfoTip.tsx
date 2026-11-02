@@ -21,17 +21,17 @@ export default function InfoTip({ label, title, children, align = 'center' }: Pr
   useEffect(() => {
     if (!open) return;
 
-    function onMouseDown(event: MouseEvent) {
+    function onPointerDown(event: PointerEvent) {
       if (!wrapRef.current) return;
       if (!wrapRef.current.contains(event.target as Node)) setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false);
     }
-    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);

@@ -131,7 +131,7 @@
   font: 10px 'IBM Plex Mono', monospace;
 }
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .chartWrap {
     height: 320px;
   }

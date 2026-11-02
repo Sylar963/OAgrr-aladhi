@@ -223,6 +223,81 @@ async function renderAndConnect(
 // ── Tests ─────────────────────────────────────────────────────
 
 describe('useChainWs', () => {
+  it('fully validates only the first diff of a subscription', async () => {
+    const qc = queryClient;
+    renderHook(() => useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] }), {
+      wrapper,
+    });
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const ws = getLastWs();
+    const subId = (JSON.parse(ws.sent[0]!) as { subscriptionId: string }).subscriptionId;
+    const key = chainKeys.chain('BTC', '2026-03-27', ['deribit']);
+    const flush = () => act(() => vi.advanceTimersByTimeAsync(50));
+    const diffWith = (seq: number, bestIv: unknown) => ({
+      ...deltaMsg(subId, seq),
+      type: 'diff',
+      patch: {
+        stats: (deltaMsg(subId, seq) as { patch: { stats: unknown } }).patch.stats,
+        strikes: [{ strike: 70_000, call: { bestIv } }],
+      },
+    });
+    const bestIv = () =>
+      qc.getQueryData<{ strikes: Array<{ call: { bestIv: unknown } }> }>(key)?.strikes[0]?.call
+        .bestIv;
+
+    await act(async () => {
+      ws.pushMessage(snapshot(subId, 1));
+    });
+    await act(async () => {
+      ws.pushMessage(diffWith(2, 'not-a-number') as unknown as ServerWsMessage);
+    });
+    await flush();
+    expect(bestIv()).not.toBe('not-a-number');
+
+    await act(async () => {
+      ws.pushMessage(diffWith(3, 0.5) as unknown as ServerWsMessage);
+    });
+    await flush();
+    expect(bestIv()).toBe(0.5);
+
+    const malformedEnvelope = { ...diffWith(4, 0.6), seq: 'four' };
+    await act(async () => {
+      ws.pushMessage(malformedEnvelope as unknown as ServerWsMessage);
+    });
+    await flush();
+    expect(bestIv()).toBe(0.5);
+  });
+
+  it('replaces a socket that stays OPEN but silent on a visible page', async () => {
+    renderHook(() => useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] }), {
+      wrapper,
+    });
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const first = getLastWs();
+
+    await act(() => vi.advanceTimersByTimeAsync(40_000));
+
+    expect(first.readyState).toBe(MockWebSocket.CLOSED);
+    expect(getLastWs()).not.toBe(first);
+    expect(getLastWs().sent).toHaveLength(1);
+  });
+
+  it('opens a fresh socket when the network comes back', async () => {
+    renderHook(() => useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] }), {
+      wrapper,
+    });
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const first = getLastWs();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    expect(first.readyState).toBe(MockWebSocket.CLOSED);
+    expect(getLastWs()).not.toBe(first);
+  });
+
   it('opens WebSocket and sends subscribe on connect', async () => {
     const { result } = renderHook(
       () => useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] }),

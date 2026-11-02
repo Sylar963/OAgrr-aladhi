@@ -210,7 +210,7 @@ export default function TradfiGexView() {
                   ref={isNearSpot ? spotRowRef : undefined}
                 >
                   <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
-                    {g.strike.toLocaleString()}
+                    {g.strike.toLocaleString('en-US')}
                     {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}
                   </div>
                   <div className={styles.barTrack}>

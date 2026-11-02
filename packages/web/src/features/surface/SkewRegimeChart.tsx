@@ -163,8 +163,12 @@ export default function SkewRegimeChart({ points, source, underlying }: Props) {
         height={H}
         role="img"
         aria-label={t('regimeAria')}
-        onMouseMove={onMove}
-        onMouseLeave={() => setHoverIdx(null)}
+        style={{ touchAction: 'pan-y' }}
+        onPointerDown={onMove}
+        onPointerMove={onMove}
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') setHoverIdx(null);
+        }}
       >
         {zeroVisible && <line x1={PAD_L} x2={W - PAD_R} y1={toY(0)} y2={toY(0)} stroke="#2a3138" />}
         <path

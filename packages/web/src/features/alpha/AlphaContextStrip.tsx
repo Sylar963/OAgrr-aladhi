@@ -25,7 +25,7 @@ const messages = defineMessages(
     aria: 'Alpha market context',
     setupTitle:
       'Broad market heuristic, not a trade verdict. Past realized volatility is not a forecast. An unfavorable selling setup does not imply buying is profitable.',
-    setupHeuristic: 'Setup heuristic ⓘ',
+    setupHeuristic: 'Setup heuristic',
     loading: 'LOADING',
     UNAVAILABLE: 'UNAVAILABLE',
     'CHECK DIRECTION + PRICE': 'CHECK DIRECTION + PRICE',
@@ -60,7 +60,7 @@ const messages = defineMessages(
     aria: 'Contexto de mercado Alpha',
     setupTitle:
       'Heurística amplia de mercado, no un veredicto de trade. La volatilidad realizada pasada no es un pronóstico. Un setup desfavorable para vender no implica que comprar sea rentable.',
-    setupHeuristic: 'Heurística de setup ⓘ',
+    setupHeuristic: 'Heurística de setup',
     loading: 'CARGANDO',
     UNAVAILABLE: 'NO DISPONIBLE',
     'CHECK DIRECTION + PRICE': 'REVISA DIRECCIÓN + PRECIO',

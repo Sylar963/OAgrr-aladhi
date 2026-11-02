@@ -71,7 +71,7 @@ function fmtUsd(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '-' : '';
-  if (abs >= 100) return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (abs >= 100) return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
   if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;
   if (abs === 0) return '$0.00';
@@ -208,7 +208,7 @@ export default function PositionsTable({
           const noteLabel = beNoteLabel(be?.beNote, tl);
           const noteTitle = beNoteTitle(be?.beNote, tl);
           const debitOrCredit = leg.size > 0 ? tl('debit') : tl('credit');
-          const entryPrice = `$${leg.entryPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          const entryPrice = `$${leg.entryPriceUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
           const debitOrCreditTitle =
             leg.size > 0 ? t('longLeg', { v: entryPrice }) : t('shortLeg', { v: entryPrice });
           return (
@@ -218,7 +218,7 @@ export default function PositionsTable({
             >
               <td>{leg.underlying}</td>
               <td>{leg.expiry}</td>
-              <td>{leg.strike.toLocaleString()}</td>
+              <td>{leg.strike.toLocaleString('en-US')}</td>
               <td>{leg.optionRight === 'call' ? 'C' : 'P'}</td>
               <td className={leg.size > 0 ? styles.long : styles.short}>{leg.size}</td>
               <td>{fmtUsd(leg.entryPriceUsd)}</td>

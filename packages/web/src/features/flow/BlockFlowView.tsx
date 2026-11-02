@@ -108,7 +108,7 @@ function parseLegInfo(instrument: string): { expiry: string; strike: string; typ
   const parts = instrument.split('-');
   const option = instrument.match(/-(\d+(?:[._d]\d+)?)-([CP])(?:-|$)/);
   const type = option?.[2] === 'C' ? 'CALL' : option?.[2] === 'P' ? 'PUT' : '–';
-  const strike = option?.[1] ? Number(option[1].replace(/[d_]/, '.')).toLocaleString() : '–';
+  const strike = option?.[1] ? Number(option[1].replace(/[d_]/, '.')).toLocaleString('en-US') : '–';
 
   let expiry = '–';
   for (const part of parts) {
@@ -373,7 +373,7 @@ export default function BlockFlowView({
   }
 
   if (error) {
-    return <EmptyState icon="⚠" title={t('failedBlocks')} detail={t('failedBlocksDetail')} />;
+    return <EmptyState icon="⚠︎" title={t('failedBlocks')} detail={t('failedBlocksDetail')} />;
   }
 
   return (

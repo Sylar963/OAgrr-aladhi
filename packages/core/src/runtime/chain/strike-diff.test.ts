@@ -115,4 +115,27 @@ describe('diffEnrichedStrikes', () => {
     const prev = [strike({ deribit: quote() })];
     expect(diffEnrichedStrikes(prev, [strike({ deribit: quote() })])).toEqual([]);
   });
+
+  it('rounds computed floats to eight significant digits', () => {
+    const prev = strike({ deribit: quote({ bid: 100 }) });
+    const next = strike({ deribit: quote({ bid: 77.0130196685822 }) });
+
+    expect(diffEnrichedStrike(prev, next)?.call?.venues?.deribit).toEqual({ bid: 77.01302 });
+  });
+
+  it('keeps integers whole, so millisecond timestamps survive rounding', () => {
+    const prev = strike({ deribit: quote({ asOfMs: 1_793_641_002_269 }) });
+    const next = strike({ deribit: quote({ asOfMs: 1_793_641_002_270 }) });
+
+    expect(diffEnrichedStrike(prev, next)?.call?.venues?.deribit).toEqual({
+      asOfMs: 1_793_641_002_270,
+    });
+  });
+
+  it('sends nothing when a value only moved past the rounded precision', () => {
+    const prev = strike({ deribit: quote({ delta: 0.180344737701 }) });
+    const next = strike({ deribit: quote({ delta: 0.180344737799 }) });
+
+    expect(diffEnrichedStrike(prev, next)).toBeNull();
+  });
 });

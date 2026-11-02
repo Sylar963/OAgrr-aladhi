@@ -68,6 +68,7 @@ export interface SpotCandle {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 export type SpotCandleCurrency = 'BTC' | 'ETH' | 'HYPE';

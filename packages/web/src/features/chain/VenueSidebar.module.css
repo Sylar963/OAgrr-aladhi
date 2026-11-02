@@ -208,7 +208,7 @@
 
 /* ── Mobile: sidebar inside a drawer, full width ───── */
 
-@media (max-width: 768px) {
+@media (--mobile) {
   .sidebar {
     width: 100%;
     border-right: none;

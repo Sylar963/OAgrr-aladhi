@@ -1,5 +1,6 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { createWebSocketTicket } from '@lib/account-session-api';
+import { onConnectionResume } from '@lib/connection-resume';
 import { wsUrl } from '@lib/http';
 import {
   type ChatClientMessage,
@@ -110,6 +111,7 @@ export function useSocialSocket(enabled = true) {
     let disposed = false;
     let retries = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let connectAttempt = 0;
 
     const scheduleReconnect = () => {
       if (disposed || timer != null) return;
@@ -130,15 +132,16 @@ export function useSocialSocket(enabled = true) {
 
     const connect = async () => {
       if (disposed) return;
+      const connectId = ++connectAttempt;
       dispatch({ type: 'connection', connection: 'connecting' });
       let ticket: string;
       try {
         ticket = await createWebSocketTicket();
       } catch {
-        scheduleReconnect();
+        if (connectId === connectAttempt) scheduleReconnect();
         return;
       }
-      if (disposed) return;
+      if (disposed || connectId !== connectAttempt) return;
       const ws = new WebSocket(socialWsUrl(ticket));
       wsRef.current = ws;
       ws.onmessage = (event) => {
@@ -166,8 +169,24 @@ export function useSocialSocket(enabled = true) {
 
     void connect();
 
+    const stopResume = onConnectionResume(() => {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      retries = 0;
+      const stale = wsRef.current;
+      wsRef.current = null;
+      if (stale) {
+        stale.onclose = null;
+        stale.close();
+      }
+      void connect();
+    });
+
     return () => {
       disposed = true;
+      stopResume();
       if (timer != null) clearTimeout(timer);
       const ws = wsRef.current;
       wsRef.current = null;

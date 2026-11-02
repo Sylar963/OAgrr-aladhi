@@ -8,9 +8,11 @@ import type {
   VenueQuote,
 } from '@shared/enriched';
 import type { WsConnectionState, VenueFailure } from '@oggregator/protocol';
-import { ServerWsMessageSchema } from '@oggregator/protocol';
+import { ChainDiffEnvelopeSchema, ServerWsMessageSchema } from '@oggregator/protocol';
 import { chainKeys } from '@features/chain/queries';
 import { applyStrikeDiffs } from './chain-diff';
+import { MOBILE_QUERY } from '@lib/breakpoints';
+import { onConnectionResume } from '@lib/connection-resume';
 import { wsUrl } from '@lib/http';
 
 interface UseChainWsOptions {
@@ -33,6 +35,15 @@ type StatusSnapshot = UseChainWsResult;
 
 // Servers that predate per-venue lag omit the field; a shared empty object keeps the store stable.
 const NO_VENUE_LAG: Record<string, number> = {};
+
+// The chain pushes every 500ms and the index moves constantly, so this much silence on a visible
+// page means a dead connection that never reported a close.
+const SILENT_SOCKET_MS = 30_000;
+const SILENCE_CHECK_MS = 10_000;
+
+// Phones render every strike in the list, and the server pushes twice a second. Batching to one
+// render a second halves that work; a one-second-old quote isn't noticeable on a phone-sized list.
+const MOBILE_FLUSH_MS = 1_000;
 
 const INITIAL_SNAPSHOT: StatusSnapshot = {
   connectionState: 'closed',
@@ -181,6 +192,23 @@ type DiffMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: '
 
 type StatusMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'status' }>;
 
+// A subscription's first diff gets the full schema, which catches a client/server version mismatch.
+// Later diffs on it only get their envelope checked, because deep-validating thousands of quote
+// fields twice a second is the most expensive per-frame work on a phone.
+function parseServerMessage(
+  json: unknown,
+  verifiedDiffSubId: string | null,
+): ReturnType<typeof ServerWsMessageSchema.parse> | null {
+  if (verifiedDiffSubId != null) {
+    const envelope = ChainDiffEnvelopeSchema.safeParse(json);
+    if (envelope.success && envelope.data.subscriptionId === verifiedDiffSubId) {
+      return envelope.data as DiffMsg;
+    }
+  }
+  const parsed = ServerWsMessageSchema.safeParse(json);
+  return parsed.success ? parsed.data : null;
+}
+
 const CONNECTION_STATE_ORDER: WsConnectionState[] = ['live', 'reconnecting', 'stale', 'error'];
 
 function mapServerStateToWsConnectionState(state: StatusMsg['state']): WsConnectionState {
@@ -237,6 +265,8 @@ export function useChainWs({
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSubIdRef = useRef<string | null>(null);
   const lastSubscribeRequestKeyRef = useRef<string | null>(null);
+  const lastMessageAtRef = useRef(0);
+  const verifiedDiffSubIdRef = useRef<string | null>(null);
 
   const storeRef = useRef<ReturnType<typeof createStatusStore> | null>(null);
   storeRef.current ??= createStatusStore();
@@ -244,6 +274,7 @@ export function useChainWs({
 
   const pendingRef = useRef<PendingDelta[]>([]);
   const rafRef = useRef<number | null>(null);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Last received snapshot across all cache keys. Used as a reconciliation
   // baseline on tenor change so strikes whose content happens to match
@@ -256,6 +287,7 @@ export function useChainWs({
 
   const flushDeltas = useCallback(() => {
     rafRef.current = null;
+    flushTimerRef.current = null;
     const queue = pendingRef.current;
     if (queue.length === 0) return;
     pendingRef.current = [];
@@ -300,7 +332,11 @@ export function useChainWs({
   }, [qc, store]);
 
   const scheduleFlush = useCallback(() => {
-    if (rafRef.current != null) return;
+    if (rafRef.current != null || flushTimerRef.current != null) return;
+    if (window.matchMedia?.(MOBILE_QUERY).matches) {
+      flushTimerRef.current = setTimeout(flushDeltas, MOBILE_FLUSH_MS);
+      return;
+    }
     if (typeof requestAnimationFrame === 'function') {
       rafRef.current = requestAnimationFrame(flushDeltas);
     } else {
@@ -329,6 +365,7 @@ export function useChainWs({
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
+      lastMessageAtRef.current = Date.now();
       let json: unknown;
       try {
         json = JSON.parse(event.data as string);
@@ -336,10 +373,9 @@ export function useChainWs({
         return;
       }
 
-      const parsed = ServerWsMessageSchema.safeParse(json);
-      if (!parsed.success) return;
-
-      const msg = parsed.data;
+      const msg = parseServerMessage(json, verifiedDiffSubIdRef.current);
+      if (msg == null) return;
+      if (msg.type === 'diff') verifiedDiffSubIdRef.current = msg.subscriptionId;
 
       if ('subscriptionId' in msg && msg.subscriptionId !== activeSubIdRef.current) return;
 
@@ -348,6 +384,8 @@ export function useChainWs({
           // The server can accept the socket and close it straight away (not ready, slow client),
           // so only a delivered snapshot proves the connection and resets the backoff.
           attemptRef.current = 0;
+          // Anything still batched is older than this snapshot and would overwrite it.
+          pendingRef.current = [];
           const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
@@ -462,6 +500,7 @@ export function useChainWs({
     const ws = new WebSocket(chainWsUrl);
     wsRef.current = ws;
     lastSubscribeRequestKeyRef.current = null;
+    lastMessageAtRef.current = Date.now();
     store.set({ connectionState: 'connecting' });
 
     ws.onopen = () => {
@@ -504,6 +543,10 @@ export function useChainWs({
       }
       rafRef.current = null;
     }
+    if (flushTimerRef.current != null) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
     pendingRef.current = [];
     attemptRef.current = 0;
     activeSubIdRef.current = null;
@@ -533,6 +576,33 @@ export function useChainWs({
 
   // Tear down only when the hook itself unmounts.
   useEffect(() => () => disconnect(), [disconnect]);
+
+  const replaceSocket = useCallback(() => {
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
+    attemptRef.current = 0;
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    connect();
+  }, [connect]);
+
+  useEffect(() => {
+    if (!enabled || !underlying || !expiry) return;
+    const stopResume = onConnectionResume(replaceSocket);
+    const silenceTimer = setInterval(() => {
+      if (document.hidden || wsRef.current?.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - lastMessageAtRef.current >= SILENT_SOCKET_MS) replaceSocket();
+    }, SILENCE_CHECK_MS);
+    return () => {
+      stopResume();
+      clearInterval(silenceTimer);
+    };
+  }, [enabled, underlying, expiry, replaceSocket]);
 
   // Resubscribe on param change over an existing connection. When the socket
   // is still CONNECTING, the onopen handler will sendSubscribe using

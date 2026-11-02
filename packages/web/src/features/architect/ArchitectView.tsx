@@ -20,6 +20,7 @@ import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import {
+  isAggregatedSpotUnderlying,
   isSpotCandleUnderlying,
   type InstrumentCandleInterval,
   type InstrumentCandleRange,
@@ -363,7 +364,7 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
           <button className={styles.legStepBtn} onClick={() => stepStrike(-1)}>
             −
           </button>
-          <span className={styles.legStepVal}>{leg.strike.toLocaleString()}</span>
+          <span className={styles.legStepVal}>{leg.strike.toLocaleString('en-US')}</span>
           <button className={styles.legStepBtn} onClick={() => stepStrike(1)}>
             +
           </button>
@@ -404,7 +405,7 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
         {leg.direction === 'buy' ? t('buy') : t('sell')}
       </span>
       <span className={styles.legQty}>{leg.quantity}×</span>
-      <span className={styles.legStrike}>{leg.strike.toLocaleString()}</span>
+      <span className={styles.legStrike}>{leg.strike.toLocaleString('en-US')}</span>
       <span className={styles.legType} data-type={leg.type}>
         {leg.type === 'call' ? 'C' : 'P'}
       </span>
@@ -507,7 +508,7 @@ function HedgeRow({ hedge, spotPrice, onRemove, onUpdate }: HedgeRowProps) {
       </span>
       <span className={styles.legQty}>{hedge.quantity}×</span>
       <span className={styles.legStrike} title={`${t('entry')} ${fmtUsd(hedge.entryPrice)}`}>
-        {hedge.entryPrice.toLocaleString(undefined, {
+        {hedge.entryPrice.toLocaleString('en-US', {
           maximumFractionDigits: hedge.entryPrice >= 1000 ? 0 : 3,
         })}
       </span>
@@ -1648,6 +1649,13 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                     <>
                       {candleAvailable && (
                         <SnapshotBanner
+                          source={
+                            market === 'tradfi'
+                              ? 'tradfi'
+                              : isAggregatedSpotUnderlying(underlying)
+                                ? 'spot'
+                                : 'perp'
+                          }
                           dataUpdatedAt={visibleSpotCandlesUpdatedAt}
                           hasData={hasVisibleSpotCandles}
                           isFetching={spotCandlesFetching}
@@ -1706,6 +1714,11 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                       </div>
                       <PayoffChartV2
                         candles={visibleSpotCandles?.candles ?? []}
+                        liveSpotCurrency={
+                          market === 'crypto' && selectedSnapshotId == null && !spotCandlesIsPlaceholderData
+                            ? underlying
+                            : null
+                        }
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
                         legs={analyticsLegs}

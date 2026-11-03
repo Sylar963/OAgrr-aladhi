@@ -4,6 +4,9 @@ import { useMemo } from 'react';
 
 const cardMessages = defineMessages(
   {
+    'chain-table': 'Chain table',
+    'chain-stats': 'Chain stats',
+    'chain-venues': 'Venues',
     'oi-summary': 'OI summary',
     'venue-share': 'Venue share',
     'top-positions': 'Top positions',
@@ -22,6 +25,9 @@ const cardMessages = defineMessages(
     'skew-history': 'Skew history',
   } satisfies Record<CardKind, string>,
   {
+    'chain-table': 'Tabla de la cadena',
+    'chain-stats': 'Estadísticas de la cadena',
+    'chain-venues': 'Exchanges',
     'oi-summary': 'Resumen de OI',
     'venue-share': 'Cuota por exchange',
     'top-positions': 'Mayores posiciones',

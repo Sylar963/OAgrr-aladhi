@@ -173,3 +173,10 @@
   background: var(--accent-primary);
   box-shadow: 0 0 6px var(--accent-primary);
 }
+
+.statsCard {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-base);
+}

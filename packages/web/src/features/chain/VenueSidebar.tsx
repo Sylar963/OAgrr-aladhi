@@ -28,6 +28,8 @@ interface VenueSidebarProps {
   onToggle: (venueId: string) => void;
   venueOi?: Record<string, number>;
   failedVenues?: VenueFailure[];
+  /** Fills its panel instead of keeping the fixed sidebar width. */
+  fill?: boolean;
 }
 
 function VenueSidebar({
@@ -35,6 +37,7 @@ function VenueSidebar({
   onToggle,
   venueOi,
   failedVenues = [],
+  fill,
 }: VenueSidebarProps) {
   const t = useT(messages);
   const activeSet = useMemo(() => new Set<string>(activeVenues), [activeVenues]);
@@ -46,7 +49,7 @@ function VenueSidebar({
     [failedVenues],
   );
   return (
-    <aside className={styles.sidebar}>
+    <aside className={styles.sidebar} data-fill={fill || undefined}>
       <div className={styles.header}>{t('venues')}</div>
       <div className={styles.list}>
         {VENUE_LIST.map((venue) => {

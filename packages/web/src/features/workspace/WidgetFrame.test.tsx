@@ -10,7 +10,12 @@ vi.mock('@components/auth/AccountSessionProvider', () => ({
     <div data-testid="account-boundary">{children}</div>
   ),
 }));
-vi.mock('@features/chain', () => ({ ChainView: () => <div>view:chain</div> }));
+vi.mock('@features/chain', () => ({
+  ChainView: () => <div>view:chain</div>,
+  ChainTableWidget: () => <div>card:chain-table</div>,
+  ChainStatsWidget: () => <div>card:chain-stats</div>,
+  ChainVenuesWidget: () => <div>card:chain-venues</div>,
+}));
 vi.mock('@features/alpha', () => ({ AlphaView: () => <div>view:alpha</div> }));
 vi.mock('@features/architect', () => ({ ArchitectView: () => <div>view:architect</div> }));
 vi.mock('@features/trading', () => ({ TradingView: () => <div>view:trading</div> }));
@@ -106,15 +111,22 @@ describe('card widgets', () => {
     (kind) => !TABS.some((tab) => tab.id === kind),
   );
 
-  it('lists sixteen cards', () => {
-    expect(cardKinds).toHaveLength(16);
+  it('lists nineteen cards', () => {
+    expect(cardKinds).toHaveLength(19);
   });
 
-  it.each(cardKinds)('renders the %s card without holding a feed or needing an account', async (kind) => {
+  it.each(cardKinds)('renders the %s card without needing an account', async (kind) => {
     useAppStore.setState({ mainFeedClaims: 0 });
     render(<WidgetFrame kind={kind} />);
     expect(await screen.findByText(`card:${kind}`)).toBeDefined();
     expect(screen.queryByTestId('account-boundary')).toBeNull();
-    expect(useAppStore.getState().mainFeedClaims).toBe(0);
+    expect(useAppStore.getState().mainFeedClaims).toBe(WIDGET_TRAITS[kind].chainFeed ? 1 : 0);
+  });
+
+  it('holds the chain socket only for cards showing chain data', () => {
+    expect(cardKinds.filter((kind) => WIDGET_TRAITS[kind].chainFeed).sort()).toEqual([
+      'chain-stats',
+      'chain-table',
+    ]);
   });
 });

@@ -1,6 +1,11 @@
 export { AttributionSummary } from './AttributionSummary';
 export { default as ChainTable } from './ChainTable';
-export { default as ChainView } from './ChainView';
+export {
+  ChainStatsWidget,
+  ChainTableWidget,
+  ChainVenuesWidget,
+  default as ChainView,
+} from './ChainView';
 export { default as ChartPanelLayer } from './ChartPanelLayer';
 export { default as ExpiryBar } from './ExpiryBar';
 export { default as InstrumentAttributionChart } from './InstrumentAttributionChart';

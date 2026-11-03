@@ -1,7 +1,11 @@
+import { ChainStatsWidget, ChainTableWidget, ChainVenuesWidget } from '@features/chain';
 import type { CardKind } from '@lib/tabs';
 import { type ComponentType, lazy } from 'react';
 
 const CARD_VIEWS: Record<CardKind, ComponentType> = {
+  'chain-table': ChainTableWidget,
+  'chain-stats': ChainStatsWidget,
+  'chain-venues': ChainVenuesWidget,
   'oi-summary': lazy(() =>
     import('@features/analytics').then((m) => ({ default: m.OiSummaryWidget })),
   ),

@@ -59,23 +59,11 @@ function readEasyMode(): boolean {
   }
 }
 
-export default function ChainView() {
-  const t = useT(messages);
+function useChainData() {
   const underlying = useMarket((m) => m.underlying);
   const expiry = useMarket((m) => m.expiry);
-  const setExpiry = useAppStore((s) => s.setExpiry);
   const activeVenues = useMarket((m) => m.activeVenues);
-  const toggleVenue = useAppStore((s) => s.toggleVenue);
-  const setActiveVenues = useAppStore((s) => s.setActiveVenues);
-  const myIv = useMarket((m) => m.myIv);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
-  const failedVenues = useAppStore((s) => s.feedStatus.failedVenues);
-  const expiryPositions = useExpiryPositions(underlying, activeVenues);
-  const openPalette = useOpenPalette();
-
-  const { data: expiriesData } = useExpiries(underlying);
-  const expiries = expiriesData?.expiries ?? [];
-  const expiryByVenue = expiriesData?.byVenue;
 
   // Once the WS is live it delivers a snapshot on every resubscribe (tenor /
   // underlying / venue change), so the REST fetch is redundant and only races
@@ -95,20 +83,33 @@ export default function ChainView() {
   const { data: marketStats } = useStats(underlying);
   const { data: richness } = useVolRichness(underlying);
 
-  const displayChain = chain;
-  // Table props follow the rendered chain, not the selected tab, so positions,
-  // ATM scroll and price-flash scope stay consistent while a placeholder shows.
-  const displayExpiry = displayChain?.expiry ?? expiry;
-  const expiryLegs = expiryPositions.get(displayExpiry)?.legs;
-  const strikePositions = useMemo(() => summarizeStrikePositions(expiryLegs ?? []), [expiryLegs]);
-  const showLoading =
-    !displayChain && (isLoading || connectionState === 'live' || connectionState === 'connecting');
+  return {
+    underlying,
+    expiry,
+    activeVenues,
+    connectionState,
+    chain,
+    isLoading,
+    error,
+    isPlaceholderData,
+    marketStats,
+    richness,
+  };
+}
 
-  const prefetchChain = usePrefetchChain(underlying, activeVenues);
+type ChainData = ReturnType<typeof useChainData>;
 
-  // Only auto-reset venue selection when the underlying changes — not on every
-  // expiry switch. Without this guard, manually toggling a venue off and then
-  // navigating to a different expiry overwrites the user's selection.
+function isLoadingChain({ chain, isLoading, connectionState }: ChainData): boolean {
+  return !chain && (isLoading || connectionState === 'live' || connectionState === 'connecting');
+}
+
+// Only auto-reset venue selection when the underlying changes — not on every
+// expiry switch. Without this guard, manually toggling a venue off and then
+// navigating to a different expiry overwrites the user's selection.
+function useAutoSelectVenues(underlying: string): void {
+  const setActiveVenues = useAppStore((s) => s.setActiveVenues);
+  const { data: expiriesData } = useExpiries(underlying);
+  const expiryByVenue = expiriesData?.byVenue;
   const lastAutoSetUnderlyingRef = useRef<string | null>(null);
   useEffect(() => {
     if (!expiryByVenue || underlying === lastAutoSetUnderlyingRef.current) return;
@@ -118,11 +119,125 @@ export default function ChainView() {
       setActiveVenues(available);
     }
   }, [underlying, expiryByVenue, setActiveVenues]);
+}
 
-  const isMobile = useIsMobile();
+function useMyIv(): number | null {
+  const myIv = useMarket((m) => m.myIv);
+  const parsed = myIv !== '' ? parseFloat(myIv) / 100 : null;
+  return parsed != null && !Number.isNaN(parsed) && parsed > 0 ? parsed : null;
+}
+
+function MobileChain() {
+  const t = useT(messages);
+  const data = useChainData();
+  const { underlying, expiry, activeVenues, chain, error, isPlaceholderData } = data;
+  useAutoSelectVenues(underlying);
+  const myIv = useMyIv();
   const [statsExpanded, setStatsExpanded] = useState(false);
+
+  return (
+    <div className={styles.view}>
+      <div className={styles.main}>
+        {/* Collapsible stats summary */}
+        {chain && (
+          <button
+            className={styles.mobileStatsToggle}
+            onClick={() => setStatsExpanded((v) => !v)}
+          >
+            <span className={styles.mstLabel}>
+              ATM {fmtIv(chain.stats.atmIv)} · P/C {chain.stats.putCallOiRatio?.toFixed(2) ?? '—'} ·
+              OI {fmtUsdCompact(chain.stats.totalOiUsd)}
+            </span>
+            <span className={styles.mstChevron} data-expanded={statsExpanded}>
+              ›
+            </span>
+          </button>
+        )}
+
+        {statsExpanded && chain && (
+          <StatStrip
+            stats={chain.stats}
+            underlying={chain.underlying}
+            dte={chain.dte}
+            connectionState={data.connectionState}
+            marketStats={data.marketStats}
+            richness={data.richness}
+          />
+        )}
+
+        <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
+          {isLoadingChain(data) && <Spinner size="lg" label={t('loading')} />}
+          {error && !chain && (
+            <EmptyState
+              icon="⚠︎"
+              title={t('failed')}
+              detail={error instanceof Error ? error.message : t('checkConnection')}
+            />
+          )}
+          {chain && chain.strikes.length === 0 && (
+            <EmptyState
+              icon="∅"
+              title={t('noData')}
+              detail={t('noVenuesShort', { underlying, expiry })}
+            />
+          )}
+          {chain && chain.strikes.length > 0 && (
+            <ChainTable
+              strikes={chain.strikes}
+              atmStrike={chain.stats.atmStrike}
+              indexPrice={chain.stats.indexPriceUsd}
+              activeVenues={activeVenues}
+              myIv={myIv}
+              expiry={chain.expiry ?? expiry}
+              underlying={underlying}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChainStatArea({ chain, connectionState, marketStats, richness, isPlaceholderData }: ChainData) {
+  if (!chain) return null;
+  return (
+    <div className={styles.statArea} data-stale={isPlaceholderData}>
+      <StatStrip
+        stats={chain.stats}
+        underlying={chain.underlying}
+        dte={chain.dte}
+        connectionState={connectionState}
+        marketStats={marketStats}
+        richness={richness}
+      />
+    </div>
+  );
+}
+
+interface ChainMainProps {
+  /** The stat strip and venue list are separate widgets in this layout, so the table omits them. */
+  standalone?: boolean;
+}
+
+function ChainMain({ standalone = false }: ChainMainProps) {
+  const t = useT(messages);
+  const data = useChainData();
+  const { underlying, expiry, activeVenues, chain, error, isPlaceholderData } = data;
+  useAutoSelectVenues(underlying);
+  const setExpiry = useAppStore((s) => s.setExpiry);
+  const expiryPositions = useExpiryPositions(underlying, activeVenues);
+  const openPalette = useOpenPalette();
+  const prefetchChain = usePrefetchChain(underlying, activeVenues);
+  const { data: expiriesData } = useExpiries(underlying);
+  const myIv = useMyIv();
   const [calcOpen, setCalcOpen] = useState(false);
   const [easyMode, setEasyMode] = useState(readEasyMode);
+
+  // Table props follow the rendered chain, not the selected tab, so positions,
+  // ATM scroll and price-flash scope stay consistent while a placeholder shows.
+  const displayExpiry = chain?.expiry ?? expiry;
+  const expiryLegs = expiryPositions.get(displayExpiry)?.legs;
+  const strikePositions = useMemo(() => summarizeStrikePositions(expiryLegs ?? []), [expiryLegs]);
 
   useEffect(() => {
     try {
@@ -132,92 +247,14 @@ export default function ChainView() {
     }
   }, [easyMode]);
 
-  const myIvFloat = myIv !== '' ? parseFloat(myIv) / 100 : null;
-  const myIvValid = myIvFloat != null && !Number.isNaN(myIvFloat) && myIvFloat > 0;
-
-  if (isMobile) {
-    return (
-      <div className={styles.view}>
-        <div className={styles.main}>
-          {/* Collapsible stats summary */}
-          {displayChain && (
-            <button
-              className={styles.mobileStatsToggle}
-              onClick={() => setStatsExpanded((v) => !v)}
-            >
-              <span className={styles.mstLabel}>
-                ATM {fmtIv(displayChain.stats.atmIv)} · P/C{' '}
-                {displayChain.stats.putCallOiRatio?.toFixed(2) ?? '—'} · OI{' '}
-                {fmtUsdCompact(displayChain.stats.totalOiUsd)}
-              </span>
-              <span className={styles.mstChevron} data-expanded={statsExpanded}>
-                ›
-              </span>
-            </button>
-          )}
-
-          {statsExpanded && displayChain && (
-            <StatStrip
-              stats={displayChain.stats}
-              underlying={displayChain.underlying}
-              dte={displayChain.dte}
-              connectionState={connectionState}
-              marketStats={marketStats}
-              richness={richness}
-            />
-          )}
-
-          <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
-            {showLoading && <Spinner size="lg" label={t('loading')} />}
-            {error && !displayChain && (
-              <EmptyState
-                icon="⚠︎"
-                title={t('failed')}
-                detail={
-                  error instanceof Error ? error.message : t('checkConnection')
-                }
-              />
-            )}
-            {displayChain && displayChain.strikes.length === 0 && (
-              <EmptyState
-                icon="∅"
-                title={t('noData')}
-                detail={t('noVenuesShort', { underlying, expiry })}
-              />
-            )}
-            {displayChain && displayChain.strikes.length > 0 && (
-              <ChainTable
-                strikes={displayChain.strikes}
-                atmStrike={displayChain.stats.atmStrike}
-                indexPrice={displayChain.stats.indexPriceUsd}
-                activeVenues={activeVenues}
-                myIv={myIvValid ? myIvFloat : null}
-                expiry={displayExpiry}
-                underlying={underlying}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.view}>
-      <div className={styles.sidebarSlot}>
-        <VenueSidebar
-          activeVenues={activeVenues}
-          onToggle={toggleVenue}
-          failedVenues={failedVenues}
-        />
-      </div>
-
+    <>
       <div className={styles.main}>
         <ExpiryBar
           underlying={underlying}
-          spotPrice={displayChain?.stats.forwardPriceUsd}
-          spotChange={marketStats?.spot?.change24hPct}
-          expiries={expiries}
+          spotPrice={chain?.stats.forwardPriceUsd}
+          spotChange={data.marketStats?.spot?.change24hPct}
+          expiries={expiriesData?.expiries ?? []}
           selected={expiry}
           onSelect={setExpiry}
           onChangeAsset={openPalette}
@@ -225,21 +262,10 @@ export default function ChainView() {
           positions={expiryPositions}
         />
 
-        {displayChain && (
-          <div className={styles.statArea} data-stale={isPlaceholderData}>
-            <StatStrip
-              stats={displayChain.stats}
-              underlying={displayChain.underlying}
-              dte={displayChain.dte}
-              connectionState={connectionState}
-              marketStats={marketStats}
-              richness={richness}
-            />
-          </div>
-        )}
+        {!standalone && <ChainStatArea {...data} />}
 
         <div className={styles.tableControls}>
-          <span className={styles.narrowVenues}>
+          <span className={standalone ? undefined : styles.narrowVenues}>
             <VenuePickerButton />
           </span>
           {!easyMode && <MyIvInput />}
@@ -257,33 +283,31 @@ export default function ChainView() {
         </div>
 
         <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
-          {showLoading && <Spinner size="lg" label={t('loading')} />}
-          {error && !displayChain && (
+          {isLoadingChain(data) && <Spinner size="lg" label={t('loading')} />}
+          {error && !chain && (
             <EmptyState
               icon="⚠︎"
               title={t('failed')}
-              detail={
-                error instanceof Error ? error.message : t('checkConnection')
-              }
+              detail={error instanceof Error ? error.message : t('checkConnection')}
             />
           )}
-          {displayChain && displayChain.strikes.length === 0 && (
+          {chain && chain.strikes.length === 0 && (
             <EmptyState
               icon="∅"
               title={t('noData')}
               detail={t('noVenuesLong', { underlying, expiry })}
             />
           )}
-          {displayChain && displayChain.strikes.length > 0 && easyMode && (
-            <EasyChainView chain={displayChain} underlying={underlying} activeVenues={activeVenues} />
+          {chain && chain.strikes.length > 0 && easyMode && (
+            <EasyChainView chain={chain} underlying={underlying} activeVenues={activeVenues} />
           )}
-          {displayChain && displayChain.strikes.length > 0 && !easyMode && (
+          {chain && chain.strikes.length > 0 && !easyMode && (
             <ChainTable
-              strikes={displayChain.strikes}
-              atmStrike={displayChain.stats.atmStrike}
-              indexPrice={displayChain.stats.indexPriceUsd}
+              strikes={chain.strikes}
+              atmStrike={chain.stats.atmStrike}
+              indexPrice={chain.stats.indexPriceUsd}
               activeVenues={activeVenues}
-              myIv={myIvValid ? myIvFloat : null}
+              myIv={myIv}
               expiry={displayExpiry}
               underlying={underlying}
               positions={strikePositions}
@@ -307,11 +331,60 @@ export default function ChainView() {
           <OptionCalculator
             defaultUnderlying={underlying}
             defaultExpiry={expiry}
-            defaultSpot={displayChain?.stats.indexPriceUsd}
+            defaultSpot={chain?.stats.indexPriceUsd}
             onClose={() => setCalcOpen(false)}
           />
         </OverlayPortal>
       )}
+    </>
+  );
+}
+
+function ChainVenues({ fill }: { fill?: boolean }) {
+  const activeVenues = useMarket((m) => m.activeVenues);
+  const toggleVenue = useAppStore((s) => s.toggleVenue);
+  const failedVenues = useAppStore((s) => s.feedStatus.failedVenues);
+  return (
+    <VenueSidebar
+      activeVenues={activeVenues}
+      onToggle={toggleVenue}
+      failedVenues={failedVenues}
+      fill={fill}
+    />
+  );
+}
+
+export function ChainTableWidget() {
+  return (
+    <div className={styles.view}>
+      <ChainMain standalone />
+    </div>
+  );
+}
+
+export function ChainStatsWidget() {
+  const data = useChainData();
+  return (
+    <div className={styles.statsCard}>
+      {isLoadingChain(data) && <Spinner size="md" />}
+      <ChainStatArea {...data} />
+    </div>
+  );
+}
+
+export function ChainVenuesWidget() {
+  return <ChainVenues fill />;
+}
+
+export default function ChainView() {
+  const isMobile = useIsMobile();
+  if (isMobile) return <MobileChain />;
+  return (
+    <div className={styles.view}>
+      <div className={styles.sidebarSlot}>
+        <ChainVenues />
+      </div>
+      <ChainMain />
     </div>
   );
 }

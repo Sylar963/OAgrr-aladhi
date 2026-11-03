@@ -372,3 +372,36 @@ describe('custom tabs', () => {
     });
   });
 });
+
+describe('moveCustomTab', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setTestMarket({ underlying: 'BTC' });
+    useAppStore.setState({ customTabs: [] });
+    for (const name of ['A', 'B', 'C']) useAppStore.getState().createCustomTab(name);
+  });
+
+  const names = () => useAppStore.getState().customTabs.map((tab) => tab.name);
+  const idOf = (name: string) => useAppStore.getState().customTabs.find((t) => t.name === name)!.id;
+
+  it('moves a tab to the new position', () => {
+    useAppStore.getState().moveCustomTab(idOf('A'), 2);
+    expect(names()).toEqual(['B', 'C', 'A']);
+  });
+
+  it('keeps the same array when nothing moves, so nothing re-renders or saves', () => {
+    const before = useAppStore.getState().customTabs;
+    useAppStore.getState().moveCustomTab(idOf('B'), 1);
+    expect(useAppStore.getState().customTabs).toBe(before);
+  });
+
+  it('ignores an unknown tab', () => {
+    useAppStore.getState().moveCustomTab('nope', 0);
+    expect(names()).toEqual(['A', 'B', 'C']);
+  });
+
+  it('saves the new order', () => {
+    useAppStore.getState().moveCustomTab(idOf('C'), 0);
+    expect(readCustomTabs().map((tab) => tab.name)).toEqual(['C', 'A', 'B']);
+  });
+});

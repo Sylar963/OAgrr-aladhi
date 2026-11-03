@@ -143,6 +143,7 @@ interface AppState {
   openCustomTab: (id: string) => void;
   renameCustomTab: (id: string, name: string) => void;
   closeCustomTab: (id: string) => void;
+  moveCustomTab: (id: string, toIndex: number) => void;
   addWidget: (kind: WidgetKind) => void;
   setCustomTabKinds: (id: string, kinds: WidgetKind[]) => void;
   setAssetMode: (m: 'crypto' | 'tradfi') => void;
@@ -306,6 +307,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     });
   },
+  moveCustomTab: (id, toIndex) =>
+    set((s) => {
+      const from = s.customTabs.findIndex((tab) => tab.id === id);
+      if (from < 0 || from === toIndex) return {};
+      const customTabs = [...s.customTabs];
+      const [moved] = customTabs.splice(from, 1);
+      customTabs.splice(toIndex, 0, moved!);
+      return { customTabs };
+    }),
   addWidget: (kind) =>
     set((s) => {
       const active = selectActiveCustomTab(s);

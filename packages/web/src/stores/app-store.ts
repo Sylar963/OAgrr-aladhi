@@ -111,7 +111,7 @@ interface AppState {
   customTabs: CustomTab[];
   /** Visible widgets holding the main chain socket open. */
   mainFeedClaims: number;
-  widgetFocusRequest: { kind: WidgetKind; nonce: number } | null;
+  widgetFocusRequest: WidgetKind | null;
   assetMode: 'crypto' | 'tradfi';
   tradfiUnderlying: string;
   tradfiExpiry: string;
@@ -138,6 +138,7 @@ interface AppState {
   /** Jump to a widget from inside a feature, carrying any market change along with the jump. */
   navigateToWidget: (kind: TabId, target?: MarketTarget) => void;
   claimMainFeed: () => () => void;
+  clearWidgetFocus: () => void;
   createCustomTab: (name: string) => void;
   openCustomTab: (id: string) => void;
   renameCustomTab: (id: string, name: string) => void;
@@ -257,7 +258,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (tab?.kinds.includes(kind)) {
         return {
           ...patchActiveMarket(s, patch),
-          widgetFocusRequest: { kind, nonce: (s.widgetFocusRequest?.nonce ?? 0) + 1 },
+          widgetFocusRequest: kind,
         };
       }
       // Whatever sent the user here was looking at the custom tab's market, so it comes along.
@@ -276,6 +277,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ mainFeedClaims: s.mainFeedClaims + 1 }));
     return () => set((s) => ({ mainFeedClaims: s.mainFeedClaims - 1 }));
   },
+  clearWidgetFocus: () => set({ widgetFocusRequest: null }),
   createCustomTab: (name) =>
     set((s) => {
       if (s.customTabs.length >= MAX_CUSTOM_TABS) return {};

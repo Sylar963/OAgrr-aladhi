@@ -66,6 +66,7 @@ export default function DockHost({ tabId }: { tabId: string }) {
     (s) => s.customTabs.find((tab) => tab.id === tabId)?.kinds ?? NO_KINDS,
   );
   const focusRequest = useAppStore((s) => s.widgetFocusRequest);
+  const clearWidgetFocus = useAppStore((s) => s.clearWidgetFocus);
   const setCustomTabKinds = useAppStore((s) => s.setCustomTabKinds);
   const catalog = useWidgetCatalog();
   const [api, setApi] = useState<DockviewApi | null>(null);
@@ -126,7 +127,9 @@ export default function DockHost({ tabId }: { tabId: string }) {
       if (syncTimer) clearTimeout(syncTimer);
       if (saveTimer) {
         clearTimeout(saveTimer);
-        writeLayout(tabId, api.toJSON());
+        // Closing a tab unmounts this after deleting its layout, which must stay deleted.
+        const stillOpen = useAppStore.getState().customTabs.some((tab) => tab.id === tabId);
+        if (stillOpen) writeLayout(tabId, api.toJSON());
       }
     };
   }, [api, tabId, setCustomTabKinds]);
@@ -149,8 +152,9 @@ export default function DockHost({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     if (api == null || focusRequest == null) return;
-    api.getPanel(focusRequest.kind)?.api.setActive();
-  }, [api, focusRequest]);
+    api.getPanel(focusRequest)?.api.setActive();
+    clearWidgetFocus();
+  }, [api, focusRequest, clearWidgetFocus]);
 
   return (
     <div className={styles.host}>

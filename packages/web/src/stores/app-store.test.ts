@@ -314,20 +314,21 @@ describe('custom tabs', () => {
 
       const state = useAppStore.getState();
       expect(state.activeMarketId).toBe(id);
-      expect(state.widgetFocusRequest?.kind).toBe('architect');
+      expect(state.widgetFocusRequest).toBe('architect');
       expect(selectActiveMarket(state).expiry).toBe('2026-09-25');
       expect(state.markets[MAIN_MARKET_ID].expiry).toBe('2026-03-21');
     });
 
-    it('asks for focus again on a repeat jump', () => {
+    it('asks for focus again after the last request was handled', () => {
       openNewTab();
       useAppStore.getState().addWidget('architect');
 
       useAppStore.getState().navigateToWidget('architect');
-      const first = useAppStore.getState().widgetFocusRequest?.nonce;
-      useAppStore.getState().navigateToWidget('architect');
+      useAppStore.getState().clearWidgetFocus();
+      expect(useAppStore.getState().widgetFocusRequest).toBeNull();
 
-      expect(useAppStore.getState().widgetFocusRequest?.nonce).toBe((first ?? 0) + 1);
+      useAppStore.getState().navigateToWidget('architect');
+      expect(useAppStore.getState().widgetFocusRequest).toBe('architect');
     });
 
     it('goes to the fixed tab carrying the custom market when the widget is absent', () => {

@@ -143,7 +143,11 @@ export class LiveSpotOverlay {
   }
 
   dispose(chartAlive: boolean): void {
-    if (!chartAlive) return;
+    if (!chartAlive) {
+      // A removed chart never detaches its primitives, so the countdown's timer has to stop here.
+      this.countdown.detached();
+      return;
+    }
     this.series.detachPrimitive(this.countdown);
     this.chart.removeSeries(this.volume);
   }

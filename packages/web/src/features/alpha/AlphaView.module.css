@@ -128,7 +128,7 @@
   flex-shrink: 0;
 }
 
-@media (max-width: 960px) {
+@container widget (max-width: 960px) {
   .grid {
     grid-template-columns: 1fr;
   }
@@ -160,7 +160,7 @@
 }
 
 /* Below this the strategy tabs need the room; each tab scrolls under the label otherwise. */
-@media (max-width: 1023px) {
+@container widget (max-width: 1023px) {
   .venueScope {
     display: none;
   }

@@ -104,7 +104,7 @@
   color: var(--text-tertiary);
 }
 
-@media (max-width: 900px) {
+@container widget (max-width: 900px) {
   .dock {
     left: 0;
     right: 0;

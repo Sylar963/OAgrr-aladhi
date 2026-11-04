@@ -98,3 +98,9 @@
     width: 48px;
   }
 }
+
+@container widget (max-width: 560px) {
+  .hint {
+    display: none;
+  }
+}

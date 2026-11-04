@@ -613,7 +613,7 @@
   border-color: var(--color-loss);
 }
 
-@media (max-width: 1000px) {
+@container widget (max-width: 1000px) {
   .visualGrid {
     grid-template-columns: 1fr 1fr;
   }
@@ -635,7 +635,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .card {
     padding: var(--space-3);
   }

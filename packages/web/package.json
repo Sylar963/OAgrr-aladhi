@@ -23,6 +23,7 @@
     "@vercel/analytics": "2.0.1",
     "@vercel/speed-insights": "2.0.0",
     "@wagmi/core": "3.6.5",
+    "dockview-react": "8.8.3",
     "lightweight-charts": "5.1.0",
     "plotly.js": "4.1.1",
     "plotly.js-gl3d-dist-min": "4.1.1",

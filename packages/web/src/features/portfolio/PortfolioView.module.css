@@ -187,7 +187,7 @@
   color: #60a5fa;
 }
 
-@media (min-width: 901px) and (max-width: 1440px) {
+@container widget (min-width: 901px) and (max-width: 1440px) {
   .wrap {
     padding: 12px;
     gap: 12px;
@@ -199,7 +199,7 @@
   }
 }
 
-@media (min-width: 1600px) {
+@container widget (min-width: 1600px) {
   .bodyGrid {
     grid-template-columns: minmax(0, 1fr) 420px;
     gap: 20px;
@@ -211,7 +211,7 @@
   }
 }
 
-@media (min-width: 2200px) {
+@container widget (min-width: 2200px) {
   .wrap {
     max-width: 2400px;
     margin-inline: auto;
@@ -230,7 +230,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@container widget (max-width: 900px) {
   .bodyGrid {
     grid-template-columns: 1fr;
     grid-template-areas: "assistant" "main" "sidebar";

@@ -6,7 +6,7 @@ import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { VENUE_IDS } from '@lib/venue-meta';
 import type { SpotCandleCurrency } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import GexBandsChart from './GexBandsChart';
 import { computeGammaWalls, flowAttributedShare, formatGexM, gexAtSpot } from './gex-wall-utils';
@@ -125,8 +125,8 @@ function isBandsCurrency(c: string): c is SpotCandleCurrency {
 export default function GexView() {
   const t = useT(messages);
   const locale = useLocale();
-  const underlying = useAppStore((s) => s.underlying);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const underlying = useMarket((m) => m.underlying);
+  const activeVenues = useMarket((m) => m.activeVenues);
 
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];

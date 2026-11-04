@@ -323,7 +323,7 @@
   color: var(--color-loss);
 }
 
-@media (max-width: 1080px) {
+@container widget (max-width: 1080px) {
   .twoColumn {
     grid-template-columns: 1fr;
   }

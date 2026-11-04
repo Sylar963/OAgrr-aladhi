@@ -1,0 +1,8 @@
+.card {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding: var(--space-3);
+  overflow: auto;
+  background: var(--bg-surface);
+}

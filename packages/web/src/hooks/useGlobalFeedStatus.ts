@@ -1,15 +1,15 @@
 import { useEffect, useMemo } from 'react';
 
 import { useExpiries } from '@features/chain/queries';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 
 import { useChainWs } from './useChainWs';
 
 export function useGlobalFeedStatus(enabled = true) {
-  const underlying = useAppStore((s) => s.underlying);
-  const expiry = useAppStore((s) => s.expiry);
+  const underlying = useMarket((m) => m.underlying);
+  const expiry = useMarket((m) => m.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const setFeedStatus = useAppStore((s) => s.setFeedStatus);
 
   const { data: expiriesData } = useExpiries(underlying);

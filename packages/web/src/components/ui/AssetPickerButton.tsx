@@ -1,4 +1,4 @@
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { useOpenPalette } from '@components/layout/palette-context';
 import { useLocale } from '@lib/i18n';
 import { getTokenLogo, getUnderlyingDisplayMeta } from '@lib/token-meta';
@@ -7,7 +7,7 @@ import { useUnderlyings } from '@features/chain/queries';
 import styles from './AssetPickerButton.module.css';
 
 export default function AssetPickerButton() {
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const openPalette = useOpenPalette();

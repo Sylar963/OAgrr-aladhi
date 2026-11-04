@@ -114,3 +114,35 @@ describe('LiveSpotOverlay', () => {
     expect(alive.series.detachPrimitive).toHaveBeenCalled();
   });
 });
+
+describe('countdown timer', () => {
+  function attachedCountdown() {
+    const built = build();
+    const primitive = built.series.attachPrimitive.mock.calls[0]![0] as {
+      attached: (params: { series: unknown; requestUpdate: () => void }) => void;
+    };
+    const requestUpdate = vi.fn();
+    primitive.attached({ series: {}, requestUpdate });
+    return { ...built, requestUpdate };
+  }
+
+  it('ticks while attached', () => {
+    vi.useFakeTimers();
+    const { requestUpdate } = attachedCountdown();
+    vi.advanceTimersByTime(3_000);
+    expect(requestUpdate).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('stops when the chart was already removed, as happens on unmount', () => {
+    vi.useFakeTimers();
+    const { overlay, requestUpdate } = attachedCountdown();
+
+    overlay.dispose(false);
+    vi.advanceTimersByTime(3_000);
+
+    expect(requestUpdate).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
+});

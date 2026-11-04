@@ -3,4 +3,5 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  container: widget / inline-size;
 }

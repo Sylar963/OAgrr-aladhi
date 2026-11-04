@@ -384,7 +384,7 @@
   color: var(--color-loss);
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }

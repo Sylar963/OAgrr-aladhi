@@ -185,18 +185,14 @@ function BasketTile({
 }) {
   const t = useT(messages);
   const [expanded, setExpanded] = useState(false);
-  const setUnderlying = useAppStore((s) => s.setUnderlying);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const navigateToWidget = useAppStore((s) => s.navigateToWidget);
 
   const rows = expanded ? basket.members : collapsedMembers(basket.members);
   const hidden = basket.members.length - rows.length;
   const tint = basket.mean == null ? 0 : Math.min(Math.abs(basket.mean) / FULL_TINT_MOVE, 1);
   const tileTone = tone(basket.mean);
 
-  const open = (symbol: string) => {
-    setUnderlying(symbol);
-    setActiveTab('chain');
-  };
+  const open = (symbol: string) => navigateToWidget('chain', { underlying: symbol });
 
   return (
     <section

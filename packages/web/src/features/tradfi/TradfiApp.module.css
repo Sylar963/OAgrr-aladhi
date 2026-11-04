@@ -34,4 +34,5 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  container: widget / inline-size;
 }

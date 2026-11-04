@@ -667,7 +667,7 @@
   line-height: 1.45;
 }
 
-@media (max-width: 1040px) {
+@container widget (max-width: 1040px) {
   .results {
     grid-template-columns: 1fr;
   }
@@ -745,7 +745,7 @@
   }
 }
 
-@media (max-width: 430px) {
+@container widget (max-width: 430px) {
   .scanOnly {
     display: none;
   }

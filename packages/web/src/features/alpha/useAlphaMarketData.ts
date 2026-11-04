@@ -3,7 +3,7 @@ import { useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
 import { useTradfiChain, useTradfiSelection } from '@features/tradfi';
 import { VENUE_IDS } from '@oggregator/protocol';
 import type { VenueId } from '@shared/enriched';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { useMemo } from 'react';
 
 export type AlphaMarket = 'crypto' | 'tradfi';
@@ -15,11 +15,11 @@ const TRADFI_VENUES: VenueId[] = ['tastytrade' as VenueId];
 export function useAlphaMarketData(market: AlphaMarket) {
   const tradfi = market === 'tradfi';
   const openPalette = useOpenPalette();
-  const cryptoUnderlying = useAppStore((s) => s.underlying);
-  const cryptoExpiry = useAppStore((s) => s.expiry);
+  const cryptoUnderlying = useMarket((m) => m.underlying);
+  const cryptoExpiry = useMarket((m) => m.expiry);
   const setCryptoExpiry = useAppStore((s) => s.setExpiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const activeVenues = useMarket((m) => m.activeVenues);
+  const navigateToWidget = useAppStore((s) => s.navigateToWidget);
   const setTradfiPage = useAppStore((s) => s.setTradfiPage);
   const expiriesQuery = useExpiries(tradfi ? '' : cryptoUnderlying);
   const cryptoExpiries = expiriesQuery.data?.expiries;
@@ -52,7 +52,10 @@ export function useAlphaMarketData(market: AlphaMarket) {
       chainQuery: tradfiChain,
       changeAsset: selection.cycleUnderlying,
       prefetch: undefined,
-      showBuilder: () => setTradfiPage('builder'),
+      showBuilder: (nextExpiry: string) => {
+        selection.setExpiry(nextExpiry);
+        setTradfiPage('builder');
+      },
     };
   }
   return {
@@ -64,6 +67,6 @@ export function useAlphaMarketData(market: AlphaMarket) {
     chainQuery: cryptoChain,
     changeAsset: openPalette,
     prefetch: prefetchCrypto,
-    showBuilder: () => setActiveTab('architect'),
+    showBuilder: (nextExpiry: string) => navigateToWidget('architect', { expiry: nextExpiry }),
   };
 }

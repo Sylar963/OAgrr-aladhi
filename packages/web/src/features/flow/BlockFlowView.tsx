@@ -4,7 +4,7 @@ import { Spinner, EmptyState } from '@components/ui';
 import { VENUES } from '@lib/venue-meta';
 import { fmtUsd } from '@lib/format';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { useBlockFlow, useBlockFlowHistoryPage, useBlockFlowHistorySummary } from './block-queries';
 import type { BlockTradeEvent } from './block-queries';
 import { getCustomRangeFromBounds } from './DateRangePicker';
@@ -292,8 +292,8 @@ export default function BlockFlowView({
 }: BlockFlowViewProps) {
   const t = useT(messages);
   const tf = useT(flowMessages);
-  const underlying = useAppStore((s) => s.underlying);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const underlying = useMarket((m) => m.underlying);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const { data, isLoading, error } = useBlockFlow(underlying, scope === 'tape');
   const liveTrades = useMemo(
     () => (data?.trades ?? []).filter((trade) => activeVenues.includes(trade.venue)),

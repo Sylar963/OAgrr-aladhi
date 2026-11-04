@@ -633,3 +633,162 @@ describe('useChainWs', () => {
     expect(MockWebSocket.instances).toHaveLength(0);
   });
 });
+
+describe('chain feed hub', () => {
+  function feedHook(underlying: string, expiry = '2026-03-27', enabled = true) {
+    return renderHook(
+      (props: { underlying: string; expiry: string; enabled: boolean }) =>
+        useChainWs({ ...props, venues: ['deribit'] }),
+      { wrapper, initialProps: { underlying, expiry, enabled } },
+    );
+  }
+
+  async function settle() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  }
+
+  function subscribes(ws: MockWebSocket): string[] {
+    return ws.sent.map((raw) => JSON.parse(raw).request.underlying as string);
+  }
+
+  it('shares one socket between hooks asking for the same chain', async () => {
+    const first = feedHook('BTC');
+    const second = feedHook('BTC');
+    await settle();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0]!.sent).toHaveLength(1);
+
+    const subId = JSON.parse(MockWebSocket.instances[0]!.sent[0]!).subscriptionId as string;
+    act(() => MockWebSocket.instances[0]!.pushMessage(subscribedMsg(subId)));
+    expect(first.result.current.connectionState).toBe('live');
+    expect(second.result.current.connectionState).toBe('live');
+  });
+
+  it('keeps the socket for the remaining subscriber when one leaves', async () => {
+    const first = feedHook('BTC');
+    const second = feedHook('BTC');
+    await settle();
+
+    first.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+
+    expect(MockWebSocket.instances[0]!.readyState).toBe(MockWebSocket.OPEN);
+    expect(second.result.current.connectionState).not.toBe('closed');
+  });
+
+  it('opens a separate socket per distinct chain, up to the limit', async () => {
+    feedHook('BTC');
+    feedHook('ETH');
+    feedHook('SOL');
+    const fourth = feedHook('XRP');
+    await settle();
+
+    expect(MockWebSocket.instances).toHaveLength(3);
+    expect(fourth.result.current.connectionState).toBe('closed');
+  });
+
+  it('gives a freed socket to the chain waiting past the limit', async () => {
+    const first = feedHook('BTC');
+    feedHook('ETH');
+    feedHook('SOL');
+    const fourth = feedHook('XRP');
+    await settle();
+
+    first.unmount();
+    await settle();
+
+    expect(MockWebSocket.instances).toHaveLength(3);
+    expect(subscribes(MockWebSocket.instances[0]!)).toEqual(['BTC', 'XRP']);
+    expect(fourth.result.current.connectionState).not.toBe('closed');
+  });
+
+  it('closes the socket once the release delay passes with no subscribers', async () => {
+    const { unmount } = feedHook('BTC');
+    await settle();
+    const ws = MockWebSocket.instances[0]!;
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_999);
+    });
+    expect(ws.readyState).toBe(MockWebSocket.OPEN);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(ws.readyState).toBe(MockWebSocket.CLOSED);
+  });
+
+  it('stops all timers once the socket is released', async () => {
+    const { unmount } = feedHook('BTC');
+    await settle();
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('reuses the socket when another chain starts inside the release delay', async () => {
+    const first = feedHook('BTC');
+    await settle();
+
+    first.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    feedHook('ETH');
+    await settle();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(subscribes(MockWebSocket.instances[0]!)).toEqual(['BTC', 'ETH']);
+  });
+
+  it('keeps the subscription when the same chain returns inside the release delay', async () => {
+    const first = feedHook('BTC');
+    await settle();
+
+    first.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    feedHook('BTC');
+    await settle();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0]!.sent).toHaveLength(1);
+  });
+
+  it('keeps the socket through the empty expiry after a ticker change', async () => {
+    const { rerender } = feedHook('BTC');
+    await settle();
+
+    rerender({ underlying: 'ETH', expiry: '', enabled: true });
+    await settle();
+    rerender({ underlying: 'ETH', expiry: '2026-03-27', enabled: true });
+    await settle();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(subscribes(MockWebSocket.instances[0]!)).toEqual(['BTC', 'ETH']);
+  });
+
+  it('reports closed while disabled and releases the socket', async () => {
+    const { result, rerender } = feedHook('BTC');
+    await settle();
+
+    rerender({ underlying: 'BTC', expiry: '2026-03-27', enabled: false });
+    expect(result.current.connectionState).toBe('closed');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(MockWebSocket.instances[0]!.readyState).toBe(MockWebSocket.CLOSED);
+  });
+});

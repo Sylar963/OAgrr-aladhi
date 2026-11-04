@@ -372,7 +372,7 @@
   color: var(--text-dim);
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .opportunities {
     padding: var(--space-3);
   }

@@ -1,5 +1,5 @@
 import { defineMessages, translate } from '@lib/i18n';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { useEffect, useRef } from 'react';
 
 const DEGRADED_DELAY_MS = 8000;
@@ -16,7 +16,7 @@ const messages = defineMessages(
  */
 export function useFeedToasts() {
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const failedVenueIds = useAppStore((s) => s.feedStatus.failedVenueIds);
   const pushToast = useAppStore((s) => s.pushToast);
   const setFeedDegraded = useAppStore((s) => s.setFeedDegraded);

@@ -1,4 +1,4 @@
-import { EmptyState, IvChip, SpreadPill } from '@components/ui';
+import { EmptyState, IvChip, OverlayPortal, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { venueColor } from '@lib/colors';
 import { fmtDelta, fmtStrike, fmtUsd } from '@lib/format';
@@ -672,7 +672,7 @@ export default function NewChainTable({
       </div>
 
       {quickTrade && (
-        <>
+        <OverlayPortal>
           <div className={styles.backdrop} onClick={() => setQuickTrade(null)} />
           <QuickTrade
             strike={quickTrade.strike}
@@ -685,7 +685,7 @@ export default function NewChainTable({
             builderMode={builderMode}
             onClose={() => setQuickTrade(null)}
           />
-        </>
+        </OverlayPortal>
       )}
     </div>
   );

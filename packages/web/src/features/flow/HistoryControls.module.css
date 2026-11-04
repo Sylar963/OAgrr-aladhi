@@ -195,7 +195,7 @@
   color: var(--text-dim);
 }
 
-@media (max-width: 1024px) {
+@container widget (max-width: 1024px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -1,7 +1,7 @@
 import type { WsConnectionState } from '@oggregator/protocol';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUE_LIST } from '@lib/venue-meta';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
 
 import FreshnessLabel, { formatLatency } from './FreshnessLabel';
@@ -73,7 +73,7 @@ export function healthLevel({ connectionState, staleMs, liveCount, activeCount }
 
 export default function VenueHealth() {
   const t = useT(messages);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const failedVenueIds = useAppStore((s) => s.feedStatus.failedVenueIds);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const venueStates = useAppStore((s) => s.feedStatus.venueStates);

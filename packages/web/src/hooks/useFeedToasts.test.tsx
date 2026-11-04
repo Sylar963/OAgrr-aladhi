@@ -6,10 +6,12 @@ import { useAppStore } from '@stores/app-store';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useFeedToasts } from './useFeedToasts';
+import { setTestMarket } from '@/test/market-state';
 
 function setConn(state: string) {
   act(() => {
-    useAppStore.setState((s) => ({
+    setTestMarket({ activeVenues: ['deribit'] });
+  useAppStore.setState((s) => ({
       feedStatus: { ...s.feedStatus, connectionState: state as never },
     }));
   });
@@ -19,7 +21,6 @@ beforeEach(() => {
   vi.useFakeTimers();
   useAppStore.setState((s) => ({
     feedStatus: { ...s.feedStatus, connectionState: 'live', failedVenueIds: [] },
-    activeVenues: ['deribit'],
     toasts: [],
     feedDegraded: false,
   }));

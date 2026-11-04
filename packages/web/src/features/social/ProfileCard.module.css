@@ -149,7 +149,7 @@
   color: var(--color-loss);
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .card {
     padding: var(--space-3) var(--space-4);
   }

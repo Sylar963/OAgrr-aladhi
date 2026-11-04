@@ -1,46 +1,20 @@
-import { AccountAccessBoundary } from '@components/auth/AccountSessionProvider';
 import { AppShell } from '@components/layout';
 import { TradfiApp } from '@features/tradfi';
-import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
-import { ChainView, ChartPanelLayer, useUnderlyings } from '@features/chain';
+import { SessionNotice } from '@components/ui';
+import { ChartPanelLayer, useUnderlyings } from '@features/chain';
+import { CustomTabView, WidgetFrame } from '@features/workspace';
 import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
+import { useIsMobile } from '@hooks/useIsMobile';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
-import { defineMessages, useT } from '@lib/i18n';
 import { useTabs } from '@lib/tabs';
-import { useAppStore } from '@stores/app-store';
-import { lazy, Suspense, useEffect } from 'react';
+import { MAIN_MARKET_ID, useAppStore, useMarket } from '@stores/app-store';
+import { useEffect } from 'react';
 
 import styles from './App.module.css';
 
-const SurfaceView = lazy(() =>
-  import('@features/surface').then((m) => ({ default: m.SurfaceView })),
-);
-const GexView = lazy(() => import('@features/gex').then((m) => ({ default: m.GexView })));
-const FlowView = lazy(() => import('@features/flow').then((m) => ({ default: m.FlowView })));
-const AnalyticsView = lazy(() =>
-  import('@features/analytics').then((m) => ({ default: m.AnalyticsView })),
-);
-const ArchitectView = lazy(() =>
-  import('@features/architect').then((m) => ({ default: m.ArchitectView })),
-);
-const TradingView = lazy(() =>
-  import('@features/trading').then((m) => ({ default: m.TradingView })),
-);
-const AlphaView = lazy(() => import('@features/alpha').then((m) => ({ default: m.AlphaView })));
-const SectorsView = lazy(() =>
-  import('@features/sectors').then((m) => ({ default: m.SectorsView })),
-);
-const NewsView = lazy(() => import('@features/news').then((m) => ({ default: m.NewsView })));
-const SocialView = lazy(() => import('@features/social').then((m) => ({ default: m.SocialView })));
-const PortfolioView = lazy(() =>
-  import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
-);
-const messages = defineMessages({ loading: 'Loading {label}…' }, { loading: 'Cargando {label}…' });
-
 export default function App() {
-  const t = useT(messages);
   useServerVersion();
   useSessionTimeout();
   useTabUrlSync();
@@ -48,9 +22,11 @@ export default function App() {
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
-  useGlobalFeedStatus(activeTab === 'chain' || activeTab === 'alpha');
+  const activeMarketId = useAppStore((s) => s.activeMarketId);
+  const isMobile = useIsMobile();
+  useGlobalFeedStatus(useAppStore((s) => s.mainFeedClaims > 0));
 
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   useEffect(() => {
@@ -71,43 +47,24 @@ export default function App() {
     }
   }, [setActiveTab]);
 
+  const customTabOpen = activeMarketId !== MAIN_MARKET_ID;
+  useEffect(() => {
+    if (isMobile && customTabOpen) setActiveTab(activeTab);
+  }, [isMobile, customTabOpen, activeTab, setActiveTab]);
+
   const assetMode = useAppStore((s) => s.assetMode);
   const tabs = useTabs();
-  const activeLabel = tabs.find((t) => t.id === activeTab)?.label ?? activeTab;
 
   if (assetMode === 'tradfi') return <TradfiApp />;
 
   return (
     <AppShell underlyings={underlyings} tabs={tabs}>
       <div className={styles.panel}>
-        <ErrorBoundary key={activeTab} label={activeLabel}>
-          {activeTab === 'chain' && <ChainView />}
-          <Suspense fallback={<Spinner size="lg" label={t('loading', { label: activeLabel })} />}>
-            {activeTab === 'alpha' && <AlphaView />}
-            {activeTab === 'architect' && <ArchitectView />}
-            {activeTab === 'trading' && (
-              <AccountAccessBoundary>
-                <TradingView />
-              </AccountAccessBoundary>
-            )}
-            {activeTab === 'portfolio' && (
-              <AccountAccessBoundary>
-                <PortfolioView />
-              </AccountAccessBoundary>
-            )}
-            {activeTab === 'social' && (
-              <AccountAccessBoundary>
-                <SocialView />
-              </AccountAccessBoundary>
-            )}
-            {activeTab === 'surface' && <SurfaceView />}
-            {activeTab === 'flow' && <FlowView />}
-            {activeTab === 'sectors' && <SectorsView />}
-            {activeTab === 'analytics' && <AnalyticsView />}
-            {activeTab === 'gex' && <GexView />}
-            {activeTab === 'news' && <NewsView />}
-          </Suspense>
-        </ErrorBoundary>
+        {customTabOpen && !isMobile ? (
+          <CustomTabView key={activeMarketId} tabId={activeMarketId} />
+        ) : (
+          <WidgetFrame key={activeTab} kind={activeTab} />
+        )}
       </div>
       <SessionNotice />
       <ChartPanelLayer />

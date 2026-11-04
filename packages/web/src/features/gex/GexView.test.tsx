@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
-import { useAppStore } from '@stores/app-store';
 import GexView from './GexView';
 import GexBandsChart from './GexBandsChart';
+import { setTestMarket } from '@/test/market-state';
 
 const data = vi.hoisted(() => ({
   stats: { indexPriceUsd: 80_000 as number | null, forwardPriceUsd: 84_000 },
@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 function mount() {
-  useAppStore.setState({ underlying: 'BTC' });
+  setTestMarket({ underlying: 'BTC' });
   render(<GexView />);
 }
 

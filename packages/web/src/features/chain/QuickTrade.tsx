@@ -1,7 +1,7 @@
 import type { EnrichedSide } from '@shared/enriched';
 import { VenueCard, type VenueCardDetail } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
-import { useAppStore } from '@stores/app-store';
+import { selectIsWidgetOpen, useAppStore } from '@stores/app-store';
 import { defineMessages, useT } from '@lib/i18n';
 import { isActionableQuote } from './quote-selection';
 import styles from './QuickTrade.module.css';
@@ -54,9 +54,9 @@ export default function QuickTrade({
 }: QuickTradeProps) {
   const t = useT(messages);
   const addLeg = useStrategyStore((s) => s.addLeg);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const navigateToWidget = useAppStore((s) => s.navigateToWidget);
   const setTradfiPage = useAppStore((s) => s.setTradfiPage);
-  const activeTab = useAppStore((s) => s.activeTab);
+  const builderOpen = useAppStore((s) => selectIsWidgetOpen(s, 'architect'));
   const tradfiPage = useAppStore((s) => s.tradfiPage);
 
   const venues = Object.entries(side.venues)
@@ -109,7 +109,7 @@ export default function QuickTrade({
     }, null)?.id ?? null;
 
   const isOnBuilder =
-    builderMode === 'tradfi' ? tradfiPage === 'builder' : activeTab === 'architect';
+    builderMode === 'tradfi' ? tradfiPage === 'builder' : builderOpen;
 
   function handleAdd(v: (typeof venues)[0]) {
     addLeg(
@@ -132,7 +132,7 @@ export default function QuickTrade({
     if (builderMode === 'tradfi') {
       if (!isOnBuilder) setTradfiPage('builder');
     } else if (!isOnBuilder) {
-      setActiveTab('architect');
+      navigateToWidget('architect');
     }
     onClose();
   }

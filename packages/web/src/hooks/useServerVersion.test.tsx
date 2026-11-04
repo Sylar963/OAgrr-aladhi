@@ -12,6 +12,7 @@ beforeEach(() => {
     sessionNotice: null,
     announcement: null,
     activeTab: 'flow',
+    mainFeedClaims: 0,
     feedStatus: {
       connectionState: 'closed',
       failedVenueCount: 0,
@@ -97,9 +98,10 @@ describe('useServerVersion', () => {
     unmount();
   });
 
-  it('does not overwrite chain WebSocket status while the chain tab is active', async () => {
+  it('does not overwrite chain WebSocket status while a widget holds the socket', async () => {
     useAppStore.setState((s) => ({
       activeTab: 'chain',
+      mainFeedClaims: 1,
       feedStatus: { ...s.feedStatus, connectionState: 'stale', staleMs: 600_000 },
     }));
     vi.stubGlobal(

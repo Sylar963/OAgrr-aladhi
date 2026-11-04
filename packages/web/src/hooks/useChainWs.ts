@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 
 import type {
   EnrichedChainResponse,
@@ -46,6 +46,11 @@ const PROBE_TIMEOUT_MS = 10_000;
 // Phones render every strike in the list, and the server pushes twice a second. Batching to one
 // render a second halves that work; a one-second-old quote isn't noticeable on a phone-sized list.
 const MOBILE_FLUSH_MS = 1_000;
+
+const MAX_LIVE_CHAINS_PER_PAGE = 3;
+
+// Long enough to reuse the socket across a tab switch or the brief empty expiry after a ticker change.
+const IDLE_RELEASE_MS = 5_000;
 
 const INITIAL_SNAPSHOT: StatusSnapshot = {
   connectionState: 'closed',
@@ -248,52 +253,95 @@ type PendingDelta = PendingPatch & {
   venueLagMs: Record<string, number>;
 };
 
-/**
- * Subscribes to real-time chain updates via server WebSocket.
- * Validates incoming messages with Zod, gates on subscriptionId,
- * and pushes snapshots into TanStack Query cache. Delta applications
- * are coalesced per animation frame so a burst of patches results in
- * a single cache write + re-render.
- */
-export function useChainWs({
-  underlying,
-  expiry,
-  venues,
-  enabled = true,
-}: UseChainWsOptions): UseChainWsResult {
-  const qc = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
-  const attemptRef = useRef(0);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeSubIdRef = useRef<string | null>(null);
-  const lastSubscribeRequestKeyRef = useRef<string | null>(null);
-  const lastMessageAtRef = useRef(0);
-  const probeSentAtRef = useRef(0);
-  const verifiedDiffSubIdRef = useRef<string | null>(null);
+interface ChainFeedParams {
+  underlying: string;
+  expiry: string;
+  venues: string[];
+  requestKey: string;
+}
 
-  const storeRef = useRef<ReturnType<typeof createStatusStore> | null>(null);
-  storeRef.current ??= createStatusStore();
-  const store = storeRef.current;
+type StatusStore = ReturnType<typeof createStatusStore>;
 
-  const pendingRef = useRef<PendingDelta[]>([]);
-  const rafRef = useRef<number | null>(null);
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+// One socket per request. Validates incoming messages with Zod, gates on subscriptionId, and pushes
+// snapshots into the TanStack Query cache. Delta applications are coalesced per animation frame so
+// a burst of patches results in a single cache write + re-render.
+class ChainFeedConnection {
+  readonly status: StatusStore = createStatusStore();
+  subscribers = 0;
+  idleTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private ws: WebSocket | null = null;
+  private attempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private activeSubId: string | null = null;
+  private lastSubscribeRequestKey: string | null = null;
+  private lastMessageAt = 0;
+  private probeSentAt = 0;
+  private verifiedDiffSubId: string | null = null;
+  private pending: PendingDelta[] = [];
+  private raf: number | null = null;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
   // Last received snapshot across all cache keys. Used as a reconciliation
   // baseline on tenor change so strikes whose content happens to match
   // (deep OTM, all-null venues) keep their ref instead of getting a fresh one.
-  const lastSnapshotRef = useRef<EnrichedChainResponse | null>(null);
+  private lastSnapshot: EnrichedChainResponse | null = null;
+  private readonly stopResume: () => void;
+  private readonly silenceTimer: ReturnType<typeof setInterval>;
 
-  const currentRequestKey = requestKey(underlying, expiry, venues);
-  const paramsRef = useRef({ underlying, expiry, venues, requestKey: currentRequestKey });
-  paramsRef.current = { underlying, expiry, venues, requestKey: currentRequestKey };
+  constructor(
+    private readonly qc: QueryClient,
+    public params: ChainFeedParams,
+  ) {
+    this.connect();
+    this.stopResume = onConnectionResume(this.replaceSocket);
+    this.silenceTimer = setInterval(this.checkSilence, SILENCE_CHECK_MS);
+  }
 
-  const flushDeltas = useCallback(() => {
-    rafRef.current = null;
-    flushTimerRef.current = null;
-    const queue = pendingRef.current;
+  // Keeps the socket when the request changes. Tearing down forced a closed → connecting → live
+  // cycle on every tenor change, which made the FreshnessLabel ms display flicker visibly. A socket
+  // still CONNECTING picks up the new params in its onopen handler.
+  retarget(params: ChainFeedParams): void {
+    this.params = params;
+    this.connect();
+    if (this.ws?.readyState === WebSocket.OPEN) this.sendSubscribe(this.ws);
+  }
+
+  dispose(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.stopResume();
+    clearInterval(this.silenceTimer);
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.raf != null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(this.raf);
+      } else {
+        clearTimeout(this.raf as unknown as ReturnType<typeof setTimeout>);
+      }
+      this.raf = null;
+    }
+    if (this.flushTimer != null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.pending = [];
+    this.activeSubId = null;
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close(1000, 'unmount');
+      this.ws = null;
+    }
+    this.status.set({ connectionState: 'closed' });
+  }
+
+  private readonly flushDeltas = () => {
+    this.raf = null;
+    this.flushTimer = null;
+    const queue = this.pending;
     if (queue.length === 0) return;
-    pendingRef.current = [];
+    this.pending = [];
 
     // Group by cache key so bursts against the same chain coalesce to one write.
     const byKey = new Map<string, PendingDelta[]>();
@@ -306,7 +354,7 @@ export function useChainWs({
 
     for (const patches of byKey.values()) {
       const last = patches[patches.length - 1]!;
-      qc.setQueryData(last.key, (current: EnrichedChainResponse | undefined) => {
+      this.qc.setQueryData(last.key, (current: EnrichedChainResponse | undefined) => {
         if (current == null) return current;
         let strikes = current.strikes;
         for (const p of patches) {
@@ -326,34 +374,33 @@ export function useChainWs({
     }
 
     const last = queue[queue.length - 1]!;
-    store.set({
+    this.status.set({
       connectionState: 'live',
       staleMs: last.staleMs,
       venueLagMs: last.venueLagMs,
       lastSeq: last.seq,
     });
-  }, [qc, store]);
+  };
 
-  const scheduleFlush = useCallback(() => {
-    if (rafRef.current != null || flushTimerRef.current != null) return;
+  private scheduleFlush(): void {
+    if (this.raf != null || this.flushTimer != null) return;
     if (window.matchMedia?.(MOBILE_QUERY).matches) {
-      flushTimerRef.current = setTimeout(flushDeltas, MOBILE_FLUSH_MS);
+      this.flushTimer = setTimeout(this.flushDeltas, MOBILE_FLUSH_MS);
       return;
     }
     if (typeof requestAnimationFrame === 'function') {
-      rafRef.current = requestAnimationFrame(flushDeltas);
+      this.raf = requestAnimationFrame(this.flushDeltas);
     } else {
-      rafRef.current = setTimeout(flushDeltas, 16) as unknown as number;
+      this.raf = setTimeout(this.flushDeltas, 16) as unknown as number;
     }
-  }, [flushDeltas]);
+  }
 
-  const sendSubscribe = useCallback((ws: WebSocket) => {
-    const { underlying: u, expiry: e, venues: v, requestKey: key } = paramsRef.current;
-    if (!u || !e) return;
-    if (lastSubscribeRequestKeyRef.current === key) return;
+  private sendSubscribe(ws: WebSocket): void {
+    const { underlying: u, expiry: e, venues: v, requestKey: key } = this.params;
+    if (this.lastSubscribeRequestKey === key) return;
 
     const subId = nextSubId();
-    activeSubIdRef.current = subId;
+    this.activeSubId = subId;
 
     ws.send(
       JSON.stringify({
@@ -363,137 +410,131 @@ export function useChainWs({
         patchFormat: 'diff',
       }),
     );
-    lastSubscribeRequestKeyRef.current = key;
-  }, []);
+    this.lastSubscribeRequestKey = key;
+  }
 
-  const handleMessage = useCallback(
-    (event: MessageEvent) => {
-      lastMessageAtRef.current = Date.now();
-      let json: unknown;
-      try {
-        json = JSON.parse(event.data as string);
-      } catch {
-        return;
+  private readonly handleMessage = (event: MessageEvent) => {
+    this.lastMessageAt = Date.now();
+    let json: unknown;
+    try {
+      json = JSON.parse(event.data as string);
+    } catch {
+      return;
+    }
+
+    const msg = parseServerMessage(json, this.verifiedDiffSubId);
+    if (msg == null) return;
+    if (msg.type === 'diff') this.verifiedDiffSubId = msg.subscriptionId;
+
+    if ('subscriptionId' in msg && msg.subscriptionId !== this.activeSubId) return;
+
+    switch (msg.type) {
+      case 'snapshot': {
+        // The server can accept the socket and close it straight away (not ready, slow client),
+        // so only a delivered snapshot proves the connection and resets the backoff.
+        this.attempt = 0;
+        // Anything still batched is older than this snapshot and would overwrite it.
+        this.pending = [];
+        const serverKey = chainKeys.chain(
+          msg.request.underlying,
+          msg.request.expiry,
+          msg.request.venues,
+        );
+        const requestedKey = chainKeys.chain(
+          this.params.underlying,
+          this.params.expiry,
+          this.params.venues,
+        );
+        const writeSnapshot = (key: ReturnType<typeof chainKeys.chain>) => {
+          this.qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
+            // Reconcile against the cache for this exact key first (resync
+            // within same tenor); fall back to the most recent snapshot from
+            // any tenor so cross-tenor switches still benefit from content-
+            // equal strikes keeping their refs.
+            const baseline = current ?? this.lastSnapshot ?? undefined;
+            if (baseline == null) return msg.data;
+            return {
+              ...msg.data,
+              strikes: reconcileSnapshotStrikes(baseline.strikes, msg.data.strikes),
+            };
+          });
+        };
+
+        writeSnapshot(serverKey);
+        if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
+          writeSnapshot(requestedKey);
+        }
+        this.lastSnapshot =
+          this.qc.getQueryData<EnrichedChainResponse>(requestedKey) ??
+          this.qc.getQueryData<EnrichedChainResponse>(serverKey) ??
+          msg.data;
+        this.status.set({
+          connectionState: 'live',
+          staleMs: msg.meta.staleMs,
+          venueLagMs: msg.meta.venueLagMs ?? NO_VENUE_LAG,
+          lastSeq: msg.seq,
+        });
+        break;
       }
 
-      const msg = parseServerMessage(json, verifiedDiffSubIdRef.current);
-      if (msg == null) return;
-      if (msg.type === 'diff') verifiedDiffSubIdRef.current = msg.subscriptionId;
-
-      if ('subscriptionId' in msg && msg.subscriptionId !== activeSubIdRef.current) return;
-
-      switch (msg.type) {
-        case 'snapshot': {
-          // The server can accept the socket and close it straight away (not ready, slow client),
-          // so only a delivered snapshot proves the connection and resets the backoff.
-          attemptRef.current = 0;
-          // Anything still batched is older than this snapshot and would overwrite it.
-          pendingRef.current = [];
-          const serverKey = chainKeys.chain(
-            msg.request.underlying,
-            msg.request.expiry,
-            msg.request.venues,
-          );
-          const requestedKey = chainKeys.chain(
-            paramsRef.current.underlying,
-            paramsRef.current.expiry,
-            paramsRef.current.venues,
-          );
-          const writeSnapshot = (key: ReturnType<typeof chainKeys.chain>) => {
-            qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
-              // Reconcile against the cache for this exact key first (resync
-              // within same tenor); fall back to the most recent snapshot from
-              // any tenor so cross-tenor switches still benefit from content-
-              // equal strikes keeping their refs.
-              const baseline = current ?? lastSnapshotRef.current ?? undefined;
-              if (baseline == null) return msg.data;
-              return {
-                ...msg.data,
-                strikes: reconcileSnapshotStrikes(baseline.strikes, msg.data.strikes),
-              };
-            });
-          };
-
-          writeSnapshot(serverKey);
-          if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
-            writeSnapshot(requestedKey);
-          }
-          lastSnapshotRef.current =
-            qc.getQueryData<EnrichedChainResponse>(requestedKey) ??
-            qc.getQueryData<EnrichedChainResponse>(serverKey) ??
-            msg.data;
-          store.set({
-            connectionState: 'live',
-            staleMs: msg.meta.staleMs,
-            venueLagMs: msg.meta.venueLagMs ?? NO_VENUE_LAG,
-            lastSeq: msg.seq,
-          });
-          break;
+      case 'delta':
+      case 'diff': {
+        const serverKey = chainKeys.chain(
+          msg.request.underlying,
+          msg.request.expiry,
+          msg.request.venues,
+        );
+        const requestedKey = chainKeys.chain(
+          this.params.underlying,
+          this.params.expiry,
+          this.params.venues,
+        );
+        const pending: PendingPatch =
+          msg.type === 'diff'
+            ? { kind: 'diff', patch: msg.patch }
+            : { kind: 'strikes', patch: msg.patch };
+        const meta = {
+          seq: msg.seq,
+          staleMs: msg.meta.staleMs,
+          venueLagMs: msg.meta.venueLagMs ?? NO_VENUE_LAG,
+        };
+        this.pending.push({ ...pending, ...meta, key: serverKey });
+        if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
+          this.pending.push({ ...pending, ...meta, key: requestedKey });
         }
-
-        case 'delta':
-        case 'diff': {
-          const serverKey = chainKeys.chain(
-            msg.request.underlying,
-            msg.request.expiry,
-            msg.request.venues,
-          );
-          const requestedKey = chainKeys.chain(
-            paramsRef.current.underlying,
-            paramsRef.current.expiry,
-            paramsRef.current.venues,
-          );
-          const pending: PendingPatch =
-            msg.type === 'diff'
-              ? { kind: 'diff', patch: msg.patch }
-              : { kind: 'strikes', patch: msg.patch };
-          const meta = {
-            seq: msg.seq,
-            staleMs: msg.meta.staleMs,
-            venueLagMs: msg.meta.venueLagMs ?? NO_VENUE_LAG,
-          };
-          pendingRef.current.push({ ...pending, ...meta, key: serverKey });
-          if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
-            pendingRef.current.push({ ...pending, ...meta, key: requestedKey });
-          }
-          scheduleFlush();
-          break;
-        }
-
-        case 'subscribed':
-          store.set({ connectionState: 'live', failedVenues: msg.failedVenues ?? [] });
-          break;
-
-        case 'status': {
-          const mapped = mapServerStateToWsConnectionState(msg.state);
-          const prev = store.get();
-          // Skip the spread + store.set when nothing changed — preserves
-          // reference equality so useSyncExternalStore doesn't re-render.
-          if (prev.venueStates[msg.venue] === mapped) break;
-          const venueStates: Record<string, WsConnectionState> = {
-            ...prev.venueStates,
-            [msg.venue]: mapped,
-          };
-          store.set({
-            connectionState: worstConnectionState(Object.values(venueStates)),
-            venueStates,
-          });
-          break;
-        }
-
-        case 'error':
-          if (!msg.retryable) store.set({ connectionState: 'error' });
-          break;
+        this.scheduleFlush();
+        break;
       }
-    },
-    [qc, store, scheduleFlush],
-  );
 
-  const connect = useCallback(() => {
-    if (
-      wsRef.current?.readyState === WebSocket.OPEN ||
-      wsRef.current?.readyState === WebSocket.CONNECTING
-    ) {
+      case 'subscribed':
+        this.status.set({ connectionState: 'live', failedVenues: msg.failedVenues ?? [] });
+        break;
+
+      case 'status': {
+        const mapped = mapServerStateToWsConnectionState(msg.state);
+        const prev = this.status.get();
+        // Skip the spread + store.set when nothing changed — preserves
+        // reference equality so useSyncExternalStore doesn't re-render.
+        if (prev.venueStates[msg.venue] === mapped) break;
+        const venueStates: Record<string, WsConnectionState> = {
+          ...prev.venueStates,
+          [msg.venue]: mapped,
+        };
+        this.status.set({
+          connectionState: worstConnectionState(Object.values(venueStates)),
+          venueStates,
+        });
+        break;
+      }
+
+      case 'error':
+        if (!msg.retryable) this.status.set({ connectionState: 'error' });
+        break;
+    }
+  };
+
+  private connect(): void {
+    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
@@ -501,141 +542,179 @@ export function useChainWs({
     const chainWsUrl = envWsBase ? `${envWsBase.replace(/\/$/, '')}/ws/chain` : wsUrl('/ws/chain');
 
     const ws = new WebSocket(chainWsUrl);
-    wsRef.current = ws;
-    lastSubscribeRequestKeyRef.current = null;
-    lastMessageAtRef.current = Date.now();
-    store.set({ connectionState: 'connecting' });
+    this.ws = ws;
+    this.lastSubscribeRequestKey = null;
+    this.lastMessageAt = Date.now();
+    this.status.set({ connectionState: 'connecting' });
 
     ws.onopen = () => {
-      sendSubscribe(ws);
+      this.sendSubscribe(ws);
     };
 
-    ws.onmessage = handleMessage;
+    ws.onmessage = this.handleMessage;
 
     ws.onclose = () => {
-      wsRef.current = null;
-      store.set({ connectionState: 'reconnecting' });
-      scheduleReconnect();
+      this.ws = null;
+      this.status.set({ connectionState: 'reconnecting' });
+      this.scheduleReconnect();
     };
 
     // onerror usually precedes onclose for transient transport failures.
     // Keep reconnect logic centralized in onclose so retries remain unbounded.
     ws.onerror = () => {};
-  }, [sendSubscribe, handleMessage, store]);
+  }
 
-  const scheduleReconnect = useCallback(() => {
-    if (reconnectRef.current) return;
-    const delay = backoffMs(attemptRef.current);
-    attemptRef.current++;
-    reconnectRef.current = setTimeout(() => {
-      reconnectRef.current = null;
-      connect();
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+    const delay = backoffMs(this.attempt);
+    this.attempt++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
     }, delay);
-  }, [connect, store]);
+  }
 
-  const disconnect = useCallback(() => {
-    if (reconnectRef.current) {
-      clearTimeout(reconnectRef.current);
-      reconnectRef.current = null;
+  private readonly replaceSocket = () => {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
-    if (rafRef.current != null) {
-      if (typeof cancelAnimationFrame === 'function') {
-        cancelAnimationFrame(rafRef.current);
-      } else {
-        clearTimeout(rafRef.current as unknown as ReturnType<typeof setTimeout>);
-      }
-      rafRef.current = null;
+    this.attempt = 0;
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
     }
-    if (flushTimerRef.current != null) {
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = null;
-    }
-    pendingRef.current = [];
-    attemptRef.current = 0;
-    activeSubIdRef.current = null;
-    lastSubscribeRequestKeyRef.current = null;
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close(1000, 'unmount');
-      wsRef.current = null;
-    }
-    store.set({ connectionState: 'closed' });
-  }, [store]);
+    this.connect();
+  };
 
-  // Connect / disconnect based on enabled + params. Crucially, do NOT tear
-  // down the socket when only `underlying` or `expiry` change — the
-  // resubscribe effect below pushes a new subscribe over the live socket.
-  // Tearing down forced a closed → connecting → live cycle on every tenor
-  // change, which made the FreshnessLabel ms display flicker visibly.
-  useEffect(() => {
-    if (!enabled || !underlying || !expiry) {
-      disconnect();
+  private readonly checkSilence = () => {
+    const ws = this.ws;
+    if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    if (now - this.lastMessageAt < SILENT_SOCKET_MS) return;
+    if (this.probeSentAt <= this.lastMessageAt) {
+      this.probeSentAt = now;
+      this.lastSubscribeRequestKey = null;
+      this.sendSubscribe(ws);
+    } else if (now - this.probeSentAt >= PROBE_TIMEOUT_MS) {
+      this.replaceSocket();
+    }
+  };
+}
+
+interface ChainFeedSubscriber {
+  params: ChainFeedParams;
+  store: StatusStore;
+  connection: ChainFeedConnection | null;
+  stopListening: (() => void) | null;
+}
+
+// Each socket carries one subscription, and every distinct request costs the server an engine plus
+// venue subscriptions, so widgets asking for the same chain share one connection.
+class ChainFeedHub {
+  private connections: ChainFeedConnection[] = [];
+  private waiting: ChainFeedSubscriber[] = [];
+
+  constructor(private readonly qc: QueryClient) {}
+
+  acquire(params: ChainFeedParams, store: StatusStore): () => void {
+    const subscriber: ChainFeedSubscriber = {
+      params,
+      store,
+      connection: null,
+      stopListening: null,
+    };
+    this.attach(subscriber);
+    return () => this.release(subscriber);
+  }
+
+  private attach(subscriber: ChainFeedSubscriber): void {
+    const connection = this.connectionFor(subscriber.params);
+    if (connection == null) {
+      this.waiting.push(subscriber);
+      subscriber.store.set({ connectionState: 'closed' });
       return;
     }
-    // connect() is idempotent: it no-ops if the socket is already OPEN or
-    // CONNECTING, so re-running on param change is safe.
-    connect();
-  }, [enabled, connect, disconnect, underlying, expiry]);
-
-  // Tear down only when the hook itself unmounts.
-  useEffect(() => () => disconnect(), [disconnect]);
-
-  const replaceSocket = useCallback(() => {
-    if (reconnectRef.current) {
-      clearTimeout(reconnectRef.current);
-      reconnectRef.current = null;
+    if (connection.idleTimer) {
+      clearTimeout(connection.idleTimer);
+      connection.idleTimer = null;
     }
-    attemptRef.current = 0;
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close();
-      wsRef.current = null;
+    connection.subscribers += 1;
+    subscriber.connection = connection;
+    const sync = () => subscriber.store.set(connection.status.get());
+    sync();
+    subscriber.stopListening = connection.status.subscribe(sync);
+  }
+
+  private connectionFor(params: ChainFeedParams): ChainFeedConnection | null {
+    const existing = this.connections.find((c) => c.params.requestKey === params.requestKey);
+    if (existing) return existing;
+    const idle = this.connections.find((c) => c.subscribers === 0);
+    if (idle) {
+      idle.retarget(params);
+      return idle;
     }
-    connect();
-  }, [connect]);
+    if (this.connections.length >= MAX_LIVE_CHAINS_PER_PAGE) return null;
+    const created = new ChainFeedConnection(this.qc, params);
+    this.connections.push(created);
+    return created;
+  }
+
+  private release(subscriber: ChainFeedSubscriber): void {
+    this.waiting = this.waiting.filter((w) => w !== subscriber);
+    const connection = subscriber.connection;
+    if (connection == null) return;
+    subscriber.stopListening?.();
+    connection.subscribers -= 1;
+    if (connection.subscribers > 0) return;
+
+    const next = this.waiting.shift();
+    if (next) {
+      this.attach(next);
+      return;
+    }
+    connection.idleTimer = setTimeout(() => {
+      this.connections = this.connections.filter((c) => c !== connection);
+      connection.dispose();
+    }, IDLE_RELEASE_MS);
+  }
+}
+
+const hubs = new WeakMap<QueryClient, ChainFeedHub>();
+
+function hubFor(qc: QueryClient): ChainFeedHub {
+  let hub = hubs.get(qc);
+  if (hub == null) {
+    hub = new ChainFeedHub(qc);
+    hubs.set(qc, hub);
+  }
+  return hub;
+}
+
+/** Subscribes to real-time chain updates, sharing one socket per distinct request across the page. */
+export function useChainWs({
+  underlying,
+  expiry,
+  venues,
+  enabled = true,
+}: UseChainWsOptions): UseChainWsResult {
+  const qc = useQueryClient();
+  const storeRef = useRef<StatusStore | null>(null);
+  storeRef.current ??= createStatusStore();
+  const store = storeRef.current;
+
+  const key = enabled && underlying && expiry ? requestKey(underlying, expiry, venues) : null;
+  const paramsRef = useRef<ChainFeedParams>({ underlying, expiry, venues, requestKey: key ?? '' });
+  paramsRef.current = { underlying, expiry, venues, requestKey: key ?? '' };
 
   useEffect(() => {
-    if (!enabled || !underlying || !expiry) return;
-    const stopResume = onConnectionResume(replaceSocket);
-    const silenceTimer = setInterval(() => {
-      const ws = wsRef.current;
-      if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
-      const now = Date.now();
-      if (now - lastMessageAtRef.current < SILENT_SOCKET_MS) return;
-      if (probeSentAtRef.current <= lastMessageAtRef.current) {
-        probeSentAtRef.current = now;
-        lastSubscribeRequestKeyRef.current = null;
-        sendSubscribe(ws);
-      } else if (now - probeSentAtRef.current >= PROBE_TIMEOUT_MS) {
-        replaceSocket();
-      }
-    }, SILENCE_CHECK_MS);
-    return () => {
-      stopResume();
-      clearInterval(silenceTimer);
-    };
-  }, [enabled, underlying, expiry, replaceSocket, sendSubscribe]);
+    if (key == null) {
+      store.set({ connectionState: 'closed' });
+      return;
+    }
+    return hubFor(qc).acquire(paramsRef.current, store);
+  }, [qc, key, store]);
 
-  // Resubscribe on param change over an existing connection. When the socket
-  // is still CONNECTING, the onopen handler will sendSubscribe using
-  // paramsRef.current, which is updated every render.
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || !underlying || !expiry) return;
-    sendSubscribe(ws);
-  }, [underlying, expiry, currentRequestKey, sendSubscribe]);
-
-  const snapshot = useSyncExternalStore(store.subscribe, store.get, store.get);
-
-  return useMemo(
-    () => ({
-      connectionState: snapshot.connectionState,
-      staleMs: snapshot.staleMs,
-      venueLagMs: snapshot.venueLagMs,
-      lastSeq: snapshot.lastSeq,
-      failedVenues: snapshot.failedVenues,
-      venueStates: snapshot.venueStates,
-    }),
-    [snapshot],
-  );
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
 }

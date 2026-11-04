@@ -1,11 +1,12 @@
 import { SystemNotifications } from '@components/notifications';
 import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
+import { WorkspaceBar } from '@features/workspace';
 import { useIsMobile } from '@hooks/useIsMobile';
-import type { TabDef, TabId } from '@lib/tabs';
-import { useAppStore } from '@stores/app-store';
+import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
+import { useAppStore, useMarket } from '@stores/app-store';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import styles from './AppShell.module.css';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
@@ -41,21 +42,14 @@ interface AppShellProps {
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
+  const hasCustomTabs = useAppStore((s) => s.customTabs.length > 0);
 
-  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set([
-    'trading',
-    'portfolio',
-    'social',
-    'analytics',
-    'news',
-    'sectors',
-  ]);
-  const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
+  const showToolbar = isMobile && WIDGET_TRAITS[activeTab].mobileToolbar;
 
   const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -122,6 +116,11 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setHelpOpen(true)}
         />
+        {!isMobile && hasCustomTabs && (
+          <Suspense fallback={null}>
+            <WorkspaceBar />
+          </Suspense>
+        )}
         <SystemNotifications />
         <Onboarding />
         {showToolbar && <MobileToolbar />}

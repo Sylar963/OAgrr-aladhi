@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import styles from './VenuePickerButton.module.css';
 
 // Open state lives outside React render cycle so parent re-renders (from
@@ -41,7 +41,7 @@ export default function VenuePickerButton({
   readOnly = false,
 }: VenuePickerButtonProps = {}) {
   const t = useT(messages);
-  const storeActiveVenues = useAppStore((s) => s.activeVenues);
+  const storeActiveVenues = useMarket((m) => m.activeVenues);
   const storeToggleVenue = useAppStore((s) => s.toggleVenue);
   const venues = venueIds
     ? venueIds.flatMap((venueId) => {

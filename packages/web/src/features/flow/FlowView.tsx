@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Spinner, EmptyState, VenuePickerButton, AssetPickerButton } from '@components/ui';
 import { VENUES } from '@lib/venue-meta';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { fmtIv } from '@lib/format';
 import { defineMessages, useT, type Translate } from '@lib/i18n';
 import { playTradeCue, tierForNotional } from '@lib/audio';
@@ -291,8 +291,8 @@ export default function FlowView() {
   const [historyRange, setHistoryRange] = useState<HistoryRange>(() => getPresetRange('today'));
   const [lastCustomRange, setLastCustomRange] = useState<HistoryRange>({ start: null, end: null });
   const [historyCursors, setHistoryCursors] = useState<Array<TradeHistoryCursor | null>>([null]);
-  const underlying = useAppStore((s) => s.underlying);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const underlying = useMarket((m) => m.underlying);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const soundEnabled = useAppStore((s) => s.soundEnabled);
   const setSoundEnabled = useAppStore((s) => s.setSoundEnabled);
   const isLiveTape = mode === 'all' && scope === 'tape';

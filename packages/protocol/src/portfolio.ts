@@ -78,6 +78,21 @@ export const LinearPositionSchema = z.object({
 });
 export type LinearPosition = z.infer<typeof LinearPositionSchema>;
 
+// At three decimal places, values below this threshold display as 0.000 coin.
+export const DELTA_HEDGE_TOLERANCE_COIN = 0.0005;
+
+export const DeltaHedgeStateSchema = z.enum(['neutral', 'offsetting', 'long', 'short', 'unknown']);
+export type DeltaHedgeState = z.infer<typeof DeltaHedgeStateSchema>;
+
+export const DeltaExposureSchema = z.object({
+  underlying: z.string().min(1),
+  optionsDeltaCoin: z.number().nullable(),
+  linearDeltaCoin: z.number(),
+  netDeltaCoin: z.number().nullable(),
+  hedgeState: DeltaHedgeStateSchema,
+});
+export type DeltaExposure = z.infer<typeof DeltaExposureSchema>;
+
 export const ExchangePortfolioVenueSchema = z.enum(['derive', 'thalex']);
 export type ExchangePortfolioVenue = z.infer<typeof ExchangePortfolioVenueSchema>;
 
@@ -530,6 +545,7 @@ export const PortfolioMetricsSchema = z.object({
   generatedAt: z.number().int(),
   forwardDays: z.number().int().nonnegative(),
   totals: PortfolioTotalsSchema,
+  deltaByUnderlying: z.array(DeltaExposureSchema).optional(),
   pnlCurve: PortfolioPnlCurveSchema,
   byStrike: z.array(VegaByStrikeRowSchema),
   byExpiry: z.array(ExpiryBucketRowSchema),

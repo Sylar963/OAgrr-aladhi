@@ -22,6 +22,7 @@ import {
   aggregateGreeksByExpiry,
   aggregateGreeksByStrike,
   breakEvenIvCurve,
+  computeDeltaByUnderlying as computeDeltaExposures,
   computeTotals,
 } from '../../portfolio/aggregator.js';
 import {
@@ -427,6 +428,7 @@ export class PortfolioRuntime {
       generatedAt: this.now(),
       forwardDays,
       totals,
+      deltaByUnderlying: computeDeltaExposures(withMarks, linearPositions),
       pnlCurve,
       byStrike,
       byExpiry,
@@ -458,6 +460,7 @@ export class PortfolioRuntime {
         generatedAt: this.now(),
         forwardDays,
         totals: emptyTotals(),
+        deltaByUnderlying: [],
         pnlCurve: emptyPnlCurve(),
         byStrike: [],
         byExpiry: [],

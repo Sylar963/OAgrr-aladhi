@@ -495,6 +495,7 @@ export {
   type PortfolioHorizonScenarioCell,
   type PortfolioHorizonScenarios,
   computeTotals,
+  computeDeltaByUnderlying,
   attachMarks,
   legMarkFromShockedIv,
   applyVolShock,

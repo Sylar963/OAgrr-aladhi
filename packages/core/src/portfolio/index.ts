@@ -23,6 +23,7 @@ export {
   aggregateGreeksByExpiry,
   breakEvenIvCurve,
   computeTotals,
+  computeDeltaByUnderlying,
   attachMarks,
   legMarkFromShockedIv,
 } from './aggregator.js';

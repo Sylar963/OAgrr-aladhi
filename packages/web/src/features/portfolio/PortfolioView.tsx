@@ -316,6 +316,7 @@ export default function PortfolioView() {
               positions={positions}
               totals={metrics?.totals ?? null}
               linearPositions={metrics?.linearPositions ?? []}
+              deltaByUnderlying={metrics?.deltaByUnderlying ?? []}
             />
           </div>
           <StrategyGroupsPanel

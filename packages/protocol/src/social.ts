@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { DeltaHedgeStateSchema } from './portfolio.js';
+
 export const CHAT_MESSAGE_MAX_CHARS = 500;
 export const CHAT_GLOBAL_ROOM = 'global';
 
@@ -93,6 +95,13 @@ export const PublicPositionDtoSchema = z.object({
 });
 export type PublicPositionDto = z.infer<typeof PublicPositionDtoSchema>;
 
+export const PublicDeltaStatusSchema = z.object({
+  underlying: z.string(),
+  netDeltaCoin: z.number().nullable(),
+  hedgeState: DeltaHedgeStateSchema,
+});
+export type PublicDeltaStatus = z.infer<typeof PublicDeltaStatusSchema>;
+
 /** A venue fill that reduced a position and realized PnL. */
 export const PublicClosedTradeDtoSchema = z.object({
   id: z.string(),
@@ -124,6 +133,7 @@ export const TraderLiveDtoSchema = z.object({
   pnlUsd: z.number(),
   returnPct: z.number(),
   openPositions: z.array(PublicPositionDtoSchema),
+  deltaStatusByUnderlying: z.array(PublicDeltaStatusSchema).optional(),
   generatedAt: z.string().datetime(),
 });
 export type TraderLiveDto = z.infer<typeof TraderLiveDtoSchema>;

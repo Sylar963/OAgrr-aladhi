@@ -1,4 +1,4 @@
-import { logger } from '@oggregator/core';
+import { computeDeltaByUnderlying, logger } from '@oggregator/core';
 import { NoopSocialStore, PostgresSocialStore, type SocialStore } from '@oggregator/db';
 import { type SocialVenue, SocialVenueSchema } from '@oggregator/protocol';
 
@@ -18,6 +18,7 @@ import { SocialThesisFeed } from './social-theses.js';
 import { TraderStreamService } from './social-trader-stream.js';
 import { thalexPositionStore } from './thalex-position-store.js';
 import { thesisService } from './thesis-services.js';
+import { ensureChainsForBook, portfolioMarkProvider } from './portfolio-services.js';
 import {
   exchangePortfolioLedgerStore,
   quoteProvider,
@@ -51,6 +52,10 @@ const venueAccess: VenueAccountAccess = {
   restore: (accountId, venue) => restoreStoredVenue(accountId, venue),
   keepAlive: (accountId, venue, enabled) => VENUE_STORES[venue].keepAlive(accountId, enabled),
   listLegs: (accountId, venue) => (onTestnet(accountId, venue) ? [] : VENUE_STORES[venue].list(accountId)),
+  listLinear: (accountId, venue) =>
+    venue === 'thalex' && !onTestnet(accountId, venue)
+      ? thalexPositionStore.listLinear(accountId)
+      : [],
   fetchEquityHistory: async (accountId, venue, fromMs) =>
     onTestnet(accountId, venue) ? null : VENUE_STORES[venue].fetchEquityHistory(accountId, fromMs),
   loadTrades: async (accountId, venue, limit) => {
@@ -84,6 +89,19 @@ export const traderStreamService = new TraderStreamService({
   isConnected: (target) => venueAccess.isConnected(target.accountId, target.venue),
   loadEquity: (target) => equityCache.get(target.accountId, target.venue),
   listLegs: (target) => venueAccess.listLegs(target.accountId, target.venue),
+  getDeltaByUnderlying: async (target) => {
+    const legs = venueAccess.listLegs(target.accountId, target.venue);
+    await ensureChainsForBook(legs);
+    const exposures = computeDeltaByUnderlying(
+      legs.map((leg) => ({ leg, mark: portfolioMarkProvider(leg) })),
+      venueAccess.listLinear?.(target.accountId, target.venue) ?? [],
+    );
+    return exposures.map(({ underlying, netDeltaCoin, hedgeState }) => ({
+      underlying,
+      netDeltaCoin,
+      hedgeState,
+    }));
+  },
   loadClosedTrades: async (target) => {
     const trades = await venueAccess.loadTrades(target.accountId, target.venue, LEDGER_LOAD_LIMIT);
     if (trades == null) return null;

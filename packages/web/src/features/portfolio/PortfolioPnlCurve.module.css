@@ -87,9 +87,15 @@
   background: rgba(15, 23, 42, 0.55);
 }
 
-.metricPill[data-hedge='hedged'] {
+.metricPill[data-hedge='hedged'],
+.metricPill[data-hedge='neutral'] {
   color: var(--color-profit);
   border-color: color-mix(in srgb, var(--color-profit) 45%, transparent);
+}
+
+.metricPill[data-hedge='offsetting'] {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
 }
 
 .stalePill {

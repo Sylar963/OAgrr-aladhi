@@ -2,6 +2,7 @@ import type { PositionLeg } from '@oggregator/core';
 import type {
   ChatServerMessage,
   PublicClosedTradeDto,
+  PublicDeltaStatus,
   PublicPositionDto,
   SocialVenue,
   TraderLiveDto,
@@ -21,6 +22,9 @@ export interface TraderStreamDeps {
   isConnected: (target: TraderTarget) => boolean;
   loadEquity: (target: TraderTarget) => Promise<VenueEquity | null>;
   listLegs: (target: TraderTarget) => PositionLeg[];
+  getDeltaByUnderlying?: (target: TraderTarget) =>
+    | PublicDeltaStatus[]
+    | Promise<PublicDeltaStatus[]>;
   /** Null when the venue keeps no fill history. */
   loadClosedTrades: (target: TraderTarget) => Promise<PublicClosedTradeDto[] | null>;
   getMark: MarkLookup;
@@ -138,9 +142,10 @@ export class TraderStreamService {
       if (entry.watchers.size === 0 || !entry.data) return;
       void this.deps
         .loadClosedTrades(entry.target)
+        .catch(() => null)
         .then(async (closedTrades) => {
-          if (!entry.data || closedTrades == null) return;
-          entry.data = { ...entry.data, closedTrades };
+          if (!entry.data) return;
+          if (closedTrades != null) entry.data = { ...entry.data, closedTrades };
           await this.sendFull(entry, [...entry.watchers]);
         })
         .catch(() => {});
@@ -273,6 +278,10 @@ export class TraderStreamService {
         unrealizedPnlUsd: mark == null ? null : leg.size * (mark - leg.entryPriceUsd),
       };
     });
+    let deltaStatusByUnderlying: PublicDeltaStatus[] = [];
+    try {
+      deltaStatusByUnderlying = (await this.deps.getDeltaByUnderlying?.(target)) ?? [];
+    } catch {}
     const nowMs = this.now();
     const summary = summarizeEquity(data.equity.points, 'all', nowMs);
     return {
@@ -283,6 +292,7 @@ export class TraderStreamService {
       pnlUsd: summary?.pnlUsd ?? 0,
       returnPct: summary?.returnPct ?? 0,
       openPositions,
+      deltaStatusByUnderlying,
       generatedAt: new Date(nowMs).toISOString(),
     };
   }

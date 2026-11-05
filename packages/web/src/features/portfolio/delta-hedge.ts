@@ -1,11 +1,16 @@
-// Options delta moves continuously, so "zero" means net delta rounds to 0.000 coin,
-// the precision it is shown at.
-export const DELTA_HEDGE_TOLERANCE_COIN = 0.0005;
+import { DELTA_HEDGE_TOLERANCE_COIN } from '@oggregator/protocol';
+
 export const DELTA_DIGITS = 3;
 
-export type DeltaHedgeState = 'hedged' | 'long' | 'short';
+export type DeltaHedgeState = 'hedged' | 'offsetting' | 'long' | 'short' | 'unknown';
 
-export function deltaHedgeState(netDeltaCoin: number): DeltaHedgeState {
+export function deltaHedgeState(
+  netDeltaCoin: number | null,
+  optionsDeltaCoin?: number | null,
+  linearDeltaCoin = 0,
+): DeltaHedgeState {
+  if (netDeltaCoin == null) return 'unknown';
   if (Math.abs(netDeltaCoin) < DELTA_HEDGE_TOLERANCE_COIN) return 'hedged';
+  if (optionsDeltaCoin != null && optionsDeltaCoin * linearDeltaCoin < 0) return 'offsetting';
   return netDeltaCoin > 0 ? 'long' : 'short';
 }

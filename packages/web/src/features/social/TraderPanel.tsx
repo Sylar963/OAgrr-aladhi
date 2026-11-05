@@ -23,6 +23,16 @@ const messages = defineMessages(
     sharingSince: 'Sharing since',
     openPositions: 'Open positions · {n}',
     noOpenPositions: 'No open positions.',
+    deltaExposure: 'Delta hedge · live',
+    deltaMissing: 'No live delta exposure is available.',
+    underlying: 'Underlying',
+    netDelta: 'Net Δ',
+    status: 'Status',
+    deltaNeutral: 'Delta neutral',
+    hedgeActive: 'Hedge active',
+    longDelta: 'Long delta',
+    shortDelta: 'Short delta',
+    deltaUnknown: 'Delta unavailable',
     closedTrades: 'Closed trades · {n}',
     noFillHistory: 'does not report fill history.',
     noClosingFills: 'No closing fills yet.',
@@ -49,6 +59,16 @@ const messages = defineMessages(
     sharingSince: 'Comparte desde',
     openPositions: 'Posiciones abiertas · {n}',
     noOpenPositions: 'Sin posiciones abiertas.',
+    deltaExposure: 'Cobertura delta · en vivo',
+    deltaMissing: 'No hay exposición delta en vivo disponible.',
+    underlying: 'Subyacente',
+    netDelta: 'Δ neto',
+    status: 'Estado',
+    deltaNeutral: 'Delta neutral',
+    hedgeActive: 'Cobertura activa',
+    longDelta: 'Delta largo',
+    shortDelta: 'Delta corto',
+    deltaUnknown: 'Delta no disponible',
     closedTrades: 'Trades cerrados · {n}',
     noFillHistory: 'no reporta historial de ejecuciones.',
     noClosingFills: 'Aún no hay ejecuciones de cierre.',
@@ -145,6 +165,46 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
               trader.equityUsd
             }
           />
+
+          <h4 className={styles.sectionTitle}>{t('deltaExposure')}</h4>
+          {trader.deltaStatusByUnderlying && trader.deltaStatusByUnderlying.length > 0 ? (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>{t('underlying')}</th>
+                    <th className={styles.num}>{t('netDelta')}</th>
+                    <th>{t('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trader.deltaStatusByUnderlying.map((exposure) => (
+                    <tr key={exposure.underlying}>
+                      <td>{exposure.underlying}</td>
+                      <td className={styles.num}>
+                        {exposure.netDeltaCoin == null
+                          ? '—'
+                          : `${exposure.netDeltaCoin > 0 ? '+' : ''}${exposure.netDeltaCoin.toFixed(3)}`}
+                      </td>
+                      <td data-hedge-state={exposure.hedgeState}>
+                        {exposure.hedgeState === 'neutral'
+                          ? t('deltaNeutral')
+                          : exposure.hedgeState === 'offsetting'
+                            ? t('hedgeActive')
+                            : exposure.hedgeState === 'long'
+                              ? t('longDelta')
+                              : exposure.hedgeState === 'short'
+                                ? t('shortDelta')
+                                : t('deltaUnknown')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className={styles.empty}>{t('deltaMissing')}</p>
+          )}
 
           <h4 className={styles.sectionTitle}>
             {t('openPositions', { n: trader.openPositions.length })}

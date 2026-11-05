@@ -1,10 +1,12 @@
 import type {
+  DeltaExposure,
   BreakEvenIvRow,
   ExpiryBucketRow,
   LinearPosition,
   PortfolioTotals,
   VegaByStrikeRow,
 } from '@oggregator/protocol';
+import { DELTA_HEDGE_TOLERANCE_COIN } from '@oggregator/protocol';
 
 import { price76, solveIv } from '../feeds/thalex/bs-solver.js';
 import { vannaPct76, volgaPct76 } from './greeks-extra.js';
@@ -199,6 +201,40 @@ export function computeTotals(
   totals.netDeltaCoin = totals.optionsDeltaCoin + totals.linearDeltaCoin;
 
   return totals;
+}
+
+export function computeDeltaByUnderlying(
+  legsWithMarks: readonly LegWithMark[],
+  linear: readonly LinearPosition[] = [],
+): DeltaExposure[] {
+  const underlyings = new Set([
+    ...legsWithMarks.map(({ leg }) => leg.underlying.toUpperCase()),
+    ...linear.map((position) => position.underlying.toUpperCase()),
+  ]);
+
+  return [...underlyings].sort().map((underlying) => {
+    const options = legsWithMarks.filter(({ leg }) => leg.underlying.toUpperCase() === underlying);
+    const linearForUnderlying = linear.filter(
+      (position) => position.underlying.toUpperCase() === underlying,
+    );
+    const optionsDeltaCoin = options.some(({ mark }) => mark.delta == null)
+      ? null
+      : options.reduce((sum, { leg, mark }) => sum + mark.delta! * leg.size, 0);
+    const linearDeltaCoin = linearForUnderlying.reduce((sum, position) => sum + position.sizeCoin, 0);
+    const netDeltaCoin = optionsDeltaCoin == null ? null : optionsDeltaCoin + linearDeltaCoin;
+    const hedgeState =
+      netDeltaCoin == null
+        ? 'unknown'
+        : Math.abs(netDeltaCoin) < DELTA_HEDGE_TOLERANCE_COIN
+          ? 'neutral'
+          : optionsDeltaCoin != null && optionsDeltaCoin * linearDeltaCoin < 0
+            ? 'offsetting'
+            : netDeltaCoin > 0
+              ? 'long'
+              : 'short';
+
+    return { underlying, optionsDeltaCoin, linearDeltaCoin, netDeltaCoin, hedgeState };
+  });
 }
 
 export function legMarkFromShockedIv(

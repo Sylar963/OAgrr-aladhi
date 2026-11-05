@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type PointerEvent } from 'react';
 
 import type {
+  DeltaExposure,
   EquityHistoryVenue,
   LinearPosition,
   PortfolioPnlCurve as PortfolioPnlCurveData,
@@ -30,6 +31,7 @@ interface Props {
   positions?: readonly PositionLeg[];
   totals?: PortfolioTotals | null;
   linearPositions?: readonly LinearPosition[];
+  deltaByUnderlying?: readonly DeltaExposure[];
 }
 
 const WIDTH = 720;
@@ -66,8 +68,16 @@ const messages = defineMessages(
     underlying: 'underlying {v}',
     spot: 'spot {v}',
     maxGain: 'max gain {v}',
-    deltaHedged: 'Δ hedged',
+    deltaHedged: 'Δ neutral',
     deltaNet: 'Δ net {v} · not hedged',
+    deltaUnavailable: 'Δ unavailable',
+    deltaOffsetting: 'Hedge active · Δ net {v}',
+    deltaByUnderlying: '{underlying} Δ {v} · {state}',
+    deltaNeutralState: 'neutral',
+    deltaOffsettingState: 'hedge active',
+    deltaLongState: 'long',
+    deltaShortState: 'short',
+    deltaUnknownState: 'unknown',
     deltaTitle: 'Options delta {options} + perps/futures {linear} = net {net}. Hedged when the net rounds to 0.000.',
     linearPill: '{name} {size} @ {entry}',
     linearHint: ' Perps and futures are included as straight lines from their entry price.',
@@ -117,8 +127,16 @@ const messages = defineMessages(
     underlying: 'subyacente {v}',
     spot: 'spot {v}',
     maxGain: 'ganancia máx. {v}',
-    deltaHedged: 'Δ cubierto',
+    deltaHedged: 'Δ neutral',
     deltaNet: 'Δ neto {v} · sin cubrir',
+    deltaUnavailable: 'Δ no disponible',
+    deltaOffsetting: 'Cobertura activa · Δ neto {v}',
+    deltaByUnderlying: '{underlying} Δ {v} · {state}',
+    deltaNeutralState: 'neutral',
+    deltaOffsettingState: 'cobertura activa',
+    deltaLongState: 'long',
+    deltaShortState: 'short',
+    deltaUnknownState: 'desconocido',
     deltaTitle: 'Delta de opciones {options} + perpetuos/futuros {linear} = neto {net}. Cubierto cuando el neto redondea a 0.000.',
     linearPill: '{name} {size} @ {entry}',
     linearHint: ' Los perpetuos y futuros se incluyen como líneas rectas desde su precio de entrada.',
@@ -169,8 +187,17 @@ function fmtPrice(value: number | null | undefined): string {
   });
 }
 
-function fmtDelta(value: number): string {
+function fmtDelta(value: number | null): string {
+  if (value == null) return '—';
   return `${value >= 0 ? '+' : ''}${value.toFixed(DELTA_DIGITS)}`;
+}
+
+function deltaStateText(state: DeltaExposure['hedgeState'], t: T): string {
+  if (state === 'neutral') return t('deltaNeutralState');
+  if (state === 'offsetting') return t('deltaOffsettingState');
+  if (state === 'long') return t('deltaLongState');
+  if (state === 'short') return t('deltaShortState');
+  return t('deltaUnknownState');
 }
 
 function fmtUsd(value: number | null | undefined): string {
@@ -250,7 +277,7 @@ function emptyMessage(status: PortfolioPnlCurveData['status'], t: T): string {
   return t('emptyFallback');
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null, strategies, positions, totals = null, linearPositions = [] }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null, strategies, positions, totals = null, linearPositions = [], deltaByUnderlying = [] }: Props) {
   const t = useT(messages);
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
@@ -258,6 +285,55 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
   const mode: CurveMode = storedMode === 'equity' && equityVenue == null ? 'payoff' : storedMode;
   const [taUnderlying, setTaUnderlying] = useState<TaUnderlying | null>(null);
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const deltaPills = deltaByUnderlying.length > 1
+    ? deltaByUnderlying.map((exposure) => (
+        <span
+          key={exposure.underlying}
+          className={styles.metricPill}
+          data-hedge={exposure.hedgeState}
+          title={t('deltaTitle', {
+            options: fmtDelta(exposure.optionsDeltaCoin),
+            linear: fmtDelta(exposure.linearDeltaCoin),
+            net: fmtDelta(exposure.netDeltaCoin),
+          })}
+        >
+          {t('deltaByUnderlying', {
+            underlying: exposure.underlying,
+            v: fmtDelta(exposure.netDeltaCoin),
+            state: deltaStateText(exposure.hedgeState, t),
+          })}
+        </span>
+      ))
+    : totals != null
+      ? (() => {
+          const exposure = deltaByUnderlying[0];
+          const net = exposure == null ? totals.netDeltaCoin : exposure.netDeltaCoin;
+          const state = exposure?.hedgeState ?? deltaHedgeState(
+            totals.netDeltaCoin,
+            totals.optionsDeltaCoin,
+            totals.linearDeltaCoin,
+          );
+          return (
+            <span
+              className={styles.metricPill}
+              data-hedge={state}
+              title={t('deltaTitle', {
+                options: fmtDelta(exposure == null ? totals.optionsDeltaCoin : exposure.optionsDeltaCoin),
+                linear: fmtDelta(exposure == null ? totals.linearDeltaCoin : exposure.linearDeltaCoin),
+                net: fmtDelta(net),
+              })}
+            >
+              {state === 'hedged' || state === 'neutral'
+                ? t('deltaHedged')
+                : state === 'offsetting'
+                  ? t('deltaOffsetting', { v: fmtDelta(net) })
+                  : state === 'unknown'
+                    ? t('deltaUnavailable')
+                    : t('deltaNet', { v: fmtDelta(net) })}
+            </span>
+          );
+        })()
+      : [];
 
   useEffect(() => {
     if (curve.status === 'ok' && curve.points.length > 0) {
@@ -467,21 +543,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         ) : (
           displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{lossLabel} {fmtUsd(displayCurve.maxLossUsd)}</span>
         )}
-        {totals != null && (
-          <span
-            className={styles.metricPill}
-            data-hedge={deltaHedgeState(totals.netDeltaCoin)}
-            title={t('deltaTitle', {
-              options: fmtDelta(totals.optionsDeltaCoin),
-              linear: fmtDelta(totals.linearDeltaCoin),
-              net: fmtDelta(totals.netDeltaCoin),
-            })}
-          >
-            {deltaHedgeState(totals.netDeltaCoin) === 'hedged'
-              ? t('deltaHedged')
-              : t('deltaNet', { v: fmtDelta(totals.netDeltaCoin) })}
-          </span>
-        )}
+        {deltaPills}
         {linearPositions.map((position) => (
           <span key={position.instrumentName} className={styles.metricPill}>
             {t('linearPill', {

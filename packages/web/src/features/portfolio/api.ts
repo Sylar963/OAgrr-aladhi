@@ -457,6 +457,17 @@ const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
     persistence: z.enum(['venue_history', 'position_snapshot', 'unavailable']),
   }),
   linearPositions: z.array(LinearPositionSchema).default([]),
+  deltaByUnderlying: z
+    .array(
+      z.object({
+        underlying: z.string(),
+        optionsDeltaCoin: z.number().nullable(),
+        linearDeltaCoin: z.number(),
+        netDeltaCoin: z.number().nullable(),
+        hedgeState: z.enum(['neutral', 'offsetting', 'long', 'short', 'unknown']),
+      }),
+    )
+    .optional(),
 }) as z.ZodType<PortfolioMetrics>;
 
 const VolShockLegResultSchema = z.object({

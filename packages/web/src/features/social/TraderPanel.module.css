@@ -161,6 +161,14 @@
   white-space: nowrap;
 }
 
+.table td[data-hedge-state='neutral'] {
+  color: var(--color-profit);
+}
+
+.table td[data-hedge-state='offsetting'] {
+  color: var(--color-warning);
+}
+
 .num {
   text-align: right !important;
 }

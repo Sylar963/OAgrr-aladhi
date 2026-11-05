@@ -92,9 +92,13 @@ const messages = defineMessages(
     direction: 'Direction',
     longDelta: 'Long delta',
     shortDelta: 'Short delta',
-    deltaHedged: 'Delta hedged',
+    deltaHedged: 'Delta neutral',
+    hedgeActive: 'Hedge active',
+    deltaUnknown: 'Delta unavailable',
+    deltaPerUnderlying: 'Shown separately by underlying',
+    deltaByUnderlying: '{underlying} · {state} · options {options} · perps/futures {linear} · net {net}',
     deltaSplit: 'options {options} · perps {linear}',
-    deltaNote: 'Options delta plus perps and futures, in coin. Hedged when the sum is 0.000.',
+    deltaNote: 'Delta is evaluated per underlying. Hedge active means linear exposure offsets option delta; neutral means net rounds to 0.000.',
     volatility: 'Volatility',
     longVol: 'Long vol',
     shortVol: 'Short vol',
@@ -187,9 +191,13 @@ const messages = defineMessages(
     direction: 'Dirección',
     longDelta: 'Long delta',
     shortDelta: 'Short delta',
-    deltaHedged: 'Delta cubierto',
+    deltaHedged: 'Delta neutral',
+    hedgeActive: 'Cobertura activa',
+    deltaUnknown: 'Delta no disponible',
+    deltaPerUnderlying: 'Se muestra por subyacente',
+    deltaByUnderlying: '{underlying} · {state} · opciones {options} · perpetuos/futuros {linear} · neto {net}',
     deltaSplit: 'opciones {options} · perpetuos {linear}',
-    deltaNote: 'Delta de las opciones más perpetuos y futuros, en moneda. Cubierto cuando la suma es 0.000.',
+    deltaNote: 'El delta se evalúa por subyacente. Cobertura activa significa que el delta lineal compensa opciones; neutral significa que el neto redondea a 0.000.',
     volatility: 'Volatilidad',
     longVol: 'Long vol',
     shortVol: 'Short vol',
@@ -362,7 +370,15 @@ function CloseNowMetric({ closeNow }: { closeNow: PortfolioCloseNow | null | und
 export default function RiskCockpit({ metrics, positions }: Props) {
   const t = useT(messages);
   const totals = metrics?.totals ?? null;
-  const hedge = totals == null ? null : deltaHedgeState(totals.netDeltaCoin);
+  const deltaByUnderlying = metrics?.deltaByUnderlying ?? [];
+  const singleDelta = deltaByUnderlying.length === 1 ? deltaByUnderlying[0] : null;
+  const hedge =
+    deltaByUnderlying.length > 1
+      ? null
+      : singleDelta?.hedgeState ??
+        (totals == null
+          ? null
+          : deltaHedgeState(totals.netDeltaCoin, totals.optionsDeltaCoin, totals.linearDeltaCoin));
   const accounting = metrics?.accounting ?? null;
   const mode = classifyBook(totals, positions.length);
   const modeMeta = modeMetaFor(mode, t);
@@ -474,17 +490,60 @@ export default function RiskCockpit({ metrics, positions }: Props) {
             <span className={styles.exposureName}>{t('direction')}</span>
             <span className={styles.greek}>Delta</span>
           </div>
-          <strong className={styles.exposureValue}>{fmtNum(totals?.netDeltaCoin, DELTA_DIGITS)}</strong>
+          <strong className={styles.exposureValue}>
+            {deltaByUnderlying.length > 1
+              ? '—'
+              : fmtNum(
+                  singleDelta != null ? singleDelta.netDeltaCoin : totals?.netDeltaCoin,
+                  DELTA_DIGITS,
+                )}
+          </strong>
           <span className={styles.exposureState} data-hedge={hedge ?? undefined}>
-            {hedge == null
+            {deltaByUnderlying.length > 1
+              ? t('deltaPerUnderlying')
+              : hedge == null
               ? t('flat')
-              : hedge === 'hedged'
+              : hedge === 'neutral' || hedge === 'hedged'
                 ? t('deltaHedged')
+                : hedge === 'offsetting'
+                  ? t('hedgeActive')
+                  : hedge === 'unknown'
+                    ? t('deltaUnknown')
                 : hedge === 'long'
                   ? t('longDelta')
                   : t('shortDelta')}
           </span>
-          {totals != null && totals.linearDeltaCoin !== 0 && (
+          {deltaByUnderlying.length > 1 ? (
+            <div className={styles.deltaBreakdown}>
+              {deltaByUnderlying.map((exposure) => (
+                <span key={exposure.underlying} data-hedge={exposure.hedgeState}>
+                  {t('deltaByUnderlying', {
+                    underlying: exposure.underlying,
+                    state:
+                      exposure.hedgeState === 'neutral'
+                        ? t('deltaHedged')
+                        : exposure.hedgeState === 'offsetting'
+                          ? t('hedgeActive')
+                          : exposure.hedgeState === 'long'
+                            ? t('longDelta')
+                            : exposure.hedgeState === 'short'
+                              ? t('shortDelta')
+                              : t('deltaUnknown'),
+                    options: fmtNum(exposure.optionsDeltaCoin, DELTA_DIGITS),
+                    linear: fmtNum(exposure.linearDeltaCoin, DELTA_DIGITS),
+                    net: fmtNum(exposure.netDeltaCoin, DELTA_DIGITS),
+                  })}
+                </span>
+              ))}
+            </div>
+          ) : singleDelta != null && singleDelta.linearDeltaCoin !== 0 ? (
+            <span className={styles.exposureState}>
+              {t('deltaSplit', {
+                options: fmtNum(singleDelta.optionsDeltaCoin, DELTA_DIGITS),
+                linear: fmtNum(singleDelta.linearDeltaCoin, DELTA_DIGITS),
+              })}
+            </span>
+          ) : totals != null && totals.linearDeltaCoin !== 0 && (
             <span className={styles.exposureState}>
               {t('deltaSplit', {
                 options: fmtNum(totals.optionsDeltaCoin, DELTA_DIGITS),

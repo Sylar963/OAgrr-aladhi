@@ -12,6 +12,7 @@ const messages = defineMessages(
   {
     sharedUsername: 'Your account username',
     sharedPositions: 'Your {venue} open positions, streamed live with marks and unrealized PnL',
+    sharedDelta: 'Your live net delta and hedge status by underlying',
     sharedNoFills: 'Closing fills are not shown: Paradex does not report fill history',
     sharedFills: 'Your {venue} closing fills with realized PnL',
     sharedEquity:
@@ -48,6 +49,7 @@ const messages = defineMessages(
     sharedUsername: 'Tu nombre de usuario',
     sharedPositions:
       'Tus posiciones abiertas en {venue}, transmitidas en vivo con mark y PnL no realizado',
+    sharedDelta: 'Tu delta neto y estado de cobertura en vivo por subyacente',
     sharedNoFills: 'No se muestran ejecuciones de cierre: Paradex no reporta historial de ejecuciones',
     sharedFills: 'Tus ejecuciones de cierre en {venue} con PnL realizado',
     sharedEquity:
@@ -87,6 +89,7 @@ function sharedItems(venue: SocialVenue, t: Translate<typeof messages.en>): stri
   return [
     t('sharedUsername'),
     t('sharedPositions', { venue: name }),
+    t('sharedDelta'),
     venue === 'paradex' ? t('sharedNoFills') : t('sharedFills', { venue: name }),
     t('sharedEquity', { venue: name }),
   ];

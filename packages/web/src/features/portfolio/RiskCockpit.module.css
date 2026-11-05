@@ -436,6 +436,27 @@
   color: var(--color-profit);
 }
 
+.exposureState[data-hedge='neutral'],
+.deltaBreakdown [data-hedge='neutral'] {
+  color: var(--color-profit);
+}
+
+.exposureState[data-hedge='offsetting'],
+.deltaBreakdown [data-hedge='offsetting'] {
+  color: var(--color-warning);
+}
+
+.deltaBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 7px;
+  color: #929c99;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 .exposureCard p {
   margin: 9px 0 0;
   color: #626b69;

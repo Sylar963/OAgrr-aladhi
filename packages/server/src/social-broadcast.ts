@@ -1,6 +1,11 @@
 import type { PositionLeg } from '@oggregator/core';
 import type { BroadcasterRow, PersistedExchangeTrade, SocialStore } from '@oggregator/db';
-import type { EquityHistoryPoint, LeaderboardPeriod, SocialVenue } from '@oggregator/protocol';
+import type {
+  EquityHistoryPoint,
+  LeaderboardPeriod,
+  LinearPosition,
+  SocialVenue,
+} from '@oggregator/protocol';
 
 import { toDailyCloses } from './equity-daily-closes.js';
 
@@ -22,6 +27,7 @@ export interface VenueAccountAccess {
   restore(accountId: string, venue: SocialVenue): Promise<RestoreOutcome>;
   keepAlive(accountId: string, venue: SocialVenue, enabled: boolean): void;
   listLegs(accountId: string, venue: SocialVenue): PositionLeg[];
+  listLinear?(accountId: string, venue: SocialVenue): LinearPosition[];
   fetchEquityHistory(
     accountId: string,
     venue: SocialVenue,

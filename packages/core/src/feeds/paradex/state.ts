@@ -57,6 +57,12 @@ export function buildParadexQuote(
     indexPrice: safeNum(summary.underlying_price), // no discrete index field
     volume24h: null, // only USD volume is exposed
     openInterest: safeNum(summary.open_interest), // base currency; base derives USD
+    ...(summary.open_interest != null && summary.created_at != null
+      ? {
+          openInterestTimestamp: summary.created_at,
+          openInterestTiming: 'exchange' as const,
+        }
+      : {}),
     openInterestUsd: null,
     volume24hUsd: safeNum(summary.volume_24h), // already USD
     greeks: {

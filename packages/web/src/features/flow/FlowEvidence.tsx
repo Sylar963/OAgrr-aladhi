@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
   FlowEvidenceResponseSchema,
@@ -7,7 +7,7 @@ import {
   type FlowOiContext,
   type FlowPositionAssessment,
 } from '@oggregator/protocol';
-import { fetchJson } from '@lib/http';
+import { fetchJson, wsUrl } from '@lib/http';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { getStrategyLabel } from './StrategyIcon';
 import styles from './FlowEvidence.module.css';
@@ -221,13 +221,7 @@ function useFlowEvidence(target: FlowEvidenceTarget, enabled = true) {
     queryFn: async () =>
       FlowEvidenceResponseSchema.parse(await fetchJson<unknown>(`/flow/evidence?${params}`)),
     enabled,
-    staleTime: 30_000,
-    refetchInterval: (query) =>
-      enabled &&
-      target.timestamp > Date.now() - 30 * 60_000 &&
-      query.state.data?.oi.some((context) => context.status === 'pending')
-        ? 30_000
-        : false,
+    staleTime: Infinity,
     retry: 1,
   });
 }
@@ -242,6 +236,7 @@ export function FlowRowLabels({
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const t = useT(messages);
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!ref.current || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(([entry]) =>
@@ -251,6 +246,42 @@ export function FlowRowLabels({
     return () => observer.disconnect();
   }, []);
   const { data, isFetching, error } = useFlowEvidence(target, visible);
+  const awaitingOi =
+    target.timestamp > Date.now() - 30 * 60_000 &&
+    (data?.oi.some((context) => context.status === 'pending' || context.status === 'unavailable') ?? false);
+  const queryKey = ['flow-evidence', target.mode, target.venue, target.tradeUid, target.timestamp];
+  useEffect(() => {
+    if (!visible || !awaitingOi) return;
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let reconnect: ReturnType<typeof setTimeout> | null = null;
+    const connect = () => {
+      if (stopped) return;
+      const params = new URLSearchParams({ ...target, timestamp: String(target.timestamp) });
+      socket = new WebSocket(`${wsUrl('/ws/flow-evidence')}?${params}`);
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data)) as { type?: unknown; evidence?: unknown };
+          if (message.type !== 'evidence') return;
+          queryClient.setQueryData(
+            queryKey,
+            FlowEvidenceResponseSchema.parse(message.evidence),
+          );
+        } catch {
+          return;
+        }
+      };
+      socket.onclose = () => {
+        if (!stopped) reconnect = setTimeout(connect, 1_000);
+      };
+    };
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnect) clearTimeout(reconnect);
+      socket?.close();
+    };
+  }, [visible, awaitingOi, queryClient, target.mode, target.venue, target.tradeUid, target.underlying, target.instrument, target.timestamp]);
   return (
     <div ref={ref}>
       <FlowLabels analysis={data?.analysis ?? analysis} />

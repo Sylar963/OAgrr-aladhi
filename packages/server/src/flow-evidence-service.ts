@@ -184,7 +184,10 @@ export class FlowEvidenceService {
             after: { timestamp: fast.after.timestamp, openInterest: fast.after.openInterest },
             delta: fast.after.openInterest - fast.before.openInterest,
             intervalMs,
-            timing: 'exchange',
+            timing:
+              fast.before.timing === 'exchange' && fast.after.timing === 'exchange'
+                ? 'exchange'
+                : 'sampled',
             status: 'bracketed',
           });
         }
@@ -192,7 +195,7 @@ export class FlowEvidenceService {
         Object.assign(context, {
           before: { timestamp: fast.before.timestamp, openInterest: fast.before.openInterest },
           status: 'pending',
-          timing: 'exchange',
+          timing: fast.before.timing ?? 'sampled',
         });
       }
     }

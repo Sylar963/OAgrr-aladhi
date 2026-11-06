@@ -134,6 +134,8 @@ export function mergeOkxRestOpenInterest(
     // Normalize to contract count. oiCcy already applies ctMult for inverse options,
     // so storing it here would double-scale downstream analytics like GEX.
     openInterest: safeNum(item.oi),
+    openInterestTimestamp: Date.now(),
+    openInterestTiming: 'sampled',
     // OKX option oiUsd is a face/count-style USD field, not market notional.
     // Leave it null and derive USD OI from contract metadata + underlying price.
     openInterestUsd: null,

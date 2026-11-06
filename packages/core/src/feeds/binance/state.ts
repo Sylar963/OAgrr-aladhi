@@ -52,6 +52,8 @@ export function mergeBinanceOiEvent(
     ...previous,
     openInterest: safeNum(item.o),
     openInterestUsd: safeNum(item.h),
+    openInterestTimestamp: Date.now(),
+    openInterestTiming: 'sampled',
   };
 }
 
@@ -76,6 +78,8 @@ export function mergeBinanceRestOpenInterest(
     ...previous,
     openInterest: safeNum(item.sumOpenInterest),
     openInterestUsd: safeNum(item.sumOpenInterestUsd),
+    openInterestTimestamp: Date.now(),
+    openInterestTiming: 'sampled',
   };
 }
 

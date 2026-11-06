@@ -16,6 +16,8 @@ import {
   type QuoteRecorderEvent,
   type FlowOiRecorder,
   type TradeRuntime,
+  type StreamHandlers,
+  parseTradeInstrument,
 } from '@oggregator/core';
 
 type ChainAdapter = OptionVenueAdapter & {
@@ -49,6 +51,11 @@ const adapters: ChainAdapter[] = [
 
 let tradeRuntimeRecorder: (() => void) | null = null;
 const quoteRecorderUnsubs: Array<() => void> = [];
+const flowOiSubscriptions = new Map<
+  string,
+  { release: Promise<() => Promise<void>>; timer: ReturnType<typeof setTimeout> | null }
+>();
+const flowOiHandlers: StreamHandlers = { onDelta: () => {}, onStatus: () => {} };
 
 export interface AdapterBootstrapDeps {
   flowOiRecorder?: FlowOiRecorder;
@@ -61,9 +68,40 @@ export async function bootstrapAdapters(
   deps: AdapterBootstrapDeps = {},
 ) {
   log.info({ feedWorker: feedWorker != null }, 'loading markets for all venues');
-  if (deps.flowOiRecorder && deribitAdapter.addQuoteRecorder) {
+  if (deps.flowOiRecorder) {
     const recorder = deps.flowOiRecorder;
-    quoteRecorderUnsubs.push(deribitAdapter.addQuoteRecorder((event) => recorder.record(event)));
+    for (const adapter of adapters) {
+      if (adapter.addQuoteRecorder)
+        quoteRecorderUnsubs.push(adapter.addQuoteRecorder((event) => recorder.record(event)));
+    }
+    if (deps.tradeRuntime) {
+      quoteRecorderUnsubs.push(
+        deps.tradeRuntime.subscribe((trade) => {
+          recorder.observeTrade(trade.venue, trade.instrument, trade.timestamp);
+          const expiry = parseTradeInstrument(trade.instrument).expiry;
+          if (!expiry) return;
+          const adapter = adapters.find((item) => item.venue === trade.venue);
+          if (!adapter || typeof adapter.subscribe !== 'function') return;
+          const key = `${trade.venue}:${trade.underlying}:${expiry}`;
+          const existing = flowOiSubscriptions.get(key);
+          if (existing?.timer) clearTimeout(existing.timer);
+          const entry = existing ?? {
+            release: adapter.subscribe({ underlying: trade.underlying, expiry }, flowOiHandlers).catch((error: unknown) => {
+              flowOiSubscriptions.delete(key);
+              log.warn({ err: String(error), venue: trade.venue, underlying: trade.underlying, expiry }, 'FLOW OI subscription failed');
+              return async () => {};
+            }),
+            timer: null,
+          };
+          entry.timer = setTimeout(() => {
+            void entry.release.then((release) => release());
+            flowOiSubscriptions.delete(key);
+          }, 30 * 60_000);
+          entry.timer.unref();
+          flowOiSubscriptions.set(key, entry);
+        }),
+      );
+    }
   }
 
   // Feed the rolling mark buffer from venues whose REST chart sources are
@@ -81,6 +119,7 @@ export async function bootstrapAdapters(
   const buffer = deps.markHistoryBuffer;
   if (buffer) {
     const markRecorder = (event: QuoteRecorderEvent) => {
+      if (event.markPrice == null) return;
       buffer.recordMark(event.venue, event.exchangeSymbol, event.ts, event.markPrice);
     };
     for (const adapter of [deribitAdapter, deriveAdapter, coincallAdapter, gateioAdapter]) {

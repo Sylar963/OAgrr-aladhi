@@ -20,6 +20,7 @@ export class FlowOiStore {
   private readonly pool: Pool | null;
   private readonly schedule: FlushSchedule | null;
   private flushing: Promise<void> | null = null;
+  private listeners = new Set<(tick: FlowOiTick) => void>();
 
   constructor(path: string, options: Options = {}) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
@@ -30,6 +31,7 @@ export class FlowOiStore {
       CREATE TABLE IF NOT EXISTS flow_oi (
         venue TEXT NOT NULL, instrument TEXT NOT NULL, underlying TEXT NOT NULL,
         timestamp INTEGER NOT NULL, observed_at INTEGER NOT NULL, open_interest REAL NOT NULL,
+        timing TEXT NOT NULL DEFAULT 'sampled',
         archived INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (venue, instrument, timestamp)
       );
@@ -46,6 +48,8 @@ export class FlowOiStore {
         .some((column) => column['name'] === 'archived')
     )
       this.db.exec('ALTER TABLE flow_oi ADD COLUMN archived INTEGER NOT NULL DEFAULT 0');
+    if (!this.db.prepare('PRAGMA table_info(flow_oi)').all().some((column) => column['name'] === 'timing'))
+      this.db.exec("ALTER TABLE flow_oi ADD COLUMN timing TEXT NOT NULL DEFAULT 'sampled'");
     this.db.exec('CREATE INDEX IF NOT EXISTS flow_oi_pending ON flow_oi(archived)');
     this.pool =
       options.pool ??
@@ -77,9 +81,9 @@ export class FlowOiStore {
 
   append(input: FlowOiTick): void {
     const tick = FlowOiTickSchema.parse(input);
-    this.db
+    const result = this.db
       .prepare(
-        `INSERT OR IGNORE INTO flow_oi (venue, instrument, underlying, timestamp, observed_at, open_interest) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO flow_oi (venue, instrument, underlying, timestamp, observed_at, open_interest, timing) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         tick.venue,
@@ -88,7 +92,15 @@ export class FlowOiStore {
         tick.timestamp,
         tick.observedAt,
         tick.openInterest,
+        tick.timing ?? 'sampled',
       );
+    if (result.changes > 0)
+      for (const listener of this.listeners) listener({ ...tick, timing: tick.timing ?? 'sampled' });
+  }
+
+  subscribe(listener: (tick: FlowOiTick) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   bracket(
@@ -97,7 +109,7 @@ export class FlowOiStore {
     timestamp: number,
   ): { before: FlowOiTick | null; after: FlowOiTick | null } {
     const columns =
-      'venue, instrument, underlying, timestamp, observed_at AS observedAt, open_interest AS openInterest';
+      'venue, instrument, underlying, timestamp, observed_at AS observedAt, open_interest AS openInterest, timing';
     const before = this.db
       .prepare(
         `SELECT ${columns} FROM flow_oi WHERE venue = ? AND instrument = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT 1`,
@@ -146,7 +158,7 @@ export class FlowOiStore {
       if (!batch) {
         const rows = this.db
           .prepare(`SELECT rowid AS id, venue, instrument, underlying, timestamp,
-        observed_at AS observedAt, open_interest AS openInterest FROM flow_oi
+        observed_at AS observedAt, open_interest AS openInterest, timing FROM flow_oi
         WHERE archived = 0 AND rowid <= ? ORDER BY rowid LIMIT 5000`)
           .all(highWater);
         if (rows.length === 0) break;

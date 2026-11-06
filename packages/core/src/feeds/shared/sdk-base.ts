@@ -87,8 +87,13 @@ export interface QuoteRecorderEvent {
   venue: VenueId;
   exchangeSymbol: string;
   ts: number;
-  markPrice: number;
-  openInterest?: { value: number; timestamp: number; underlying: string };
+  markPrice: number | null;
+  openInterest?: {
+    value: number;
+    timestamp: number;
+    underlying: string;
+    timing?: 'sampled' | 'exchange';
+  };
 }
 
 export type QuoteRecorder = (event: QuoteRecorderEvent) => void;
@@ -113,6 +118,7 @@ export interface LiveQuote {
   /** Open interest normalized to contract count. */
   openInterest: number | null;
   openInterestTimestamp?: number;
+  openInterestTiming?: 'sampled' | 'exchange';
   /** USD-denominated open interest notional, either venue-native or derived from contract metadata. */
   openInterestUsd: number | null;
   /** USD-denominated 24h volume when the venue provides it natively (Bybit turnover). */
@@ -171,6 +177,8 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   ): Promise<void> {}
   protected abstract unsubscribeAll(): Promise<void>;
 
+  protected async afterMarketsLoaded(): Promise<void> {}
+
   // Number of nearest expiries to eagerly subscribe at boot.
   // Covers what users look at 90% of the time — data is live before the UI asks.
   protected eagerExpiryCount = 3;
@@ -186,6 +194,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       this.symbolIndex.set(inst.symbol, inst.exchangeSymbol);
     }
     this.marketsLoaded = true;
+    await this.afterMarketsLoaded();
 
     await this.eagerSubscribe();
     // Background: pinning ~1k topics takes several seconds on rate-limited venues
@@ -590,7 +599,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
       this.quoteStore.set(update.exchangeSymbol, update.quote);
 
-      if (this.quoteRecorders.size > 0 && update.quote.markPrice != null) {
+      if (this.quoteRecorders.size > 0) {
         const event: QuoteRecorderEvent = {
           venue: this.venue,
           exchangeSymbol: update.exchangeSymbol,
@@ -603,6 +612,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
             value: update.quote.openInterest * (instrument.contractSize ?? 1),
             timestamp: update.quote.openInterestTimestamp,
             underlying: instrument.base,
+            timing: update.quote.openInterestTiming ?? 'sampled',
           };
         }
         for (const recorder of this.quoteRecorders) {

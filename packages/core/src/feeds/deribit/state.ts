@@ -188,7 +188,9 @@ export function buildDeribitTickerQuote(
     indexPrice: safeNum(ticker.index_price),
     volume24h: safeNum(ticker.stats?.volume),
     openInterest: normalizedOpenInterest,
-    ...(ticker.timestamp != null && normalizedOpenInterest != null ? { openInterestTimestamp: ticker.timestamp } : {}),
+    ...(ticker.timestamp != null && normalizedOpenInterest != null
+      ? { openInterestTimestamp: ticker.timestamp, openInterestTiming: 'exchange' as const }
+      : {}),
     openInterestUsd: null,
     volume24hUsd: null,
     greeks: {

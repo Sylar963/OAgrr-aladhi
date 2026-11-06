@@ -30,6 +30,7 @@ export const FlowOiTickSchema = z.object({
   timestamp: z.number().int().nonnegative(),
   observedAt: z.number().int().nonnegative(),
   openInterest: z.number().finite().nonnegative(),
+  timing: z.enum(['sampled', 'exchange']).optional(),
 });
 export type FlowOiTick = z.infer<typeof FlowOiTickSchema>;
 

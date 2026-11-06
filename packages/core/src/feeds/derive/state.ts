@@ -94,6 +94,12 @@ export function buildDeriveQuote(
     indexPrice: safeNum(ticker.I ?? ticker.index_price),
     volume24h: safeNum(stats?.c),
     openInterest: safeNum(stats?.oi),
+    ...(stats?.oi != null && (ticker.t ?? ticker.timestamp) != null
+      ? {
+          openInterestTimestamp: Number(ticker.t ?? ticker.timestamp),
+          openInterestTiming: 'exchange' as const,
+        }
+      : {}),
     openInterestUsd: null,
     volume24hUsd: safeNum(stats?.v),
     greeks:

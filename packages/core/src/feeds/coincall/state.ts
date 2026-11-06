@@ -292,6 +292,9 @@ export function applyCoincallRestStats(
   return {
     ...base,
     openInterest: stats.openInterest ?? base.openInterest,
+    ...(stats.openInterest != null
+      ? { openInterestTimestamp: nowMs, openInterestTiming: 'sampled' as const }
+      : {}),
     volume24h: stats.volume24h ?? base.volume24h,
     volume24hUsd: stats.volume24hUsd ?? base.volume24hUsd,
     underlyingPrice: base.underlyingPrice ?? stats.underlyingPrice,

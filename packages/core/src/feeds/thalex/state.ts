@@ -73,6 +73,12 @@ export function mergeThalexTicker(
     indexPrice: mergeNumber(ticker.index, base.indexPrice),
     volume24h: mergeNumber(ticker.volume_24h, base.volume24h),
     openInterest: mergeNumber(ticker.open_interest, base.openInterest),
+    ...(ticker.open_interest != null
+      ? {
+          openInterestTimestamp: Math.round(ticker.mark_timestamp * 1000),
+          openInterestTiming: 'exchange' as const,
+        }
+      : {}),
     openInterestUsd: base.openInterestUsd,
     // `value_24h` is premium-notional USD (sum of premium paid in USD), while
     // every other venue in the aggregator reports underlying-notional USD

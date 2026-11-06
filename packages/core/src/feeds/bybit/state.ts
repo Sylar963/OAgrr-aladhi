@@ -16,6 +16,9 @@ export function buildBybitRestQuote(
     indexPrice: safeNum(ticker.indexPrice),
     volume24h: safeNum(ticker.volume24h),
     openInterest: safeNum(ticker.openInterest),
+    ...(ticker.openInterest != null
+      ? { openInterestTimestamp: Date.now(), openInterestTiming: 'sampled' as const }
+      : {}),
     openInterestUsd: safeNum(ticker.openInterestValue),
     volume24hUsd: safeNum(ticker.turnover24h),
     greeks: {
@@ -48,6 +51,8 @@ export function buildBybitWsQuote(
     indexPrice: safeNum(ticker.indexPrice),
     volume24h: safeNum(ticker.volume24h),
     openInterest: safeNum(ticker.openInterest),
+    openInterestTimestamp: envelopeTs,
+    openInterestTiming: 'exchange',
     openInterestUsd: safeNum(ticker.openInterestValue),
     volume24hUsd: safeNum(ticker.turnover24h),
     greeks: {

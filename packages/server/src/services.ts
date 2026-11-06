@@ -302,7 +302,7 @@ export const oiSnapshotStore: OiSnapshotStore = databaseUrl
   ? createOiSnapshotStore(databaseUrl)
   : new NoopOiSnapshotStore();
 
-const flowOiStore = new FlowOiStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite', {
+export const flowOiStore = new FlowOiStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite', {
   connectionString: databaseUrl,
   flushIntervalMs: Math.max(86_400_000, Number(process.env['MARKET_DATA_DB_FLUSH_INTERVAL_MS']) || 86_400_000),
   log: logger,

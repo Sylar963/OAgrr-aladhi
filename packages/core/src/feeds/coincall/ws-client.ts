@@ -672,8 +672,6 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
             if ((oi ?? 0) > 0 || (leg.volume ?? 0) > 0) activeSymbols.push(leg.symbol);
 
             const previous = this.quoteStore.get(leg.symbol);
-            // Skip unchanged OI so we don't re-emit deltas for the (many) empty legs.
-            if ((oi ?? 0) === (previous?.openInterest ?? 0)) continue;
             updates.push({
               exchangeSymbol: leg.symbol,
               quote: applyCoincallRestStats(

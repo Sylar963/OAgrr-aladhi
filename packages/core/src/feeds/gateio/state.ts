@@ -100,7 +100,10 @@ function applyTickerFields(prev: LiveQuote, t: GateioTicker, timestampMs: number
     lastPrice: num(t.last_price) ?? prev.lastPrice,
     underlyingPrice: num(t.underlying_price) ?? prev.underlyingPrice,
     indexPrice: num(t.index_price) ?? prev.indexPrice,
-    openInterest: positiveOrNull(t.position_size ?? null) ?? prev.openInterest,
+    openInterest: num(t.position_size ?? null) ?? prev.openInterest,
+    ...(num(t.position_size ?? null) != null && timestampMs > 0
+      ? { openInterestTimestamp: timestampMs, openInterestTiming: 'exchange' as const }
+      : {}),
     greeks: {
       ...prev.greeks,
       markIv: num(t.mark_iv) ?? prev.greeks.markIv,

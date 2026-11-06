@@ -15,6 +15,7 @@ import { volHeatmapRoute } from './vol-heatmap.js';
 import { expiriesRoute } from './expiries.js';
 import { flowRoute } from './flow.js';
 import { flowEvidenceRoute } from './flow-evidence.js';
+import { wsFlowEvidenceRoute } from './ws-flow-evidence.js';
 import { flowStrikeMapRoute } from './flow-strike-map.js';
 import { fundedRoutes } from './funded/index.js';
 import { gexAllExpiriesRoute } from './gex-all-expiries.js';
@@ -137,6 +138,7 @@ export function registerRoutes(app: FastifyInstance) {
   });
   app.register(wsChainRoute);
   app.register(wsInstrumentTradesRoute);
+  app.register(wsFlowEvidenceRoute);
   app.register(wsSpotCandlesRoute);
   app.register(paperWsRoute);
   app.register(portfolioWsRoute);

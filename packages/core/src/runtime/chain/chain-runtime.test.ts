@@ -103,6 +103,46 @@ type ChainRuntimeInternals = {
 };
 
 describe('ChainRuntime', () => {
+  it('adds a venue that registers after the runtime starts and clears its bootstrap failure', async () => {
+    vi.useFakeTimers();
+    fetchOptionChainMock.mockResolvedValue(makeChain(Date.now(), 100));
+    const release = vi.fn(async () => {});
+    const acquire = vi.fn(async (venue: string, _request: unknown, listener: {
+      onStatus?: (status: { venue: 'gateio'; state: 'connected'; ts: number }) => void;
+    }) => {
+      if (venue === 'gateio') listener.onStatus?.({ venue: 'gateio', state: 'connected', ts: Date.now() });
+      return { release };
+    });
+    const runtime = new ChainRuntime('test', { ...request(), venues: ['okx', 'gateio'] }, {
+      coordinator: { acquire } as never,
+    });
+    await runtime.ready();
+    expect(runtime.getActiveRequest().venues).toEqual(['okx']);
+    expect(runtime.getFailedVenues()).toEqual([
+      { venue: 'gateio', reason: 'not loaded — failed during bootstrap' },
+    ]);
+
+    const events: Array<{ type: string; status?: { venue: string; state: string } }> = [];
+    runtime.subscribe({ onEvent: (event) => events.push(event) });
+    await runtime.fetchSnapshotData();
+    getRegisteredVenuesMock.mockReturnValue(['okx', 'gateio']);
+    await vi.advanceTimersByTimeAsync(750);
+
+    expect(acquire.mock.calls.map(([venue]) => venue)).toEqual(['okx', 'gateio']);
+    expect(runtime.getActiveRequest().venues).toEqual(['okx', 'gateio']);
+    expect(runtime.getFailedVenues()).toEqual([]);
+    expect(runtime.getSnapshot()?.request.venues).toEqual(['okx', 'gateio']);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'status', status: expect.objectContaining({ venue: 'gateio', state: 'connected' }),
+    }));
+
+    await Promise.all([runtime.ready(), runtime.ready()]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(acquire).toHaveBeenCalledTimes(2);
+    await runtime.dispose();
+    expect(release).toHaveBeenCalledTimes(2);
+  });
+
   it('coalesces a large burst for one contract without forcing full snapshots', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-26T12:00:00Z'));

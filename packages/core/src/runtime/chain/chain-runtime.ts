@@ -212,6 +212,7 @@ export class ChainRuntime {
       this.readyPromise = this.initialize();
     }
     await this.readyPromise;
+    this.refreshRegisteredVenues();
   }
 
   subscribe(listener: ChainRuntimeListener): () => void {
@@ -328,6 +329,31 @@ export class ChainRuntime {
     if (this.initialSnapshotBuilt) this.scheduleLateVenueRebuild();
   }
 
+  private refreshRegisteredVenues(): void {
+    if (!this.initialSnapshotBuilt || this.disposed) return;
+    const registered = new Set(getRegisteredVenues());
+    const active = new Set(this.activeRequest.venues);
+    const added = this.request.venues.filter((venue) => registered.has(venue) && !active.has(venue));
+    if (added.length === 0) return;
+
+    this.activeRequest = {
+      ...this.request,
+      venues: this.request.venues.filter((venue) => active.has(venue) || registered.has(venue)),
+    };
+    const addedSet = new Set(added);
+    this.failedVenues = this.failedVenues.filter((failure) => !addedSet.has(failure.venue));
+    for (const venue of added) {
+      void this.coordinator.acquire(
+        venue,
+        { underlying: this.request.underlying, expiry: this.request.expiry },
+        this.venueListener,
+      ).then(
+        (handle) => this.handleVenueAcquired(handle),
+        (error: unknown) => this.handleVenueAcquireFailed(venue, error),
+      );
+    }
+  }
+
   private handleVenueAcquireFailed(venueId: VenueId, error: unknown): void {
     const reason = error instanceof Error ? error.message : String(error);
     this.failedVenues.push({ venue: venueId, reason });
@@ -368,6 +394,7 @@ export class ChainRuntime {
     this.resumeBuild = resumeBuild;
     this.pushTimer = setInterval(() => {
       if (this.disposed) return;
+      this.refreshRegisteredVenues();
       if (this.needsResync) {
         this.needsResync = false;
         void this.buildSnapshot();

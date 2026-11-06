@@ -107,6 +107,7 @@ export function thalexPortfolioEntryToLeg(
     source: 'thalex',
     venueMarkPriceUsd,
     venueMarkTs: venueMarkPriceUsd == null ? null : nowMs,
+    venueDelta: entry.delta ?? null,
   };
 }
 

@@ -61,6 +61,7 @@ export const PositionLegSchema = z.object({
   // cross-venue mid so the total matches the venue's own unrealized P&L.
   venueMarkPriceUsd: z.number().nonnegative().nullable().optional(),
   venueMarkTs: z.number().int().nonnegative().nullable().optional(),
+  venueDelta: z.number().min(-1.05).max(1.05).nullable().optional(),
 });
 export type PositionLeg = z.infer<typeof PositionLegSchema>;
 

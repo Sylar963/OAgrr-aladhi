@@ -6,6 +6,7 @@ import {
   type ThalexPrivateCreds,
   logger,
   type EntryAnchor,
+  type ThalexAccountEquity,
   type LinearPosition,
   type PositionLeg,
   type PositionStore,
@@ -74,6 +75,10 @@ export class ThalexPositionStore implements PositionStore {
 
   listLinear(accountId: string): LinearPosition[] {
     return this.linearCache.get(accountId) ?? [];
+  }
+
+  getLatestAccountEquity(accountId: string): ThalexAccountEquity | null {
+    return this.clients.get(accountId)?.getLatestAccountEquity() ?? null;
   }
 
   get(accountId: string, legId: string): PositionLeg | null {

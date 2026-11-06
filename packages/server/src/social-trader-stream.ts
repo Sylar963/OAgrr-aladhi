@@ -1,4 +1,4 @@
-import type { PositionLeg } from '@oggregator/core';
+import type { LinearPosition, PositionLeg } from '@oggregator/core';
 import type {
   ChatServerMessage,
   PublicClosedTradeDto,
@@ -22,6 +22,8 @@ export interface TraderStreamDeps {
   isConnected: (target: TraderTarget) => boolean;
   loadEquity: (target: TraderTarget) => Promise<VenueEquity | null>;
   listLegs: (target: TraderTarget) => PositionLeg[];
+  listLinear?: (target: TraderTarget) => LinearPosition[];
+  getCurrentEquity?: (target: TraderTarget) => { equityUsd: number; updatedAt: number } | null;
   getDeltaByUnderlying?: (target: TraderTarget) =>
     | PublicDeltaStatus[]
     | Promise<PublicDeltaStatus[]>;
@@ -33,6 +35,7 @@ export interface TraderStreamDeps {
   reloadDebounceMs?: number;
   idleRetentionMs?: number;
   equityRefreshMs?: number;
+  log?: { warn: (obj: object, msg: string) => void };
 }
 
 interface TraderData {
@@ -48,11 +51,23 @@ interface TraderEntry {
   refreshing: boolean;
   reloadTimer: ReturnType<typeof setTimeout> | null;
   idleSince: number | null;
+  lastDeltaErrorAt: number | null;
 }
 
 function entryKey(target: { accountId: string; venue: SocialVenue }): string {
   return `${target.accountId}|${target.venue}`;
 }
+
+function unknownDeltaRows(legs: PositionLeg[], linear: LinearPosition[]): PublicDeltaStatus[] {
+  return [...new Set([
+    ...legs.map((leg) => leg.underlying.toUpperCase()),
+    ...linear.map((position) => position.underlying.toUpperCase()),
+  ])]
+    .sort()
+    .map((underlying) => ({ underlying, netDeltaCoin: null, hedgeState: 'unknown' }));
+}
+
+const VENUE_MARK_MAX_AGE_MS = 60_000;
 
 /**
  * Streams a leaderboard member's venue account to watchers. Positions come from the live venue
@@ -94,6 +109,7 @@ export class TraderStreamService {
         refreshing: false,
         reloadTimer: null,
         idleSince: null,
+        lastDeltaErrorAt: null,
       };
       this.entries.set(key, entry);
     }
@@ -172,7 +188,7 @@ export class TraderStreamService {
         continue;
       }
       if (nowMs - entry.data.equity.fetchedAt >= this.equityRefreshMs) this.refreshEquity(entry);
-      const live = await this.computeLive(entry.target, entry.data);
+      const live = await this.computeLive(entry, entry.data);
       for (const watcher of entry.watchers) watcher.send({ type: 'trader_live', live });
     }
     if (this.entries.size === 0) this.stopTimer();
@@ -218,7 +234,7 @@ export class TraderStreamService {
   private async sendFull(entry: TraderEntry, watchers: TraderWatcher[]): Promise<void> {
     if (!entry.data || watchers.length === 0) return;
     const { equity, closedTrades } = entry.data;
-    const live = await this.computeLive(entry.target, entry.data);
+    const live = await this.computeLive(entry, entry.data);
     const firstFunded = equity.points.findIndex((point) => point.equityUsd > 0);
     const funded = firstFunded < 0 ? [] : equity.points.slice(firstFunded);
     const startedAt = new Date(funded[0]?.ts ?? equity.fetchedAt).toISOString();
@@ -243,7 +259,9 @@ export class TraderStreamService {
     }
   }
 
-  private async computeLive(target: TraderTarget, data: TraderData): Promise<TraderLiveDto> {
+  private async computeLive(entry: TraderEntry, data: TraderData): Promise<TraderLiveDto> {
+    const target = entry.target;
+    const nowMs = this.now();
     const legs = [...this.deps.listLegs(target)].sort(
       (a, b) =>
         a.underlying.localeCompare(b.underlying) ||
@@ -253,7 +271,9 @@ export class TraderStreamService {
     );
     const marks = await Promise.all(
       legs.map((leg) =>
-        leg.venueMarkPriceUsd != null
+        leg.venueMarkPriceUsd != null &&
+        leg.venueMarkTs != null &&
+        nowMs - leg.venueMarkTs <= VENUE_MARK_MAX_AGE_MS
           ? leg.venueMarkPriceUsd
           : this.deps
               .getMark({
@@ -278,20 +298,54 @@ export class TraderStreamService {
         unrealizedPnlUsd: mark == null ? null : leg.size * (mark - leg.entryPriceUsd),
       };
     });
+    const linear = this.deps.listLinear?.(target) ?? [];
     let deltaStatusByUnderlying: PublicDeltaStatus[] = [];
     try {
       deltaStatusByUnderlying = (await this.deps.getDeltaByUnderlying?.(target)) ?? [];
-    } catch {}
-    const nowMs = this.now();
+      entry.lastDeltaErrorAt = null;
+    } catch (err) {
+      deltaStatusByUnderlying = [];
+      if (
+        entry.lastDeltaErrorAt == null ||
+        nowMs - entry.lastDeltaErrorAt >= 60_000
+      ) {
+        this.deps.log?.warn(
+          { venue: target.venue, handle: target.handle, err: String(err) },
+          'social delta exposure calculation failed',
+        );
+        entry.lastDeltaErrorAt = nowMs;
+      }
+    }
+    if (deltaStatusByUnderlying.length === 0) {
+      deltaStatusByUnderlying = unknownDeltaRows(legs, linear);
+    }
     const summary = summarizeEquity(data.equity.points, 'all', nowMs);
+    const liveEquity = this.deps.getCurrentEquity?.(target) ?? null;
+    const baselineUsd = summary?.baselineUsd ?? null;
+    const equityUsd = liveEquity?.equityUsd ?? summary?.equityUsd ?? 0;
+    const pnlUsd = baselineUsd == null ? (summary?.pnlUsd ?? 0) : equityUsd - baselineUsd;
+    const returnPct =
+      baselineUsd == null || baselineUsd === 0 ? (summary?.returnPct ?? 0) : pnlUsd / baselineUsd;
+    const positionsHaveMarks = openPositions.every((position) => position.unrealizedPnlUsd != null);
+    const linearHaveMarks = linear.every((position) => position.markPriceUsd != null);
+    const totalUnrealizedPnlUsd =
+      positionsHaveMarks && linearHaveMarks
+        ? openPositions.reduce((sum, position) => sum + (position.unrealizedPnlUsd ?? 0), 0) +
+          linear.reduce(
+            (sum, position) =>
+              sum + (position.markPriceUsd! - position.entryPriceUsd) * position.sizeCoin,
+            0,
+          )
+        : null;
     return {
       handle: target.handle,
       venue: target.venue,
-      equityUsd: summary?.equityUsd ?? 0,
-      equityAsOf: new Date(summary?.equityAsOf ?? data.equity.fetchedAt).toISOString(),
-      pnlUsd: summary?.pnlUsd ?? 0,
-      returnPct: summary?.returnPct ?? 0,
+      equityUsd,
+      equityAsOf: new Date(liveEquity?.updatedAt ?? summary?.equityAsOf ?? data.equity.fetchedAt).toISOString(),
+      pnlUsd,
+      returnPct,
       openPositions,
+      totalUnrealizedPnlUsd,
       deltaStatusByUnderlying,
       generatedAt: new Date(nowMs).toISOString(),
     };

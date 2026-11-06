@@ -51,9 +51,10 @@ export const LeaderboardEntryDtoSchema = z.object({
   rank: z.number().int().positive(),
   handle: z.string(),
   venue: SocialVenueSchema,
-  /** Latest account equity the venue reported. */
+  /** Latest account equity the venue reported; cash flows can affect equity change. */
   equityUsd: z.number(),
   equityAsOf: z.string().datetime(),
+  /** Change in account equity, not flow-adjusted trading P&L. */
   pnlUsd: z.number(),
   /** Fractional equity change over the period (0.12 = +12%); deposits and withdrawals count. */
   returnPct: z.number(),
@@ -127,12 +128,16 @@ export type EquityPointDto = z.infer<typeof EquityPointDtoSchema>;
 export const TraderLiveDtoSchema = z.object({
   handle: z.string(),
   venue: SocialVenueSchema,
-  /** Latest account equity the venue reported; pnl and return run from the first history point. */
+  /** Latest account equity the venue reported; cash flows can affect equity change. */
   equityUsd: z.number(),
   equityAsOf: z.string().datetime(),
+  /** Change in account equity, not flow-adjusted trading P&L. */
   pnlUsd: z.number(),
+  /** Fractional equity change from the first funded close; deposits and withdrawals count. */
   returnPct: z.number(),
   openPositions: z.array(PublicPositionDtoSchema),
+  /** Combined marked P&L for open options and linear hedges; null if any held mark is missing. */
+  totalUnrealizedPnlUsd: z.number().nullable().optional(),
   deltaStatusByUnderlying: z.array(PublicDeltaStatusSchema).optional(),
   generatedAt: z.string().datetime(),
 });

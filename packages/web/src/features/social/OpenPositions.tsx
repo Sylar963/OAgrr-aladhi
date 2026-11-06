@@ -18,7 +18,7 @@ import {
 
 const messages = defineMessages(
   {
-    unrealized: 'Unrealized',
+    unrealized: 'Open P&L · all positions',
     netCredit: 'Net credit',
     netDebit: 'Net debit',
     legs: 'Legs',
@@ -35,7 +35,7 @@ const messages = defineMessages(
     payoffAria: 'Payoff at expiry by underlying price',
   },
   {
-    unrealized: 'No realizado',
+    unrealized: 'P&L abierto · todas las posiciones',
     netCredit: 'Crédito neto',
     netDebit: 'Débito neto',
     legs: 'Patas',
@@ -74,14 +74,25 @@ function compactPrice(price: number): string {
   });
 }
 
-export default function OpenPositions({ positions }: { positions: PublicPositionDto[] }) {
+export default function OpenPositions({
+  positions,
+  totalUnrealizedPnlUsd,
+}: {
+  positions: PublicPositionDto[];
+  totalUnrealizedPnlUsd?: number | null;
+}) {
   const t = useT(messages);
   const { data: spots } = useSpots();
   const groups = useMemo(() => groupPositions(positions), [positions]);
   const pnlScale = Math.max(1e-9, ...positions.map((leg) => Math.abs(leg.unrealizedPnlUsd ?? 0)));
 
   const known = positions.filter((leg) => leg.unrealizedPnlUsd != null);
-  const totalPnl = known.length ? known.reduce((s, leg) => s + leg.unrealizedPnlUsd!, 0) : null;
+  const totalPnl =
+    totalUnrealizedPnlUsd !== undefined
+      ? totalUnrealizedPnlUsd
+      : known.length
+        ? known.reduce((s, leg) => s + leg.unrealizedPnlUsd!, 0)
+        : null;
   const netPremium = positions.reduce((s, leg) => s - leg.netQuantity * leg.avgEntryPriceUsd, 0);
   const longs = positions.filter((leg) => leg.netQuantity > 0).length;
 

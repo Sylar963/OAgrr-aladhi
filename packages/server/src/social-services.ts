@@ -89,6 +89,12 @@ export const traderStreamService = new TraderStreamService({
   isConnected: (target) => venueAccess.isConnected(target.accountId, target.venue),
   loadEquity: (target) => equityCache.get(target.accountId, target.venue),
   listLegs: (target) => venueAccess.listLegs(target.accountId, target.venue),
+  listLinear: (target) => venueAccess.listLinear?.(target.accountId, target.venue) ?? [],
+  getCurrentEquity: (target) => {
+    if (target.venue !== 'thalex') return null;
+    const equity = thalexPositionStore.getLatestAccountEquity(target.accountId);
+    return equity == null ? null : { equityUsd: equity.equityUsd, updatedAt: equity.updatedAt };
+  },
   getDeltaByUnderlying: async (target) => {
     const legs = venueAccess.listLegs(target.accountId, target.venue);
     await ensureChainsForBook(legs);
@@ -123,6 +129,7 @@ export const traderStreamService = new TraderStreamService({
       }));
   },
   getMark,
+  log: logger,
 });
 
 venueAccess.subscribe((accountId, venue) => traderStreamService.onAccountEvent(accountId, venue));

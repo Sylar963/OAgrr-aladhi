@@ -180,7 +180,7 @@ export function computeTotals(
   };
 
   for (const { leg, mark } of legsWithMarks) {
-    totals.optionsDeltaCoin += (mark.delta ?? 0) * leg.size;
+    totals.optionsDeltaCoin += (mark.delta ?? leg.venueDelta ?? 0) * leg.size;
     totals.netGammaUsd += (mark.gamma ?? 0) * leg.size;
     totals.netVegaUsd += (mark.vega ?? 0) * leg.size;
     totals.netThetaUsd += (mark.theta ?? 0) * leg.size;
@@ -217,9 +217,10 @@ export function computeDeltaByUnderlying(
     const linearForUnderlying = linear.filter(
       (position) => position.underlying.toUpperCase() === underlying,
     );
-    const optionsDeltaCoin = options.some(({ mark }) => mark.delta == null)
+    const optionDeltas = options.map(({ leg, mark }) => mark.delta ?? leg.venueDelta ?? null);
+    const optionsDeltaCoin = optionDeltas.some((delta) => delta == null)
       ? null
-      : options.reduce((sum, { leg, mark }) => sum + mark.delta! * leg.size, 0);
+      : options.reduce((sum, { leg }, index) => sum + optionDeltas[index]! * leg.size, 0);
     const linearDeltaCoin = linearForUnderlying.reduce((sum, position) => sum + position.sizeCoin, 0);
     const netDeltaCoin = optionsDeltaCoin == null ? null : optionsDeltaCoin + linearDeltaCoin;
     const hedgeState =

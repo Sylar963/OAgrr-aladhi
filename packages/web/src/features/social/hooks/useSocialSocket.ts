@@ -33,6 +33,19 @@ type ChatAction =
 const BASE_DELAY_MS = 1_500;
 const MAX_RETRIES = 5;
 const MAX_MESSAGES = 300;
+const DAY_MS = 86_400_000;
+
+function withLiveEquity(
+  history: PublicTraderDto['equityHistory'],
+  live: { equityAsOf: string; equityUsd: number },
+): PublicTraderDto['equityHistory'] {
+  const point = { ts: live.equityAsOf, equityUsd: live.equityUsd };
+  const last = history.at(-1);
+  if (last == null) return [point];
+  if (Date.parse(last.ts) > Date.parse(point.ts)) return history;
+  const sameDay = Math.floor(Date.parse(last.ts) / DAY_MS) === Math.floor(Date.parse(point.ts) / DAY_MS);
+  return sameDay ? [...history.slice(0, -1), point] : [...history, point];
+}
 
 export const INITIAL_CHAT_STATE: ChatState = {
   connection: 'closed',
@@ -73,7 +86,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'trader_live': {
       const trader = state.trader;
       if (!trader || trader.handle !== msg.live.handle) return state;
-      return { ...state, trader: { ...trader, ...msg.live } };
+      return {
+        ...state,
+        trader: {
+          ...trader,
+          ...msg.live,
+          equityHistory: withLiveEquity(trader.equityHistory, msg.live),
+        },
+      };
     }
     case 'trader_unavailable':
       return {

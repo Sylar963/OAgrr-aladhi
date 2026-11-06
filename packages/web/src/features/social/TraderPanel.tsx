@@ -18,8 +18,9 @@ const messages = defineMessages(
     waiting: "Waiting for @{handle}'s venue account to connect. Their book streams again once it does.",
     loading: 'Loading @{handle}…',
     equity: 'Equity · {date}',
-    pnlSince: 'PnL since {date}',
-    return: 'Return',
+    pnlSince: 'Equity change since {date}',
+    return: 'Equity change %',
+    equityBasisNote: 'Equity is venue account value. Equity change includes deposits and withdrawals.',
     sharingSince: 'Sharing since',
     openPositions: 'Open positions · {n}',
     noOpenPositions: 'No open positions.',
@@ -54,8 +55,9 @@ const messages = defineMessages(
       'Esperando que se conecte la cuenta del exchange de @{handle}. Su libro vuelve a transmitirse cuando se conecte.',
     loading: 'Cargando @{handle}…',
     equity: 'Equity · {date}',
-    pnlSince: 'PnL desde {date}',
-    return: 'Retorno',
+    pnlSince: 'Cambio de equity desde {date}',
+    return: 'Cambio de equity %',
+    equityBasisNote: 'Equity es el valor de la cuenta en el exchange. El cambio incluye depósitos y retiros.',
     sharingSince: 'Comparte desde',
     openPositions: 'Posiciones abiertas · {n}',
     noOpenPositions: 'Sin posiciones abiertas.',
@@ -101,6 +103,15 @@ function tone(value: number | null): 'up' | 'down' | 'flat' {
   return value > 0 ? 'up' : 'down';
 }
 
+function fmtDateTime(value: string, locale: Locale): string {
+  return new Date(value).toLocaleString(intlLocale(locale), {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function fmtDate(iso: string | null, locale: Locale): string {
   if (!iso) return '–';
   const date = new Date(iso);
@@ -142,7 +153,7 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
         <div className={styles.body}>
           <div className={styles.stats}>
             <Stat
-              label={t('equity', { date: fmtDate(trader.equityAsOf, locale) })}
+              label={t('equity', { date: fmtDateTime(trader.equityAsOf, locale) })}
               value={fmtUsd(trader.equityUsd)}
             />
             <Stat
@@ -157,6 +168,8 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
             />
             <Stat label={t('sharingSince')} value={fmtDate(trader.sharingSince, locale)} />
           </div>
+
+          <p className={styles.empty}>{t('equityBasisNote')}</p>
 
           <EquityChart
             points={trader.equityHistory}
@@ -212,7 +225,10 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
           {trader.openPositions.length === 0 ? (
             <p className={styles.empty}>{t('noOpenPositions')}</p>
           ) : (
-            <OpenPositions positions={trader.openPositions} />
+            <OpenPositions
+              positions={trader.openPositions}
+              totalUnrealizedPnlUsd={trader.totalUnrealizedPnlUsd}
+            />
           )}
 
           <h4 className={styles.sectionTitle}>

@@ -17,7 +17,7 @@ const messages = defineMessages(
     structure: 'Structure',
     side: 'Execution',
     position: 'Position effect',
-    unknown: 'Reconcile OI',
+    unknown: 'Unknown',
     inferred_open: 'Opening · inferred',
     inferred_close: 'Closing · inferred',
     partialEffect: 'Opening / closing components',
@@ -33,7 +33,7 @@ const messages = defineMessages(
     ambiguous: 'Other trades can explain OI',
     inconsistent: 'OI / tape mismatch',
     incompleteTape: 'Incomplete tape match',
-    reconciling: 'Reconciling OI…',
+    loadingEvidence: 'Loading OI evidence…',
     intervalVolume: 'Interval volume',
     otherVolume: 'Other volume',
     prints: '{value} prints',
@@ -90,7 +90,7 @@ const messages = defineMessages(
     structure: 'Estructura',
     side: 'Ejecución',
     position: 'Efecto en posición',
-    unknown: 'Conciliar OI',
+    unknown: 'Desconocido',
     inferred_open: 'Apertura · inferida',
     inferred_close: 'Cierre · inferido',
     partialEffect: 'Componentes de apertura / cierre',
@@ -106,7 +106,7 @@ const messages = defineMessages(
     ambiguous: 'Otros trades pueden explicar el OI',
     inconsistent: 'OI y tape no coinciden',
     incompleteTape: 'Tape incompleto para conciliar',
-    reconciling: 'Conciliando OI…',
+    loadingEvidence: 'Cargando evidencia de OI…',
     intervalVolume: 'Volumen del intervalo',
     otherVolume: 'Otro volumen',
     prints: '{value} prints',
@@ -222,8 +222,12 @@ function useFlowEvidence(target: FlowEvidenceTarget, enabled = true) {
       FlowEvidenceResponseSchema.parse(await fetchJson<unknown>(`/flow/evidence?${params}`)),
     enabled,
     staleTime: 30_000,
-    refetchInterval: () =>
-      enabled && target.timestamp > Date.now() - 30 * 60_000 ? 30_000 : false,
+    refetchInterval: (query) =>
+      enabled &&
+      target.timestamp > Date.now() - 30 * 60_000 &&
+      query.state.data?.oi.some((context) => context.status === 'pending')
+        ? 30_000
+        : false,
     retry: 1,
   });
 }
@@ -251,7 +255,7 @@ export function FlowRowLabels({
     <div ref={ref}>
       <FlowLabels analysis={data?.analysis ?? analysis} />
       {!data && isFetching ? (
-        <small>{t('reconciling')}</small>
+        <small>{t('loadingEvidence')}</small>
       ) : error ? (
         <small>{t('failed')}</small>
       ) : null}

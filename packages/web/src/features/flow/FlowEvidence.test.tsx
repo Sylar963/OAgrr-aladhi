@@ -40,11 +40,11 @@ const analysis: FlowAnalysis = {
 };
 
 describe('FLOW evidence presentation', () => {
-  it('separates a mixed-leg execution from its unknown position effect', () => {
+  it('shows an unknown position effect without implying OI reconciliation is running', () => {
     render(<FlowLabels analysis={analysis} />);
     expect(screen.getByText('Put Spread')).toBeTruthy();
     expect(screen.getByText('Bought + sold legs')).toBeTruthy();
-    expect(screen.getByText('Reconcile OI')).toBeTruthy();
+    expect(screen.getByText('Unknown')).toBeTruthy();
   });
   it('shows interval timing and unverified coverage next to increasing OI', async () => {
     const response: FlowEvidenceResponse = {
@@ -115,6 +115,6 @@ describe('FLOW evidence presentation', () => {
     );
     expect(screen.getByText('Buy to close')).toBeTruthy();
     expect(screen.getByText(/inferred/)).toBeTruthy();
-    expect(screen.queryByText('Reconcile OI')).toBeNull();
+    expect(screen.queryByText('Unknown')).toBeNull();
   });
 });

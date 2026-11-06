@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -17,6 +17,7 @@ interface Options {
 
 export class FlowOiStore {
   private readonly db: DatabaseSync;
+  private readonly insert: StatementSync;
   private readonly pool: Pool | null;
   private readonly schedule: FlushSchedule | null;
   private flushing: Promise<void> | null = null;
@@ -51,6 +52,9 @@ export class FlowOiStore {
     if (!this.db.prepare('PRAGMA table_info(flow_oi)').all().some((column) => column['name'] === 'timing'))
       this.db.exec("ALTER TABLE flow_oi ADD COLUMN timing TEXT NOT NULL DEFAULT 'sampled'");
     this.db.exec('CREATE INDEX IF NOT EXISTS flow_oi_pending ON flow_oi(archived)');
+    this.insert = this.db.prepare(
+      `INSERT OR IGNORE INTO flow_oi (venue, instrument, underlying, timestamp, observed_at, open_interest, timing) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
     this.pool =
       options.pool ??
       (options.connectionString
@@ -80,22 +84,34 @@ export class FlowOiStore {
   }
 
   append(input: FlowOiTick): void {
-    const tick = FlowOiTickSchema.parse(input);
-    const result = this.db
-      .prepare(
-        `INSERT OR IGNORE INTO flow_oi (venue, instrument, underlying, timestamp, observed_at, open_interest, timing) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        tick.venue,
-        tick.instrument,
-        tick.underlying,
-        tick.timestamp,
-        tick.observedAt,
-        tick.openInterest,
-        tick.timing ?? 'sampled',
-      );
-    if (result.changes > 0)
-      for (const listener of this.listeners) listener({ ...tick, timing: tick.timing ?? 'sampled' });
+    this.appendBatch([input]);
+  }
+
+  appendBatch(inputs: readonly FlowOiTick[]): void {
+    if (inputs.length === 0) return;
+    const ticks = inputs.map((input) => FlowOiTickSchema.parse(input));
+    const inserted: FlowOiTick[] = [];
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const tick of ticks) {
+        const result = this.insert.run(
+          tick.venue,
+          tick.instrument,
+          tick.underlying,
+          tick.timestamp,
+          tick.observedAt,
+          tick.openInterest,
+          tick.timing ?? 'sampled',
+        );
+        if (result.changes > 0) inserted.push({ ...tick, timing: tick.timing ?? 'sampled' });
+      }
+      this.db.exec('COMMIT');
+    } catch (error: unknown) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+    for (const tick of inserted)
+      for (const listener of this.listeners) listener(tick);
   }
 
   subscribe(listener: (tick: FlowOiTick) => void): () => void {

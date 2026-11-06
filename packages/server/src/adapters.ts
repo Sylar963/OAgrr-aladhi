@@ -22,6 +22,7 @@ import {
 
 type ChainAdapter = OptionVenueAdapter & {
   addQuoteRecorder?: (recorder: (event: QuoteRecorderEvent) => void) => () => void;
+  addQuoteBatchRecorder?: (recorder: (events: readonly QuoteRecorderEvent[]) => void) => () => void;
 };
 
 // FEED_WORKER=1 moves socket handling, parsing and normalization for every chain venue onto a
@@ -59,6 +60,7 @@ const flowOiHandlers: StreamHandlers = { onDelta: () => {}, onStatus: () => {} }
 
 export interface AdapterBootstrapDeps {
   flowOiRecorder?: FlowOiRecorder;
+  writeFlowOiBatch?: Parameters<FlowOiRecorder['recordBatch']>[1];
   markHistoryBuffer?: MarkHistoryBuffer;
   tradeRuntime?: TradeRuntime;
 }
@@ -71,7 +73,11 @@ export async function bootstrapAdapters(
   if (deps.flowOiRecorder) {
     const recorder = deps.flowOiRecorder;
     for (const adapter of adapters) {
-      if (adapter.addQuoteRecorder)
+      if (adapter.addQuoteBatchRecorder)
+        quoteRecorderUnsubs.push(
+          adapter.addQuoteBatchRecorder((events) => recorder.recordBatch(events, deps.writeFlowOiBatch)),
+        );
+      else if (adapter.addQuoteRecorder)
         quoteRecorderUnsubs.push(adapter.addQuoteRecorder((event) => recorder.record(event)));
     }
     if (deps.tradeRuntime) {

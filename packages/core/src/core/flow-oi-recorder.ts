@@ -15,20 +15,43 @@ export class FlowOiRecorder {
   }
 
   record(event: QuoteRecorderEvent): void {
+    this.recordBatch([event]);
+  }
+
+  recordBatch(
+    events: readonly QuoteRecorderEvent[],
+    writeBatch: (ticks: readonly FlowOiTick[]) => void = (ticks) => {
+      for (const tick of ticks) this.write(tick);
+    },
+  ): void {
+    const updates = new Map<string, { timestamp: number; savedAt: number; oi: number }>();
+    const ticks: FlowOiTick[] = [];
+    const now = this.now();
+    for (const event of events) this.capture(event, now, updates, ticks);
+    if (ticks.length > 0) writeBatch(ticks);
+    for (const [key, value] of updates) this.latest.set(key, value);
+    while (this.latest.size > 30_000) this.latest.delete(this.latest.keys().next().value!);
+  }
+
+  private capture(
+    event: QuoteRecorderEvent,
+    now: number,
+    updates: Map<string, { timestamp: number; savedAt: number; oi: number }>,
+    ticks: FlowOiTick[],
+  ): void {
     const oi = event.openInterest;
     if (!oi || !Number.isFinite(oi.value) || oi.value < 0 || !Number.isSafeInteger(oi.timestamp))
       return;
-    const now = this.now();
     if (oi.timestamp > now + 5_000 || oi.timestamp < now - 60_000) return;
     const key = `${event.venue}:${event.exchangeSymbol}`;
-    const previous = this.latest.get(key);
+    const previous = updates.get(key) ?? this.latest.get(key);
     if (previous && oi.timestamp <= previous.timestamp) return;
     const activeUntil = this.activeTrades.get(key) ?? 0;
     if (previous && oi.value === previous.oi && oi.timestamp - previous.savedAt < (activeUntil > now ? 1_000 : 300_000)) {
-      previous.timestamp = oi.timestamp;
+      updates.set(key, { ...previous, timestamp: oi.timestamp });
       return;
     }
-    this.write({
+    ticks.push({
       venue: event.venue,
       instrument: event.exchangeSymbol,
       underlying: oi.underlying,
@@ -37,7 +60,6 @@ export class FlowOiRecorder {
       openInterest: oi.value,
       timing: oi.timing ?? 'sampled',
     });
-    this.latest.set(key, { timestamp: oi.timestamp, savedAt: oi.timestamp, oi: oi.value });
-    if (this.latest.size > 30_000) this.latest.delete(this.latest.keys().next().value!);
+    updates.set(key, { timestamp: oi.timestamp, savedAt: oi.timestamp, oi: oi.value });
   }
 }

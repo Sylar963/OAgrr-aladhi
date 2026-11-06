@@ -212,13 +212,37 @@ describe('FeedWorkerHost', () => {
     await host.shutdown();
   });
 
+  it('preserves recorder batches and keeps the worker recorder until every consumer releases it', async () => {
+    const { host, workers } = startHarness();
+    const adapter = host.adapter('deribit');
+    const batches = vi.fn();
+    const releaseBatch = adapter.addQuoteBatchRecorder(batches);
+    const recorded: number[] = [];
+    const releaseSingle = adapter.addQuoteRecorder((event) => recorded.push(event.ts));
+    await vi.waitFor(() => expect(workers[0]!.recorders.size).toBe(1));
+    for (const recorder of workers[0]!.recorders) {
+      recorder({ venue: 'deribit', exchangeSymbol: 'BTC-X', ts: 1, markPrice: 10 });
+      recorder({ venue: 'deribit', exchangeSymbol: 'BTC-X', ts: 2, markPrice: 11 });
+    }
+    await vi.waitFor(() => expect(batches).toHaveBeenCalledTimes(1));
+    expect(batches.mock.calls[0]![0].map((event: { ts: number }) => event.ts)).toEqual([1, 2]);
+    expect(recorded).toEqual([1, 2]);
+    releaseSingle();
+    await adapter.listUnderlyings();
+    expect(workers[0]!.recorders.size).toBe(1);
+    releaseBatch();
+    await vi.waitFor(() => expect(workers[0]!.recorders.size).toBe(0));
+    await host.shutdown();
+  });
+
   it('respawns a crashed worker and replays markets, recorders and subscriptions', async () => {
     const { host, workers, crash } = startHarness();
     const adapter = host.adapter('deribit');
     const statuses: VenueStatus[] = [];
     const onDelta = vi.fn<(deltas: VenueDelta[]) => void>();
     await adapter.loadMarkets();
-    adapter.addQuoteRecorder(() => {});
+    const batches = vi.fn();
+    adapter.addQuoteBatchRecorder(batches);
     await adapter.subscribe(REQUEST, { onDelta, onStatus: (status) => statuses.push(status) });
 
     crash();
@@ -227,6 +251,10 @@ describe('FeedWorkerHost', () => {
     await vi.waitFor(() => expect(workers[1]?.subscribed).toEqual([REQUEST]), { timeout: 3_000 });
     expect(workers[1]!.loadCalls).toBe(1);
     expect(workers[1]!.recorders.size).toBe(1);
+
+    for (const recorder of workers[1]!.recorders)
+      recorder({ venue: 'deribit', exchangeSymbol: 'BTC-X', ts: 7, markPrice: 10 });
+    await vi.waitFor(() => expect(batches).toHaveBeenCalledTimes(1));
 
     workers[1]!.emitDeltas([delta(BTC_CALL, 7)]);
     await vi.waitFor(() => expect(onDelta).toHaveBeenCalled());

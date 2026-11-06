@@ -166,6 +166,7 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
   private readonly handlerSubscriptionCounts = new Map<number, number>();
   private readonly subscriptions = new Set<ProxySubscription>();
   private readonly recorders = new Set<QuoteRecorder>();
+  private readonly batchRecorders = new Set<(events: readonly QuoteRecorderEvent[]) => void>();
   private nextHandlerId = 1;
   private disposed = false;
   private restoreGeneration = 0;
@@ -249,6 +250,7 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
     this.clearRestoreRetry();
     this.subscriptions.clear();
     this.recorders.clear();
+    this.batchRecorders.clear();
     await this.call('dispose', []).catch(() => {});
   }
 
@@ -258,12 +260,25 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
 
   addQuoteRecorder(recorder: QuoteRecorder): () => void {
     this.recorders.add(recorder);
-    if (this.recorders.size === 1) {
+    if (this.recorders.size === 1 && this.batchRecorders.size === 0) {
       this.host.send({ t: 'recorder', venue: this.venue, enabled: true });
     }
     return () => {
       if (!this.recorders.delete(recorder)) return;
-      if (this.recorders.size === 0) {
+      if (this.recorders.size === 0 && this.batchRecorders.size === 0) {
+        this.host.send({ t: 'recorder', venue: this.venue, enabled: false });
+      }
+    };
+  }
+
+  addQuoteBatchRecorder(recorder: (events: readonly QuoteRecorderEvent[]) => void): () => void {
+    this.batchRecorders.add(recorder);
+    if (this.batchRecorders.size === 1 && this.recorders.size === 0) {
+      this.host.send({ t: 'recorder', venue: this.venue, enabled: true });
+    }
+    return () => {
+      if (!this.batchRecorders.delete(recorder)) return;
+      if (this.batchRecorders.size === 0 && this.recorders.size === 0) {
         this.host.send({ t: 'recorder', venue: this.venue, enabled: false });
       }
     };
@@ -278,6 +293,13 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
   }
 
   dispatchMarks(events: QuoteRecorderEvent[]): void {
+    for (const recorder of this.batchRecorders) {
+      try {
+        recorder(events);
+      } catch (error: unknown) {
+        log.warn({ venue: this.venue, err: String(error) }, 'quote batch recorder threw');
+      }
+    }
     for (const recorder of this.recorders) {
       for (const event of events) {
         try {
@@ -326,7 +348,7 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
       return;
     }
     if (!isCurrent()) return;
-    if (this.recorders.size > 0) {
+    if (this.recorders.size > 0 || this.batchRecorders.size > 0) {
       this.host.send({ t: 'recorder', venue: this.venue, enabled: true });
     }
 

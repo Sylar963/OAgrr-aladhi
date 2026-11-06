@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { DatabaseSync } from 'node:sqlite';
 import type { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlowOiStore } from './flow-oi-store.js';
@@ -13,6 +14,7 @@ const tick = {
   timestamp: 1000,
   observedAt: 1001,
   openInterest: 1196.8,
+  timing: 'sampled' as const,
 };
 const dirs: string[] = [];
 const stores: FlowOiStore[] = [];
@@ -35,6 +37,37 @@ function setup(fail = false) {
 }
 
 describe('local FLOW OI journal and daily archive', () => {
+  it('commits a batch before notifying listeners and deduplicates ticks', () => {
+    const { store } = setup();
+    const observed: number[] = [];
+    store.subscribe((saved) => {
+      observed.push(saved.timestamp);
+      expect(store.bracket('deribit', tick.instrument, 1500).after?.timestamp).toBe(2000);
+    });
+    store.appendBatch([tick, tick, { ...tick, timestamp: 2000 }]);
+    expect(observed).toEqual([1000, 2000]);
+  });
+
+  it('rolls back the whole batch when an insert fails and can retry', () => {
+    const { store, dir } = setup();
+    const db = new DatabaseSync(join(dir, 'oi.sqlite'));
+    try {
+      db.exec(`CREATE TRIGGER reject_oi BEFORE INSERT ON flow_oi
+        WHEN NEW.timestamp = 2000 BEGIN SELECT RAISE(ABORT, 'test failure'); END;`);
+      const listener = vi.fn();
+      store.subscribe(listener);
+      const batch = [tick, { ...tick, timestamp: 2000 }];
+      expect(() => store.appendBatch(batch)).toThrow('test failure');
+      expect(store.bracket('deribit', tick.instrument, 1500)).toEqual({ before: null, after: null });
+      expect(listener).not.toHaveBeenCalled();
+      db.exec('DROP TRIGGER reject_oi');
+      store.appendBatch(batch);
+      expect(listener).toHaveBeenCalledTimes(2);
+    } finally {
+      db.close();
+    }
+  });
+
   it('writes, deduplicates and reads brackets without touching Neon', async () => {
     const { store, query } = setup();
     store.append(tick);

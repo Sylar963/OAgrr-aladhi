@@ -4,7 +4,7 @@ import type {
   FlowStrikeMapIvPoint,
   FlowStrikeMapPoint,
 } from '@oggregator/protocol';
-import { useMemo } from 'react';
+import { useMemo, type KeyboardEvent } from 'react';
 import type { HistoricalPriceCandle } from './chart-queries';
 import { formatMoney, type OptionFilter, type StrikeFlowProfile } from './flow-map-model';
 import type { HistoryRange } from './queries';
@@ -14,7 +14,7 @@ const messages = defineMessages(
   {
     underlyingPrice: 'Underlying price · perpetual proxy',
     proxyDetail: 'Candle source is a venue perpetual, not the options index.',
-    flowVolume: 'Recorded option flow · bubble size = notional',
+    flowVolume: 'Recorded option flow · bubble size = total notional',
     noCandles: 'No underlying candles for this range',
     buy: 'Buy',
     sell: 'Sell',
@@ -35,7 +35,7 @@ const messages = defineMessages(
   {
     underlyingPrice: 'Precio subyacente · proxy perpetuo',
     proxyDetail: 'La fuente de velas es un perpetuo del venue, no el índice de opciones.',
-    flowVolume: 'Flujo de opciones registrado · tamaño = nocional',
+    flowVolume: 'Flujo de opciones registrado · tamaño = nocional total',
     noCandles: 'No hay velas del subyacente en este período',
     buy: 'Compra',
     sell: 'Venta',
@@ -80,7 +80,10 @@ export function FlowSpotChart({
   const start = range.start ? Date.parse(range.start) : 0;
   const end = range.end ? Date.parse(range.end) : start + resolution * 1000;
   const priceData = useMemo(
-    () => candles.filter((candle) => candle.close > 0 && candle.timestamp >= start && candle.timestamp < end),
+    () => candles
+      .filter((candle) => candle.close > 0 && candle.timestamp >= start && candle.timestamp < end)
+      .slice()
+      .sort((left, right) => left.timestamp - right.timestamp),
     [candles, end, start],
   );
   const data = useMemo(() => {
@@ -94,32 +97,40 @@ export function FlowSpotChart({
       CHART.left + ((timestamp - start) / Math.max(1, end - start)) * (CHART.width - CHART.left - CHART.right);
     const y = (price: number) =>
       CHART.top + ((high - price) / Math.max(1e-9, high - low)) * (CHART.height - CHART.top - CHART.bottom);
-    const candleAt = (timestamp: number) => {
+    const priceAt = (timestamp: number) => {
       let left = 0;
       let right = priceData.length - 1;
-      let found = 0;
       while (left <= right) {
         const middle = (left + right) >> 1;
         const candle = priceData[middle];
-        if (!candle || candle.timestamp > timestamp) right = middle - 1;
-        else {
-          found = middle;
-          left = middle + 1;
-        }
+        if (!candle) break;
+        if (candle.timestamp < timestamp) left = middle + 1;
+        else right = middle - 1;
       }
-      return priceData[found]?.close ?? priceData[0]!.close;
+      const after = priceData[Math.min(left, priceData.length - 1)]!;
+      const before = priceData[Math.max(0, left - 1)]!;
+      const span = after.timestamp - before.timestamp;
+      if (span <= 0) return after.close;
+      const progress = Math.max(0, Math.min(1, (timestamp - before.timestamp) / span));
+      return before.close + (after.close - before.close) * progress;
     };
     const linePath = priceData
       .map((candle, index) => `${index === 0 ? 'M' : 'L'}${x(candle.timestamp).toFixed(2)},${y(candle.close).toFixed(2)}`)
       .join(' ');
     const tickPrices = Array.from({ length: 5 }, (_, index) => high - ((high - low) * index) / 4);
     const tickTimes = Array.from({ length: 6 }, (_, index) => start + ((end - start) * index) / 5);
-    return { x, y, low, high, candleAt, linePath, tickPrices, tickTimes };
+    return { x, y, low, high, priceAt, linePath, tickPrices, tickTimes };
   }, [end, priceData, start]);
 
   const visiblePoints = points.filter(
     (point) => optionFilter === 'all' || point.optionType === optionFilter,
   );
+  const pointClusters = new Map<number, FlowStrikeMapPoint[]>();
+  for (const point of visiblePoints) {
+    const cluster = pointClusters.get(point.bucketTs) ?? [];
+    cluster.push(point);
+    pointClusters.set(point.bucketTs, cluster);
+  }
 
   return (
     <section className={styles.chartPanel}>
@@ -131,6 +142,8 @@ export function FlowSpotChart({
         <div className={styles.chartLegend}>
           <span><i data-side="buy" />{t('buy')}</span>
           <span><i data-side="sell" />{t('sell')}</span>
+          <span title={t('calls')}><i data-option-type="call" />C</span>
+          <span title={t('puts')}><i data-option-type="put" />P</span>
           <span className={styles.legendMeta}>{t('flowVolume')}</span>
         </div>
       </div>
@@ -166,37 +179,50 @@ export function FlowSpotChart({
               );
             })}
             <path d={data.linePath} className={styles.spotLine} />
-            {visiblePoints.map((point) => {
-              const centerTs = point.bucketTs + (resolution * 500);
-              const xOffset = (point.side === 'buy' ? -4 : 4) + (point.optionType === 'call' ? -3 : 3);
-              const x = data.x(centerTs) + xOffset;
-              const y = data.y(data.candleAt(centerTs));
-              const radius = 4 + Math.min(10, Math.log10(1 + point.notionalUsd) * 1.2);
-              const selected = samePoint(selectedPoint, point);
-              return (
-                <circle
-                  key={`${point.bucketTs}-${point.optionType}-${point.side}`}
-                  cx={x}
-                  cy={y}
-                  r={selected ? radius + 2 : radius}
-                  className={styles.flowBubble}
-                  data-side={point.side}
-                  data-selected={selected || undefined}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={selected}
-                  aria-label={`${point.optionType} ${point.side}: ${point.count} trades, ${formatMoney(point.notionalUsd)}`}
-                  onClick={() => onSelectPoint(point)}
-                  onKeyDown={(event) => {
+            {[...pointClusters.entries()].map(([bucketTs, cluster]) => {
+              const centerTs = bucketTs + resolution * 500;
+              const x = data.x(centerTs);
+              const price = data.priceAt(centerTs);
+              const y = data.y(price);
+              const totalNotional = cluster.reduce((sum, point) => sum + point.notionalUsd, 0);
+              const radius = 4 + Math.min(10, Math.log10(1 + totalNotional) * 1.2);
+              const ordered = cluster.slice().sort((left, right) =>
+                left.side.localeCompare(right.side) || left.optionType.localeCompare(right.optionType),
+              );
+              return ordered.map((point, index) => {
+                const selected = samePoint(selectedPoint, point);
+                const isSingle = ordered.length === 1;
+                const slice = isSingle
+                  ? null
+                  : bubbleSlicePath(x, y, radius, -90 + (360 * index) / ordered.length, -90 + (360 * (index + 1)) / ordered.length);
+                const common = {
+                  className: styles.flowBubble,
+                  'data-side': point.side,
+                  'data-option-type': point.optionType,
+                  'data-selected': selected || undefined,
+                  role: 'button' as const,
+                  tabIndex: 0,
+                  'aria-pressed': selected,
+                  'aria-label': `${point.optionType} ${point.side}: ${point.count} trades, ${formatMoney(point.notionalUsd)}, ${Math.round(price).toLocaleString('en-US')} at ${new Date(centerTs).toISOString()}`,
+                  onClick: () => onSelectPoint(point),
+                  onKeyDown: (event: KeyboardEvent<SVGElement>) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       onSelectPoint(point);
                     }
-                  }}
-                >
-                  <title>{`${point.optionType.toUpperCase()} ${point.side.toUpperCase()} · ${point.count} trades · ${formatMoney(point.notionalUsd)} · ${new Date(point.bucketTs).toISOString()}`}</title>
-                </circle>
-              );
+                  },
+                };
+                const title = `${point.optionType.toUpperCase()} ${point.side.toUpperCase()} · ${point.count} trades · ${formatMoney(point.notionalUsd)} · ${Math.round(price).toLocaleString('en-US')} · ${new Date(centerTs).toISOString()}`;
+                return isSingle ? (
+                  <circle key={`${bucketTs}-${point.optionType}-${point.side}`} cx={x} cy={y} r={radius} {...common}>
+                    <title>{title}</title>
+                  </circle>
+                ) : (
+                  <path key={`${bucketTs}-${point.optionType}-${point.side}`} d={slice!} {...common}>
+                    <title>{title}</title>
+                  </path>
+                );
+              });
             })}
           </svg>
           <div className={styles.chartXAxis}>UTC</div>
@@ -426,6 +452,17 @@ export function FlowIvSmile({ points, optionFilter, range, selectedInstrument, c
 
 function samePoint(left: FlowStrikeMapPoint | null, right: FlowStrikeMapPoint): boolean {
   return left?.bucketTs === right.bucketTs && left.side === right.side && left.optionType === right.optionType;
+}
+
+function bubbleSlicePath(cx: number, cy: number, radius: number, startDegrees: number, endDegrees: number): string {
+  const start = (startDegrees * Math.PI) / 180;
+  const end = (endDegrees * Math.PI) / 180;
+  const x1 = cx + radius * Math.cos(start);
+  const y1 = cy + radius * Math.sin(start);
+  const x2 = cx + radius * Math.cos(end);
+  const y2 = cy + radius * Math.sin(end);
+  const largeArc = endDegrees - startDegrees > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
 }
 
 function formatUtcTick(timestamp: number, durationMs: number): string {

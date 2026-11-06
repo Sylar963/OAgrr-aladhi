@@ -435,7 +435,7 @@ export default function FlowChartsView({
                             {t('selectedInterval', {
                               type: selectedPoint.optionType === 'call' ? t('c') : t('p'),
                               side: selectedPoint.side === 'buy' ? t('buy') : t('sell'),
-                              time: new Date(selectedPoint.bucketTs).toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' }),
+                              time: new Date(selectedPoint.bucketTs + resolution * 500).toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' }),
                             })}
                           </span>
                         </div>

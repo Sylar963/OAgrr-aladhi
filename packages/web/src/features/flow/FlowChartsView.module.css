@@ -222,6 +222,15 @@
   background: #3f8cff;
 }
 
+.chartLegend i[data-option-type="call"] {
+  background: #bfc8ce;
+}
+
+.chartLegend i[data-option-type="put"] {
+  background: transparent;
+  border: 1px dashed #bfc8ce;
+}
+
 .chartLegend .legendMeta {
   color: var(--text-dim);
 }
@@ -272,6 +281,11 @@
 .flowBubble[data-side="sell"] {
   fill: #3f8cff;
   stroke: #3f8cff;
+}
+
+.flowBubble[data-option-type="put"] {
+  fill-opacity: 0.56;
+  stroke-dasharray: 2 1;
 }
 
 .flowBubble:hover,

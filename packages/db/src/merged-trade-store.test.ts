@@ -139,6 +139,7 @@ describe('MergedTradeStore', () => {
       listInstruments: (query) => remote.listInstruments(query),
       listInstrumentsByNames: (query, names) => remote.listInstrumentsByNames(query, names),
       bucketCallPut: (query) => remote.bucketCallPut(query),
+      bucketStrikeFlow: (query) => remote.bucketStrikeFlow(query),
       dispose: () => remote.dispose(),
     };
     const merged = new MergedTradeStore(localReader, racingRemote);
@@ -256,6 +257,31 @@ describe('MergedTradeStore.bucketCallPut', () => {
     await merged.dispose();
   });
 
+  it('merges strike buckets and removes synchronized duplicates', async () => {
+    const { local, remote, merged } = stores();
+    const duplicate = trade({ tradeUid: 'shared', tradeTs: new Date(10_000) });
+    local.writeMany([
+      duplicate,
+      trade({ tradeUid: 'local', tradeTs: new Date(20_000), notionalUsd: 20_000 }),
+    ]);
+    remote.writeMany([
+      duplicate,
+      trade({ tradeUid: 'remote', tradeTs: new Date(30_000), notionalUsd: 30_000 }),
+    ]);
+
+    const buckets = await merged.bucketStrikeFlow({
+      mode: 'live',
+      underlying: 'BTC',
+      startTs: new Date(0),
+      endTs: new Date(60_000),
+      resolutionSec: 60,
+    });
+
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatchObject({ count: 3, notionalUsd: 51_000, side: 'buy' });
+    await merged.dispose();
+  });
+
   it('reads the remote store once per high-water mark', async () => {
     const local = new SqliteTradeStore(tempPath('cache-local.sqlite'));
     const backing = new SqliteTradeStore(tempPath('cache-remote.sqlite'));
@@ -273,6 +299,7 @@ describe('MergedTradeStore.bucketCallPut', () => {
         remoteBucketReads += 1;
         return backing.bucketCallPut(q);
       },
+      bucketStrikeFlow: (q) => backing.bucketStrikeFlow(q),
       dispose: () => backing.dispose(),
     };
     const merged = new MergedTradeStore(local, remote);

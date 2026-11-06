@@ -5,6 +5,7 @@ export interface TradeFilterQuery {
   underlying?: string;
   venues?: string[];
   instrumentName?: string;
+  expiry?: string;
   startTs?: Date;
   endTs?: Date;
 }
@@ -43,6 +44,8 @@ export interface InstrumentSummary {
   lastTradeUid?: string;
   lastPrice: number | null;
   lastReferencePriceUsd: number | null;
+  lastIv: number | null;
+  lastIvAt: Date | null;
   optionType: 'call' | 'put' | null;
   strike: number | null;
   expiry: string | null;
@@ -71,6 +74,30 @@ export interface CallPutBucket {
   notionalUsd: number;
 }
 
+export interface StrikeFlowBucketQuery {
+  mode: PersistedTradeMode;
+  underlying: string;
+  venues?: string[];
+  expiry?: string;
+  startTs: Date;
+  endTs: Date;
+  resolutionSec: number;
+}
+
+/** Historical option flow grouped by time, contract, and reported trade side. */
+export interface StrikeFlowBucket {
+  bucketTs: Date;
+  instrument: string;
+  expiry: string;
+  strike: number;
+  optionType: 'call' | 'put';
+  side: 'buy' | 'sell';
+  count: number;
+  contracts: number;
+  premiumUsd: number;
+  notionalUsd: number;
+}
+
 export interface TradePruneResult {
   deleted: number;
 }
@@ -89,6 +116,7 @@ export interface TradeHistoryReader {
   ): Promise<TradeHistorySummary>;
   listInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]>;
   bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]>;
+  bucketStrikeFlow(query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]>;
   dispose(): Promise<void>;
 }
 

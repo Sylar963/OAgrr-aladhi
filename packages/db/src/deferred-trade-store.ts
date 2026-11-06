@@ -6,6 +6,8 @@ import type {
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistorySummary,
@@ -128,6 +130,10 @@ export class DeferredTradeStore implements TradeStore {
 
   async bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]> {
     return this.merged.bucketCallPut(query);
+  }
+
+  async bucketStrikeFlow(query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]> {
+    return this.merged.bucketStrikeFlow(query);
   }
 
   async listInstrumentsByNames(

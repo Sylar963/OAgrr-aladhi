@@ -338,6 +338,32 @@ export class SpotCandleService {
     return [...byTs.values()].sort((a, b) => a.timestamp - b.timestamp);
   }
 
+  async getCandlesInRange(
+    currency: SpotCandleUnderlying,
+    resolutionSec: SpotCandleResolutionSec,
+    startMs: number,
+    endMs: number,
+  ): Promise<SpotCandle[]> {
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) return [];
+    const chunkMs = resolutionSec * 1000 * HISTORY_POINTS_PER_CALL;
+    const ranges: { start: number; end: number }[] = [];
+    for (let start = startMs; start < endMs; start += chunkMs) {
+      ranges.push({ start, end: Math.min(start + chunkMs, endMs) });
+    }
+    const chunks = await Promise.all(
+      ranges.map((range) => this.fetchFromSource(currency, resolutionSec, 0, range)),
+    );
+    const byTs = new Map<number, SpotCandle>();
+    for (const chunk of chunks) {
+      for (const candle of chunk) {
+        if (candle.timestamp >= startMs && candle.timestamp < endMs) {
+          byTs.set(candle.timestamp, candle);
+        }
+      }
+    }
+    return [...byTs.values()].sort((a, b) => a.timestamp - b.timestamp);
+  }
+
   // Close of the 1m candle covering timestampMs, for pricing past fills. Minutes
   // never change once closed, so hits are cached without a TTL.
   async getPriceAt(currency: SpotCandleUnderlying, timestampMs: number): Promise<number | null> {
@@ -368,11 +394,10 @@ export class SpotCandleService {
     const source = SPOT_CANDLE_SOURCES[currency];
     return source.venue === 'hyperliquid'
       ? this.fetchFromHyperliquid(currency, source.coin, resolutionSec, buckets, range)
-      : this.fetchFromDeribit(currency, source.instrument, resolutionSec, buckets, range);
+      : this.fetchFromDeribit(source.instrument, resolutionSec, buckets, range);
   }
 
   private async fetchFromDeribit(
-    currency: SpotCandleUnderlying,
     instrument: string,
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,

@@ -45,6 +45,7 @@ export interface HistoryPageQuery {
   underlying: string;
   venues: string[];
   range: HistoryRange;
+  expiry?: string;
   cursor?: TradeHistoryCursor | null;
   limit?: number;
 }
@@ -86,6 +87,7 @@ export function useFlowHistoryPage(query: HistoryPageQuery, enabled = true) {
       query.venues.join(','),
       query.range.start,
       query.range.end,
+      query.expiry ?? null,
       query.cursor?.beforeTs ?? null,
       query.cursor?.beforeUid ?? null,
       query.limit ?? 100,
@@ -102,6 +104,7 @@ function buildHistoryParams(
   if (query.venues.length > 0) params.set('venues', query.venues.join(','));
   if (query.range.start) params.set('start', query.range.start);
   if (query.range.end) params.set('end', query.range.end);
+  if ('expiry' in query && query.expiry) params.set('expiry', query.expiry);
   if ('cursor' in query && query.cursor) {
     params.set('beforeTs', query.cursor.beforeTs);
     params.set('beforeUid', query.cursor.beforeUid);

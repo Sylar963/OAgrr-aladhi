@@ -1,5 +1,8 @@
 import { fetchJson } from '@lib/http';
-import { InstrumentTradesResponseSchema } from '@oggregator/protocol';
+import {
+  FlowStrikeMapResponseSchema,
+  InstrumentTradesResponseSchema,
+} from '@oggregator/protocol';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { z } from 'zod';
@@ -11,6 +14,8 @@ const InstrumentRowSchema = z.object({
   lastTs: z.string(),
   lastPrice: z.number().nullable(),
   lastReferencePriceUsd: z.number().nullable(),
+  lastIv: z.number().nullable(),
+  lastIvAt: z.string().nullable(),
   optionType: z.enum(['call', 'put']).nullable(),
   strike: z.number().nullable(),
   expiry: z.string().nullable(),
@@ -21,6 +26,38 @@ const InstrumentListResponseSchema = z.object({
   available: z.boolean(),
   instruments: z.array(InstrumentRowSchema),
 });
+
+const SpotCandleRangeResponseSchema = z.object({
+  currency: z.string(),
+  resolution: z.number(),
+  count: z.number(),
+  candles: z.array(
+    z.object({
+      timestamp: z.number(),
+      open: z.number(),
+      high: z.number(),
+      low: z.number(),
+      close: z.number(),
+      volume: z.number().optional(),
+    }),
+  ),
+  source: z.string().optional(),
+});
+export type HistoricalPriceCandle = z.infer<typeof SpotCandleRangeResponseSchema>['candles'][number];
+
+export interface FlowStrikeMapQueryArgs {
+  underlying: string;
+  venue: string;
+  expiry: string;
+  range: HistoryRange;
+  resolution: number;
+}
+
+export interface SpotCandleRangeQueryArgs {
+  underlying: string;
+  range: HistoryRange;
+  resolution: number;
+}
 
 export interface InstrumentListQueryArgs {
   underlying: string;
@@ -109,5 +146,63 @@ export function useInstrumentTrades(args: InstrumentTradesQueryArgs, enabled = t
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
     staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function useFlowStrikeMap(args: FlowStrikeMapQueryArgs, enabled = true) {
+  const params = useMemo(() => {
+    const p = new URLSearchParams({
+      underlying: args.underlying,
+      venue: args.venue,
+      expiry: args.expiry,
+      start: args.range.start ?? '',
+      end: args.range.end ?? '',
+      resolution: String(args.resolution),
+    });
+    return p;
+  }, [args.underlying, args.venue, args.expiry, args.range.start, args.range.end, args.resolution]);
+
+  return useQuery({
+    queryKey: [
+      'flow-strike-map',
+      args.underlying,
+      args.venue,
+      args.expiry,
+      args.range.start,
+      args.range.end,
+      args.resolution,
+    ],
+    queryFn: () => fetchAndValidate(`/flow/strike-map?${params.toString()}`, FlowStrikeMapResponseSchema),
+    enabled:
+      Boolean(args.underlying && args.venue && args.expiry && args.range.start && args.range.end) &&
+      enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useSpotCandleRange(args: SpotCandleRangeQueryArgs, enabled = true) {
+  const params = useMemo(
+    () =>
+      new URLSearchParams({
+        currency: args.underlying,
+        resolution: String(args.resolution),
+        start: args.range.start ?? '',
+        end: args.range.end ?? '',
+        source: 'perp',
+      }),
+    [args.underlying, args.range.start, args.range.end, args.resolution],
+  );
+
+  return useQuery({
+    queryKey: [
+      'flow-spot-candles',
+      args.underlying,
+      args.range.start,
+      args.range.end,
+      args.resolution,
+    ],
+    queryFn: () => fetchAndValidate(`/spot-candles?${params.toString()}`, SpotCandleRangeResponseSchema),
+    enabled: Boolean(args.underlying && args.range.start && args.range.end) && enabled,
+    staleTime: 30_000,
   });
 }

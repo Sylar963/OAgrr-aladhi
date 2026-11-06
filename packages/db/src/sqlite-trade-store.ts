@@ -19,6 +19,8 @@ import type {
   InstrumentSummary,
   MergeableTradeHistoryReader,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistorySummary,
@@ -218,6 +220,53 @@ export class SqliteTradeStore implements MergeableTradeHistoryReader {
     });
   }
 
+  async bucketStrikeFlow(query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]> {
+    const database = this.getDatabase();
+    if (database == null) return [];
+    const where = buildWhere(query);
+    where.clauses.push('option_type IS NOT NULL', 'strike IS NOT NULL', 'expiry IS NOT NULL');
+    const resolutionMs = Math.round(query.resolutionSec * 1000);
+    const rows = database
+      .prepare(
+        `SELECT
+          (trade_ts / CAST(? AS INTEGER)) * CAST(? AS INTEGER) AS bucket_ts,
+          instrument_name,
+          expiry,
+          strike,
+          option_type,
+          direction,
+          COUNT(*) AS count,
+          COALESCE(SUM(contracts), 0) AS contracts,
+          COALESCE(SUM(premium_usd), 0) AS premium_usd,
+          COALESCE(SUM(notional_usd), 0) AS notional_usd
+        FROM pending_trades ${whereSql(where)}
+        GROUP BY bucket_ts, instrument_name, expiry, strike, option_type, direction
+        ORDER BY bucket_ts ASC, strike ASC, option_type ASC, direction ASC`,
+      )
+      .all(resolutionMs, resolutionMs, ...where.values);
+    return rows.map((row) => {
+      const optionType = readOptionType(row, 'option_type');
+      const side = readDirection(row, 'direction');
+      const expiry = readNullableString(row, 'expiry');
+      const strike = readNullableNumber(row, 'strike');
+      if (optionType == null || expiry == null || strike == null) {
+        throw new Error('incomplete option contract in strike-flow bucket');
+      }
+      return {
+        bucketTs: new Date(readNumber(row, 'bucket_ts')),
+        instrument: readString(row, 'instrument_name'),
+        expiry,
+        strike,
+        optionType,
+        side,
+        count: readNumber(row, 'count'),
+        contracts: readNumber(row, 'contracts'),
+        premiumUsd: readNumber(row, 'premium_usd'),
+        notionalUsd: readNumber(row, 'notional_usd'),
+      };
+    });
+  }
+
   async listAllInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]> {
     return this.selectInstrumentSummaries(query, undefined, ALL_INSTRUMENTS_LIMIT);
   }
@@ -379,6 +428,7 @@ export class SqliteTradeStore implements MergeableTradeHistoryReader {
             trade_uid,
             price,
             reference_price_usd,
+            iv,
             option_type,
             strike,
             expiry,
@@ -386,6 +436,14 @@ export class SqliteTradeStore implements MergeableTradeHistoryReader {
               PARTITION BY instrument_name
               ORDER BY trade_ts DESC, trade_uid COLLATE BINARY DESC
             ) AS row_number,
+            FIRST_VALUE(iv) OVER (
+              PARTITION BY instrument_name
+              ORDER BY CASE WHEN iv IS NULL THEN 1 ELSE 0 END, trade_ts DESC, trade_uid COLLATE BINARY DESC
+            ) AS last_iv,
+            FIRST_VALUE(CASE WHEN iv IS NOT NULL THEN trade_ts END) OVER (
+              PARTITION BY instrument_name
+              ORDER BY CASE WHEN iv IS NULL THEN 1 ELSE 0 END, trade_ts DESC, trade_uid COLLATE BINARY DESC
+            ) AS last_iv_ts,
             COUNT(*) OVER (PARTITION BY instrument_name) AS trade_count
           FROM pending_trades
           ${whereSql(where)}
@@ -579,6 +637,10 @@ function buildWhere(query: TradeFilterQuery): SqliteWhere {
     where.clauses.push('instrument_name = ?');
     where.values.push(query.instrumentName);
   }
+  if (query.expiry) {
+    where.clauses.push('expiry = ?');
+    where.values.push(query.expiry);
+  }
   if (query.startTs) {
     where.clauses.push('trade_ts >= ?');
     where.values.push(query.startTs.getTime());
@@ -651,6 +713,11 @@ function mapInstrumentSummary(row: Record<string, unknown>): InstrumentSummary {
     lastTradeUid: readString(row, 'trade_uid'),
     lastPrice: readNullableNumber(row, 'price'),
     lastReferencePriceUsd: readNullableNumber(row, 'reference_price_usd'),
+    lastIv: readNullableNumber(row, 'last_iv'),
+    lastIvAt: (() => {
+      const timestamp = readNullableNumber(row, 'last_iv_ts');
+      return timestamp == null ? null : new Date(timestamp);
+    })(),
     optionType: readOptionType(row, 'option_type'),
     strike: readNullableNumber(row, 'strike'),
     expiry: readNullableString(row, 'expiry'),

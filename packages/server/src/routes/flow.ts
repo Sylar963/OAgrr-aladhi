@@ -50,7 +50,7 @@ const FlowInstrumentsQuerySchema = z.object({
   venue: z.string().min(1),
   start: isoDate.optional(),
   end: isoDate.optional(),
-  limit: z.coerce.number().int().positive().max(200).optional(),
+  limit: z.coerce.number().int().positive().max(1000).optional(),
 });
 
 const FlowInstrumentTradesQuerySchema = z.object({
@@ -98,6 +98,7 @@ export async function flowRoute(app: FastifyInstance) {
     Querystring: {
       underlying?: string;
       venues?: string;
+      expiry?: string;
       start?: string;
       end?: string;
       beforeTs?: string;
@@ -156,6 +157,8 @@ export async function flowRoute(app: FastifyInstance) {
         lastTs: row.lastTs.toISOString(),
         lastPrice: row.lastPrice,
         lastReferencePriceUsd: row.lastReferencePriceUsd,
+        lastIv: row.lastIv,
+        lastIvAt: row.lastIvAt?.toISOString() ?? null,
         optionType: row.optionType,
         strike: row.strike,
         expiry: row.expiry,
@@ -275,6 +278,7 @@ function buildHistoryQuery(
   query: {
     underlying?: string;
     venues?: string;
+    expiry?: string;
     start?: string;
     end?: string;
     beforeTs?: string;
@@ -289,6 +293,7 @@ function buildHistoryQuery(
   };
 
   if (query.underlying) historyQuery.underlying = normalizeApiUnderlying(query.underlying);
+  if (query.expiry) historyQuery.expiry = query.expiry;
   const venues = parseVenues(query.venues);
   if (venues.length > 0) historyQuery.venues = venues;
   const startTs = parseDate(query.start);

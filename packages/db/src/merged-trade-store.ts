@@ -6,6 +6,8 @@ import type {
   InstrumentSummary,
   MergeableTradeHistoryReader,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistoryReader,
@@ -125,6 +127,34 @@ export class MergedTradeStore implements TradeHistoryReader {
     const inRange = (bucket: CallPutBucket) =>
       bucket.bucketTs.getTime() >= startMs && bucket.bucketTs.getTime() < endMs;
     return combineCallPutBuckets(localBuckets, remote.filter(inRange), overlap.filter(inRange));
+  }
+
+  async bucketStrikeFlow(query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]> {
+    return this.withMergedSnapshot(async () => {
+      if (this.remote == null || this.excludesRemoteByTime(query)) {
+        return this.local.bucketStrikeFlow(query);
+      }
+
+      const remoteMax = this.local.getRemoteMaxTradeTs(query.mode);
+      const localQuery =
+        remoteMax == null || query.startTs.getTime() > remoteMax
+          ? query
+          : { ...query, startTs: new Date(remoteMax + 1) };
+      const localBuckets = await this.local.bucketStrikeFlow(localQuery);
+      const remoteEnd =
+        remoteMax == null
+          ? query.endTs
+          : new Date(Math.min(query.endTs.getTime(), remoteMax + 1));
+      const remoteBuckets =
+        remoteEnd.getTime() <= query.startTs.getTime()
+          ? []
+          : await this.remote.bucketStrikeFlow({ ...query, endTs: remoteEnd });
+      const overlap = new Map<string, StrikeFlowBucket>();
+      if (remoteMax == null) {
+        await this.forEachOverlap(query, (record) => addStrikeFlowRecord(overlap, record, query));
+      }
+      return combineStrikeFlowBuckets(localBuckets, remoteBuckets, [...overlap.values()]);
+    });
   }
 
   async dispose(): Promise<void> {
@@ -296,6 +326,71 @@ function toKey(record: PersistedTradeRecord): TradeRecordKey {
 
 function callPutKey(bucketTs: Date, optionType: 'call' | 'put'): string {
   return `${bucketTs.getTime()}|${optionType}`;
+}
+
+function strikeFlowKey(bucket: Pick<StrikeFlowBucket, 'bucketTs' | 'instrument' | 'side'>): string {
+  return `${bucket.bucketTs.getTime()}|${bucket.instrument}|${bucket.side}`;
+}
+
+function addStrikeFlowRecord(
+  buckets: Map<string, StrikeFlowBucket>,
+  record: PersistedTradeRecord,
+  query: StrikeFlowBucketQuery,
+): void {
+  if (record.optionType == null || record.expiry == null || record.strike == null) return;
+  const resolutionMs = Math.round(query.resolutionSec * 1000);
+  const bucketTs = new Date(Math.floor(record.tradeTs.getTime() / resolutionMs) * resolutionMs);
+  const bucket: StrikeFlowBucket = {
+    bucketTs,
+    instrument: record.instrumentName,
+    expiry: record.expiry,
+    strike: record.strike,
+    optionType: record.optionType,
+    side: record.direction,
+    count: 1,
+    contracts: record.contracts,
+    premiumUsd: record.premiumUsd ?? 0,
+    notionalUsd: record.notionalUsd ?? 0,
+  };
+  const key = strikeFlowKey(bucket);
+  const existing = buckets.get(key);
+  if (existing == null) {
+    buckets.set(key, bucket);
+    return;
+  }
+  existing.count += bucket.count;
+  existing.contracts += bucket.contracts;
+  existing.premiumUsd += bucket.premiumUsd;
+  existing.notionalUsd += bucket.notionalUsd;
+}
+
+function combineStrikeFlowBuckets(
+  local: StrikeFlowBucket[],
+  remote: StrikeFlowBucket[],
+  overlap: StrikeFlowBucket[],
+): StrikeFlowBucket[] {
+  const merged = new Map<string, StrikeFlowBucket>();
+  const add = (bucket: StrikeFlowBucket, sign: 1 | -1) => {
+    const key = strikeFlowKey(bucket);
+    const current = merged.get(key) ?? { ...bucket, count: 0, contracts: 0, premiumUsd: 0, notionalUsd: 0 };
+    current.count += bucket.count * sign;
+    current.contracts += bucket.contracts * sign;
+    current.premiumUsd += bucket.premiumUsd * sign;
+    current.notionalUsd += bucket.notionalUsd * sign;
+    merged.set(key, current);
+  };
+  for (const bucket of remote) add(bucket, 1);
+  for (const bucket of local) add(bucket, 1);
+  for (const bucket of overlap) add(bucket, -1);
+  return [...merged.values()]
+    .filter((bucket) => bucket.count > 0)
+    .sort(
+      (left, right) =>
+        left.bucketTs.getTime() - right.bucketTs.getTime() ||
+        left.strike - right.strike ||
+        left.optionType.localeCompare(right.optionType) ||
+        left.side.localeCompare(right.side),
+    );
 }
 
 function addCallPutRecord(
@@ -473,8 +568,11 @@ function combineInstrumentSummaries(
     const remoteRow = remote.get(instrument);
     const latest = latestInstrument(localRow, remoteRow);
     if (latest == null) continue;
+    const latestIv = latestIvInstrument(localRow, remoteRow);
     combined.push({
       ...latest,
+      lastIv: latestIv?.lastIv ?? null,
+      lastIvAt: latestIv?.lastIvAt ?? null,
       count:
         (localRow?.count ?? 0) + (remoteRow?.count ?? 0) - (overlapCounts.get(instrument) ?? 0),
     });
@@ -485,6 +583,15 @@ function combineInstrumentSummaries(
       right.lastTs.getTime() - left.lastTs.getTime() ||
       Buffer.compare(Buffer.from(left.instrument), Buffer.from(right.instrument)),
   );
+}
+
+function latestIvInstrument(
+  left: InstrumentSummary | undefined,
+  right: InstrumentSummary | undefined,
+): InstrumentSummary | undefined {
+  if (left?.lastIvAt == null) return right?.lastIvAt == null ? undefined : right;
+  if (right?.lastIvAt == null) return left;
+  return left.lastIvAt >= right.lastIvAt ? left : right;
 }
 
 function latestInstrument(

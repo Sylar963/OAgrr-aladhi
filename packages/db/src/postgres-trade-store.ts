@@ -7,6 +7,8 @@ import type {
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistorySummary,
@@ -255,18 +257,27 @@ export class PostgresTradeStore implements TradeStore {
           trade_uid,
           price,
           reference_price_usd,
+          iv,
           option_type,
           strike,
           expiry,
           ROW_NUMBER() OVER (
             PARTITION BY instrument_name
             ORDER BY trade_ts DESC, trade_uid COLLATE "C" DESC
-          ) AS rn
+          ) AS rn,
+          FIRST_VALUE(iv) OVER (
+            PARTITION BY instrument_name
+            ORDER BY CASE WHEN iv IS NULL THEN 1 ELSE 0 END, trade_ts DESC, trade_uid COLLATE "C" DESC
+          ) AS last_iv,
+          FIRST_VALUE(CASE WHEN iv IS NOT NULL THEN trade_ts END) OVER (
+            PARTITION BY instrument_name
+            ORDER BY CASE WHEN iv IS NULL THEN 1 ELSE 0 END, trade_ts DESC, trade_uid COLLATE "C" DESC
+          ) AS last_iv_ts
         FROM flow_trades
         ${buildWhereSql(built)}
       ),
       latest AS (
-        SELECT instrument_name, price, reference_price_usd, option_type, strike, expiry, trade_ts, trade_uid
+        SELECT instrument_name, price, reference_price_usd, option_type, strike, expiry, trade_ts, trade_uid, last_iv, last_iv_ts
         FROM filtered
         WHERE rn = 1
       ),
@@ -284,7 +295,9 @@ export class PostgresTradeStore implements TradeStore {
         latest.reference_price_usd,
         latest.option_type,
         latest.strike,
-        latest.expiry
+        latest.expiry,
+        latest.last_iv,
+        latest.last_iv_ts
       FROM latest
       JOIN counts USING (instrument_name)
       ORDER BY counts.count DESC, latest.trade_ts DESC, latest.instrument_name COLLATE "C" ASC
@@ -376,6 +389,76 @@ export class PostgresTradeStore implements TradeStore {
     }));
   }
 
+  async bucketStrikeFlow(query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]> {
+    return this.withReadSnapshot(async () => {
+      const merged = new Map<string, StrikeFlowBucket>();
+      const endMs = query.endTs.getTime();
+      for (
+        let sliceStart = query.startTs.getTime();
+        sliceStart < endMs;
+        sliceStart += BUCKET_SLICE_MS
+      ) {
+        const slice = await this.bucketStrikeFlowSlice({
+          ...query,
+          startTs: new Date(sliceStart),
+          endTs: new Date(Math.min(sliceStart + BUCKET_SLICE_MS, endMs)),
+        });
+        for (const bucket of slice) {
+          const key = strikeFlowKey(bucket);
+          const existing = merged.get(key);
+          if (existing == null) {
+            merged.set(key, bucket);
+            continue;
+          }
+          existing.count += bucket.count;
+          existing.contracts += bucket.contracts;
+          existing.premiumUsd += bucket.premiumUsd;
+          existing.notionalUsd += bucket.notionalUsd;
+        }
+      }
+      return [...merged.values()];
+    });
+  }
+
+  private async bucketStrikeFlowSlice(
+    query: StrikeFlowBucketQuery,
+  ): Promise<StrikeFlowBucket[]> {
+    const built = buildWhere(query);
+    built.clauses.push('option_type IS NOT NULL', 'strike IS NOT NULL', 'expiry IS NOT NULL');
+    built.values.push(query.resolutionSec);
+    const resolutionParam = `$${built.values.length}`;
+    const result = await this.query<StrikeFlowBucketRow>(
+      `SELECT
+        (floor(extract(epoch FROM trade_ts) / ${resolutionParam}) * ${resolutionParam})::bigint AS bucket_sec,
+        instrument_name,
+        expiry,
+        strike::text AS strike,
+        option_type,
+        direction,
+        COUNT(*)::bigint AS count,
+        COALESCE(SUM(contracts), 0)::text AS contracts,
+        COALESCE(SUM(premium_usd), 0)::text AS premium_usd,
+        COALESCE(SUM(notional_usd), 0)::text AS notional_usd
+      FROM flow_trades
+      ${buildWhereSql(built)}
+      GROUP BY 1, 2, 3, 4, 5, 6
+      ORDER BY 1 ASC, strike ASC, option_type ASC, direction ASC`,
+      built.values,
+    );
+    return result.rows.map((row) => ({
+      bucketTs: new Date(Number(row.bucket_sec) * 1000),
+      instrument: row.instrument_name,
+      expiry: row.expiry,
+      strike: toNumber(row.strike) ?? 0,
+      optionType: row.option_type,
+      side: row.direction,
+      count: Number(row.count),
+      contracts: toNumber(row.contracts) ?? 0,
+      premiumUsd: toNumber(row.premium_usd) ?? 0,
+      notionalUsd: toNumber(row.notional_usd) ?? 0,
+    }));
+  }
+
   private query<Row extends QueryResultRow = QueryResultRow>(
     text: string,
     values?: unknown[],
@@ -429,6 +512,11 @@ function buildWhere(query: TradeFilterQuery): BuiltWhere {
   if (query.instrumentName) {
     built.values.push(query.instrumentName);
     built.clauses.push(`instrument_name = $${built.values.length}`);
+  }
+
+  if (query.expiry) {
+    built.values.push(query.expiry);
+    built.clauses.push(`expiry = $${built.values.length}`);
   }
 
   if (query.startTs) {
@@ -518,6 +606,19 @@ interface CallPutBucketRow {
   notional_usd: string;
 }
 
+interface StrikeFlowBucketRow {
+  bucket_sec: string;
+  instrument_name: string;
+  expiry: string;
+  strike: string;
+  option_type: 'call' | 'put';
+  direction: 'buy' | 'sell';
+  count: string;
+  contracts: string;
+  premium_usd: string;
+  notional_usd: string;
+}
+
 interface VenueSummaryRow {
   venue: string;
   count: string;
@@ -561,6 +662,10 @@ function mapVenueSummaryRow(row: VenueSummaryRow): TradeVenueSummary {
   };
 }
 
+function strikeFlowKey(bucket: StrikeFlowBucket): string {
+  return `${bucket.bucketTs.getTime()}|${bucket.instrument}|${bucket.side}`;
+}
+
 interface InstrumentSummaryRow {
   instrument_name: string;
   count: string;
@@ -568,6 +673,8 @@ interface InstrumentSummaryRow {
   trade_uid: string;
   price: string | null;
   reference_price_usd: string | null;
+  last_iv: string | null;
+  last_iv_ts: Date | null;
   option_type: 'call' | 'put' | null;
   strike: string | null;
   expiry: string | null;
@@ -581,6 +688,8 @@ function mapInstrumentRow(row: InstrumentSummaryRow): InstrumentSummary {
     lastTradeUid: row.trade_uid,
     lastPrice: toNumber(row.price),
     lastReferencePriceUsd: toNumber(row.reference_price_usd),
+    lastIv: toNumber(row.last_iv),
+    lastIvAt: row.last_iv_ts,
     optionType: row.option_type,
     strike: toNumber(row.strike),
     expiry: row.expiry,

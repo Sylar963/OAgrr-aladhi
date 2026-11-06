@@ -133,6 +133,80 @@ describe('SqliteTradeStore', () => {
       { instrument: 'BTC-C', count: 2, lastPrice: 0.2 },
       { instrument: 'ETH-C', count: 1, lastPrice: 0.1 },
     ]);
+    expect(instruments[0]?.lastIv).toBe(0.5);
+    expect(instruments[0]?.lastIvAt).toEqual(new Date(2_000));
+    await store.dispose();
+  });
+
+  it('buckets option flow by time, contract, and reported side', async () => {
+    const store = createStore();
+    store.writeMany([
+      trade({
+        tradeUid: 'buy-a',
+        instrumentName: 'BTC-30JUN26-70000-C',
+        tradeTs: new Date(10_000),
+        premiumUsd: 700,
+        notionalUsd: 20_000,
+      }),
+      trade({
+        tradeUid: 'buy-b',
+        instrumentName: 'BTC-30JUN26-70000-C',
+        tradeTs: new Date(20_000),
+        premiumUsd: 700,
+        notionalUsd: 30_000,
+      }),
+      trade({
+        tradeUid: 'sell',
+        instrumentName: 'BTC-30JUN26-70000-C',
+        direction: 'sell',
+        tradeTs: new Date(30_000),
+        premiumUsd: 700,
+        notionalUsd: 40_000,
+      }),
+      trade({
+        tradeUid: 'other-expiry',
+        instrumentName: 'BTC-25SEP26-70000-C',
+        expiry: '2026-09-25',
+        tradeTs: new Date(10_000),
+      }),
+    ]);
+
+    const buckets = await store.bucketStrikeFlow({
+      mode: 'live',
+      underlying: 'BTC',
+      venues: ['deribit'],
+      expiry: '2026-06-30',
+      startTs: new Date(0),
+      endTs: new Date(60_000),
+      resolutionSec: 60,
+    });
+
+    expect(buckets).toEqual([
+      {
+        bucketTs: new Date(0),
+        instrument: 'BTC-30JUN26-70000-C',
+        expiry: '2026-06-30',
+        strike: 70_000,
+        optionType: 'call',
+        side: 'buy',
+        count: 2,
+        contracts: 2,
+        premiumUsd: 1_400,
+        notionalUsd: 50_000,
+      },
+      {
+        bucketTs: new Date(0),
+        instrument: 'BTC-30JUN26-70000-C',
+        expiry: '2026-06-30',
+        strike: 70_000,
+        optionType: 'call',
+        side: 'sell',
+        count: 1,
+        contracts: 1,
+        premiumUsd: 700,
+        notionalUsd: 40_000,
+      },
+    ]);
     await store.dispose();
   });
 

@@ -18,7 +18,14 @@ const WS_OPEN = 1;
 /** Crypto tickers answer with real spot aggregated across venues; `source=perp` asks for the perp. */
 export async function spotCandlesRoute(app: FastifyInstance) {
   app.get<{
-    Querystring: { currency?: string; resolution?: string; buckets?: string; source?: string };
+    Querystring: {
+      currency?: string;
+      resolution?: string;
+      buckets?: string;
+      source?: string;
+      start?: string;
+      end?: string;
+    };
   }>('/spot-candles', async (req, reply) => {
     const currency = (req.query.currency ?? 'BTC').toUpperCase();
     if (!isSpotCandleUnderlying(currency)) {
@@ -31,6 +38,35 @@ export async function spotCandlesRoute(app: FastifyInstance) {
     }
 
     const buckets = Math.min(MAX_BUCKETS, Math.max(1, Number(req.query.buckets ?? 24)));
+    const hasRange = req.query.start != null || req.query.end != null;
+    if (hasRange) {
+      const start = req.query.start == null ? Number.NaN : Date.parse(req.query.start);
+      const end = req.query.end == null ? Number.NaN : Date.parse(req.query.end);
+      if (
+        !Number.isFinite(start) ||
+        !Number.isFinite(end) ||
+        start >= end ||
+        (end - start) / (resolution * 1000) > MAX_BUCKETS ||
+        req.query.source !== 'perp'
+      ) {
+        return reply.status(400).send({ error: 'Invalid historical candle range' });
+      }
+      if (!isSpotCandlesReady()) {
+        return reply.status(503).send({ error: 'Spot candle service not available' });
+      }
+      try {
+        const candles = await spotCandleService.getCandlesInRange(
+          currency,
+          resolution,
+          start,
+          end,
+        );
+        return { currency, resolution, count: candles.length, candles, source: 'perp-proxy' };
+      } catch (err) {
+        req.log.warn({ err: String(err), currency, resolution }, 'spot-candle range fetch failed');
+        return reply.status(502).send({ error: 'Upstream candle fetch failed' });
+      }
+    }
 
     if (req.query.source !== 'perp' && isAggregatedSpotUnderlying(currency)) {
       const { candles, sources } = await aggregatedSpotRuntime.getCandles(currency, resolution, buckets);

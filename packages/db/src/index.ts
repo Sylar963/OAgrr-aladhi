@@ -88,6 +88,8 @@ export type {
   InstrumentSummary,
   MergeableTradeHistoryReader,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistoryReader,

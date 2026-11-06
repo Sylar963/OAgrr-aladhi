@@ -15,6 +15,7 @@ import { volHeatmapRoute } from './vol-heatmap.js';
 import { expiriesRoute } from './expiries.js';
 import { flowRoute } from './flow.js';
 import { flowEvidenceRoute } from './flow-evidence.js';
+import { flowStrikeMapRoute } from './flow-strike-map.js';
 import { fundedRoutes } from './funded/index.js';
 import { gexAllExpiriesRoute } from './gex-all-expiries.js';
 import { gexWallHistoryRoute } from './gex-wall-history.js';
@@ -96,6 +97,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(surfaceRoute, { prefix: '/api' });
   app.register(statsRoute, { prefix: '/api' });
   app.register(flowRoute, { prefix: '/api' });
+  app.register(flowStrikeMapRoute, { prefix: '/api' });
   app.register(flowEvidenceRoute, { prefix: '/api' });
   app.register(blockFlowRoute, { prefix: '/api' });
   app.register(blockStrikeBucketsRoute, { prefix: '/api' });

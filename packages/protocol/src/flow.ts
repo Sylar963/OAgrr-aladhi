@@ -41,6 +41,60 @@ export const InstrumentTradesResponseSchema = z.object({
 
 export type InstrumentTradesResponse = z.infer<typeof InstrumentTradesResponseSchema>;
 
+export const FlowStrikeMapBucketSchema = z.object({
+  bucketTs: z.number(),
+  instrument: z.string().min(1),
+  expiry: z.string().min(1),
+  strike: z.number().positive(),
+  optionType: z.enum(['call', 'put']),
+  side: z.enum(['buy', 'sell']),
+  count: z.number().int().positive(),
+  contracts: z.number().nonnegative(),
+  premiumUsd: z.number().nonnegative(),
+  notionalUsd: z.number().nonnegative(),
+});
+export type FlowStrikeMapBucket = z.infer<typeof FlowStrikeMapBucketSchema>;
+
+export const FlowStrikeMapIvPointSchema = z.object({
+  instrument: z.string().min(1),
+  strike: z.number().positive(),
+  optionType: z.enum(['call', 'put']),
+  iv: z.number().nonnegative().nullable(),
+  observedAt: z.number().nullable(),
+  count: z.number().int().positive(),
+});
+export type FlowStrikeMapIvPoint = z.infer<typeof FlowStrikeMapIvPointSchema>;
+
+export const FlowStrikeMapPointSchema = z.object({
+  bucketTs: z.number(),
+  optionType: z.enum(['call', 'put']),
+  side: z.enum(['buy', 'sell']),
+  count: z.number().int().positive(),
+  contracts: z.number().nonnegative(),
+  notionalUsd: z.number().nonnegative(),
+});
+export type FlowStrikeMapPoint = z.infer<typeof FlowStrikeMapPointSchema>;
+
+export const FlowStrikeMapResponseSchema = z.object({
+  available: z.boolean(),
+  underlying: z.string(),
+  venue: VenueIdSchema,
+  expiry: z.string(),
+  start: z.number(),
+  end: z.number(),
+  resolution: z.number().positive(),
+  count: z.number().nonnegative(),
+  premiumUsd: z.number().nonnegative(),
+  notionalUsd: z.number().nonnegative(),
+  buyNotionalUsd: z.number().nonnegative(),
+  sellNotionalUsd: z.number().nonnegative(),
+  points: z.array(FlowStrikeMapPointSchema),
+  buckets: z.array(FlowStrikeMapBucketSchema),
+  ivPoints: z.array(FlowStrikeMapIvPointSchema),
+  ivCoverageComplete: z.boolean(),
+});
+export type FlowStrikeMapResponse = z.infer<typeof FlowStrikeMapResponseSchema>;
+
 export const InstrumentTradeWsServerMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('snapshot'),

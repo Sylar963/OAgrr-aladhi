@@ -4,6 +4,8 @@ import type {
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistorySummary,
@@ -57,6 +59,10 @@ export class NoopTradeStore implements TradeStore {
   }
 
   async bucketCallPut(_query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    return [];
+  }
+
+  async bucketStrikeFlow(_query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]> {
     return [];
   }
 

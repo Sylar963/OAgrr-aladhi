@@ -1,116 +1,139 @@
-import { AssetPickerButton, EmptyState, Spinner } from '@components/ui';
+import { EmptyState, Spinner } from '@components/ui';
 import { fmtIv } from '@lib/format';
-import { defineMessages, useT } from '@lib/i18n';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import { VENUE_IDS, VENUES } from '@lib/venue-meta';
 import { useMarket } from '@stores/app-store';
+import { useEffect, useMemo, useState } from 'react';
+import { FlowIvSmile, FlowSpotChart, FlowStrikeLadder } from './FlowMarketCharts';
 import {
-  ColorType,
-  createChart,
-  type IChartApi,
-  type ISeriesApi,
-  LineSeries,
-  type MouseEventHandler,
-  type Time,
-} from 'lightweight-charts';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { type TradeBubble, TradeBubblePrimitive, tierForNotional } from './chart-bubble-primitive';
-import { useInstrumentList, useInstrumentTrades } from './chart-queries';
+  defaultExpiry,
+  flowRangeIsSupported,
+  flowResolution,
+  formatExpiry,
+  formatMoney,
+  optionTypeFromInstrument,
+  buildStrikeFlowProfile,
+  type OptionFilter,
+} from './flow-map-model';
 import { getCustomRangeFromBounds } from './DateRangePicker';
-import styles from './FlowChartsView.module.css';
-import { HistoryControls, type HistoryPreset } from './HistoryControls';
-import { InstrumentPicker } from './InstrumentPicker';
-import type { HistoryRange, TradeEvent } from './queries';
-import { useFlowHistorySummary } from './queries';
-import { mergeInstrumentTrades, useInstrumentTradesLive } from './use-instrument-trades-live';
+import DateRangePicker from './DateRangePicker';
+import type { HistoryPreset } from './HistoryControls';
+import {
+  useFlowStrikeMap,
+  useInstrumentList,
+  useInstrumentTrades,
+  useSpotCandleRange,
+} from './chart-queries';
+import type { HistoryRange, TradeEvent, TradeHistoryCursor } from './queries';
+import { useFlowHistoryPage, useFlowHistorySummary } from './queries';
 import { flowMessages } from './i18n';
+import type { FlowStrikeMapPoint } from '@oggregator/protocol';
+import styles from './FlowChartsView.module.css';
 
 const messages = defineMessages(
   {
-    needsStorage: 'Charts require trade history storage',
-    needsStorageDetail: 'TRADE_STORE_URL is not configured on the server.',
-    loadingInstruments: 'Loading instruments…',
-    noInstruments: 'No traded instruments for {venue} in this range',
-    noInstrumentsDetail: 'Try a wider window or a different venue.',
-    pickInstrument: 'Pick an instrument',
-    pickInstrumentDetail: 'Use the picker above to choose an option contract.',
+    historyRange: 'History range',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    last7d: '7D',
+    last30d: '30D',
+    custom: 'Custom',
+    expiry: 'Expiry',
+    allExpiries: 'No expiry data',
+    allOptions: 'All',
+    calls: 'Calls',
+    puts: 'Puts',
     trades: 'Trades',
     notional: 'Notional',
-    last: 'Last',
-    lastIv: 'Last IV',
-    buySell: 'Buy/Sell',
-    noInstrumentTrades: 'No trades for this instrument in range',
-    noInstrumentTradesDetail: 'Try a wider time range.',
-    time: 'Time',
-    side: 'Side',
-    size: 'Size',
-    price: 'Price',
+    netFlow: 'Buy − sell',
     premium: 'Premium',
+    dateWindow: 'Window',
+    historyNote: 'Stored trade prints · venue coverage varies by range',
+    loading: 'Loading strike flow…',
+    noHistory: 'No option trades in this range',
+    noHistoryDetail: 'Try another expiry, venue, or time window.',
+    storageNeeded: 'Charts require trade history storage',
+    storageNeededDetail: 'TRADE_STORE_URL is not configured on the server.',
+    rangeTooWide: 'Choose a window of 90 days or less',
+    rangeTooWideDetail: 'The historical strike map is bounded to keep the chart responsive.',
+    mapFailed: 'Could not load historical flow',
+    mapFailedDetail: 'Try another range or venue. The selected history may be unavailable.',
+    noFlowForExpiry: 'No trades for this expiry in the selected range',
+    selectFlow: 'Select a flow bubble or strike to inspect executions',
+    selectFlowDetail: 'The chart groups prints by time, option type, and reported trade side.',
+    executions: 'Executions in selected interval',
+    selectContract: 'Select a print to inspect the contract',
+    contractHistory: 'Contract history',
+    selectedInterval: '{type} {side} · {time} UTC',
+    showingPrints: 'Showing {shown} of {total} prints in this interval',
+    nextPage: 'Load next page',
+    time: 'Time UTC',
+    side: 'Side',
+    instrument: 'Contract',
+    size: 'Size',
+    premiumUsd: 'Premium USD',
+    price: 'Premium path',
+    iv: 'Last IV',
+    noContractTrades: 'No trades for this contract in this window',
+    tradeSide: 'Buy',
     buy: 'Buy',
     sell: 'Sell',
-    blockOutline: 'Block (outline)',
+    c: 'C',
+    p: 'P',
+    error: 'Request failed',
   },
   {
-    needsStorage: 'Los gráficos requieren almacenamiento del historial de trades',
-    needsStorageDetail: 'TRADE_STORE_URL no está configurado en el servidor.',
-    loadingInstruments: 'Cargando instrumentos…',
-    noInstruments: 'No hay instrumentos operados en {venue} en este rango',
-    noInstrumentsDetail: 'Prueba un período más amplio u otro exchange.',
-    pickInstrument: 'Elige un instrumento',
-    pickInstrumentDetail: 'Usa el selector de arriba para elegir un contrato de opción.',
+    historyRange: 'Rango histórico',
+    today: 'Hoy',
+    yesterday: 'Ayer',
+    last7d: '7D',
+    last30d: '30D',
+    custom: 'Personalizado',
+    expiry: 'Vencimiento',
+    allExpiries: 'Sin vencimientos',
+    allOptions: 'Todos',
+    calls: 'Calls',
+    puts: 'Puts',
     trades: 'Trades',
     notional: 'Nocional',
-    last: 'Último',
-    lastIv: 'Última IV',
-    buySell: 'Compra/Venta',
-    noInstrumentTrades: 'No hay trades de este instrumento en el rango',
-    noInstrumentTradesDetail: 'Prueba un rango de tiempo más amplio.',
-    time: 'Hora',
-    side: 'Lado',
-    size: 'Tamaño',
-    price: 'Precio',
+    netFlow: 'Compra − venta',
     premium: 'Prima',
+    dateWindow: 'Período',
+    historyNote: 'Prints guardados · la cobertura del venue varía según el período',
+    loading: 'Cargando flujo por strike…',
+    noHistory: 'No hay trades de opciones en este período',
+    noHistoryDetail: 'Prueba otro vencimiento, venue o período.',
+    storageNeeded: 'Los gráficos requieren almacenamiento del historial de trades',
+    storageNeededDetail: 'TRADE_STORE_URL no está configurado en el servidor.',
+    rangeTooWide: 'Elige un período de 90 días o menos',
+    rangeTooWideDetail: 'El mapa histórico de strikes limita el rango para mantener el gráfico ágil.',
+    mapFailed: 'No se pudo cargar el flujo histórico',
+    mapFailedDetail: 'Prueba otro período o venue. El historial seleccionado podría no estar disponible.',
+    noFlowForExpiry: 'No hay trades para este vencimiento en el período seleccionado',
+    selectFlow: 'Selecciona una burbuja o strike para revisar ejecuciones',
+    selectFlowDetail: 'El gráfico agrupa prints por hora, tipo de opción y lado reportado.',
+    executions: 'Ejecuciones del intervalo seleccionado',
+    selectContract: 'Selecciona un print para revisar el contrato',
+    contractHistory: 'Historial del contrato',
+    selectedInterval: '{type} {side} · {time} UTC',
+    showingPrints: 'Mostrando {shown} de {total} prints en este intervalo',
+    nextPage: 'Cargar página siguiente',
+    time: 'Hora UTC',
+    side: 'Lado',
+    instrument: 'Contrato',
+    size: 'Tamaño',
+    premiumUsd: 'Prima USD',
+    price: 'Trayectoria de prima',
+    iv: 'Última IV',
+    noContractTrades: 'No hay trades de este contrato en este período',
+    tradeSide: 'Compra',
     buy: 'Compra',
     sell: 'Venta',
-    blockOutline: 'Block (contorno)',
+    c: 'C',
+    p: 'P',
+    error: 'Error de solicitud',
   },
 );
-
-function optionTypeFromInstrument(instrument: string): 'C' | 'P' | null {
-  const match = instrument.match(/-([CP])(?:-|$)/);
-  if (!match) return null;
-  return match[1] as 'C' | 'P';
-}
-
-// Per-contract option premium in USD. Deribit/OKX quote premium in base
-// currency (BTC/ETH) — multiply by the index price to get USD. Linear venues
-// quote premium in the settle currency already.
-function optionPremiumUsd(trade: TradeEvent): number | null {
-  const isInverse = trade.venue === 'deribit' || trade.venue === 'okx';
-  if (!isInverse) {
-    return Number.isFinite(trade.price) && trade.price > 0 ? trade.price : null;
-  }
-  const ref = trade.referencePriceUsd;
-  if (ref == null || !Number.isFinite(ref) || ref <= 0) return null;
-  const value = trade.price * ref;
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function tradeToBubble(trade: TradeEvent): TradeBubble | null {
-  const optionType = optionTypeFromInstrument(trade.instrument);
-  if (!optionType) return null;
-  const priceUsd = optionPremiumUsd(trade);
-  if (priceUsd == null) return null;
-  const notional = trade.notionalUsd ?? trade.premiumUsd ?? 0;
-  return {
-    timeSec: Math.floor(trade.timestamp / 1000),
-    price: priceUsd,
-    side: trade.side,
-    optionType,
-    tier: tierForNotional(notional),
-    isBlock: trade.isBlock,
-    tradeUid: trade.tradeUid,
-  };
-}
 
 interface FlowChartsViewProps {
   historyPreset: HistoryPreset;
@@ -118,6 +141,8 @@ interface FlowChartsViewProps {
   onPresetChange: (preset: HistoryPreset) => void;
   onRangeChange: (range: HistoryRange) => void;
 }
+
+const PRESETS: HistoryPreset[] = ['today', 'yesterday', 'last7d', 'last30d', 'custom'];
 
 export default function FlowChartsView({
   historyPreset,
@@ -127,42 +152,45 @@ export default function FlowChartsView({
 }: FlowChartsViewProps) {
   const t = useT(messages);
   const tf = useT(flowMessages);
-  const underlying = useMarket((m) => m.underlying);
-  const activeVenues = useMarket((m) => m.activeVenues);
+  const underlying = useMarket((market) => market.underlying);
+  const activeVenues = useMarket((market) => market.activeVenues);
   const [selectedVenue, setSelectedVenue] = useState<string>(() => activeVenues[0] ?? 'deribit');
+  const [selectedExpiry, setSelectedExpiry] = useState<string | null>(null);
+  const [optionFilter, setOptionFilter] = useState<OptionFilter>('all');
+  const [selectedPoint, setSelectedPoint] = useState<FlowStrikeMapPoint | null>(null);
   const [selectedInstrument, setSelectedInstrument] = useState<string | null>(null);
+  const [pointCursor, setPointCursor] = useState<TradeHistoryCursor | null>(null);
 
   useEffect(() => {
-    if (!activeVenues.includes(selectedVenue)) {
-      setSelectedVenue(activeVenues[0] ?? 'deribit');
-    }
+    if (!activeVenues.includes(selectedVenue)) setSelectedVenue(activeVenues[0] ?? 'deribit');
   }, [activeVenues, selectedVenue]);
 
-  const instrumentsQuery = useInstrumentList({
-    underlying,
-    venue: selectedVenue,
-    range: historyRange,
-    limit: 100,
-  });
+  const rangeReady = Boolean(historyRange.start && historyRange.end);
+  const supportedRange = flowRangeIsSupported(historyRange);
+  const resolution = flowResolution(historyRange);
+  const instrumentsQuery = useInstrumentList(
+    { underlying, venue: selectedVenue, range: historyRange, limit: 1000 },
+    rangeReady,
+  );
+  const instruments = instrumentsQuery.data?.instruments ?? [];
+  const expiryOptions = useMemo(
+    () => [...new Set(instruments.flatMap((row) => (row.expiry ? [row.expiry] : [])))].sort(),
+    [instruments],
+  );
+  const fallbackExpiry = useMemo(() => defaultExpiry(instruments), [instruments]);
+  const activeExpiry = selectedExpiry && expiryOptions.includes(selectedExpiry)
+    ? selectedExpiry
+    : fallbackExpiry;
 
-  const tradesQuery = useInstrumentTrades(
-    {
-      underlying,
-      venue: selectedVenue,
-      instrument: selectedInstrument ?? '',
-      range: historyRange,
-      limit: 500,
-    },
-    Boolean(selectedInstrument),
-  );
-  const liveTrades = useInstrumentTradesLive(
-    {
-      underlying,
-      venue: selectedVenue,
-      instrument: selectedInstrument ?? '',
-    },
-    Boolean(selectedInstrument) && historyPreset !== 'yesterday' && historyPreset !== 'custom',
-  );
+  useEffect(() => {
+    if (selectedExpiry && !expiryOptions.includes(selectedExpiry)) setSelectedExpiry(null);
+  }, [expiryOptions, selectedExpiry]);
+
+  useEffect(() => {
+    setSelectedPoint(null);
+    setSelectedInstrument(null);
+    setPointCursor(null);
+  }, [activeExpiry, historyRange.end, historyRange.start, optionFilter, underlying, selectedVenue]);
 
   const historyBounds = useFlowHistorySummary(
     underlying,
@@ -170,365 +198,439 @@ export default function FlowChartsView({
     { start: null, end: null },
     true,
   );
-  const historySummary = useFlowHistorySummary(underlying, [selectedVenue], historyRange, true);
 
   useEffect(() => {
-    if (historyPreset !== 'custom') return;
-    if (historyRange.start && historyRange.end) return;
+    if (historyPreset !== 'custom' || (historyRange.start && historyRange.end)) return;
     const next = getCustomRangeFromBounds(historyBounds.data);
     if (next.start && next.end) onRangeChange(next);
   }, [historyBounds.data, historyPreset, historyRange.end, historyRange.start, onRangeChange]);
 
-  useEffect(() => {
-    const instruments = instrumentsQuery.data?.instruments ?? [];
-    if (!instruments.length) {
-      setSelectedInstrument(null);
-      return;
-    }
-    if (!selectedInstrument || !instruments.some((row) => row.instrument === selectedInstrument)) {
-      setSelectedInstrument(instruments[0]?.instrument ?? null);
-    }
-  }, [instrumentsQuery.data, selectedInstrument]);
-
-  const [hoverTrade, setHoverTrade] = useState<TradeEvent | null>(null);
-  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
-
-  const [chartContainer, setChartContainer] = useState<HTMLDivElement | null>(null);
-  const chartApiRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const primitiveRef = useRef<TradeBubblePrimitive | null>(null);
-  const tradeIndexRef = useRef<Map<string, TradeEvent>>(new Map());
-  const fittedDataKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!chartContainer) return;
-
-    const chart = createChart(chartContainer, {
-      autoSize: true,
-      layout: {
-        background: { type: ColorType.Solid, color: '#0A0A0A' },
-        textColor: '#555B5E',
-        fontFamily: "'IBM Plex Mono', monospace",
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: '#1A1A1A' },
-        horzLines: { color: '#1A1A1A' },
-      },
-      crosshair: {
-        horzLine: { color: '#50D2C1', labelBackgroundColor: '#0E3333' },
-        vertLine: { color: '#50D2C1', labelBackgroundColor: '#0E3333' },
-      },
-      rightPriceScale: { borderColor: '#1F2937', scaleMargins: { top: 0.15, bottom: 0.15 } },
-      timeScale: { borderColor: '#1F2937', timeVisible: true },
-    });
-
-    const series = chart.addSeries(LineSeries, {
-      color: '#7A8085',
-      lineWidth: 1,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-
-    const primitive = new TradeBubblePrimitive();
-    series.attachPrimitive(primitive);
-
-    chartApiRef.current = chart;
-    seriesRef.current = series;
-    primitiveRef.current = primitive;
-
-    const handleCrosshair: MouseEventHandler<Time> = (param) => {
-      const point = param.point;
-      if (!point || !primitiveRef.current) {
-        setHoverTrade(null);
-        setHoverPos(null);
-        return;
-      }
-      const bubble = primitiveRef.current.findBubbleAt(point.x, point.y);
-      if (!bubble) {
-        setHoverTrade(null);
-        setHoverPos(null);
-        return;
-      }
-      const trade = tradeIndexRef.current.get(bubble.tradeUid);
-      if (!trade) {
-        setHoverTrade(null);
-        setHoverPos(null);
-        return;
-      }
-      setHoverTrade(trade);
-      setHoverPos({ x: point.x, y: point.y });
-    };
-
-    chart.subscribeCrosshairMove(handleCrosshair);
-
-    return () => {
-      chart.unsubscribeCrosshairMove(handleCrosshair);
-      chart.remove();
-      chartApiRef.current = null;
-      seriesRef.current = null;
-      primitiveRef.current = null;
-    };
-  }, [chartContainer]);
-
-  const trades = useMemo(
-    () => mergeInstrumentTrades(tradesQuery.data?.trades ?? [], liveTrades.trades),
-    [liveTrades.trades, tradesQuery.data?.trades],
+  const flowQuery = useFlowStrikeMap(
+    {
+      underlying,
+      venue: selectedVenue,
+      expiry: activeExpiry ?? '',
+      range: historyRange,
+      resolution,
+    },
+    supportedRange && activeExpiry != null,
   );
-  const chartDataKey = `${underlying}\u0000${selectedVenue}\u0000${selectedInstrument ?? ''}\u0000${historyRange.start ?? ''}\u0000${historyRange.end ?? ''}`;
-  const bubbles = useMemo(
+  const spotQuery = useSpotCandleRange(
+    { underlying, range: historyRange, resolution },
+    supportedRange,
+  );
+  const flowMap = flowQuery.data;
+  const buckets = flowMap?.buckets ?? [];
+  const profile = useMemo(() => buildStrikeFlowProfile(buckets), [buckets]);
+  const candles = spotQuery.data?.candles ?? [];
+  const lastSpot = candles.at(-1)?.close ?? null;
+
+  const pointRange = useMemo<HistoryRange>(
     () =>
-      trades.flatMap((trade) => {
-        const bubble = tradeToBubble(trade);
-        return bubble ? [bubble] : [];
-      }),
-    [trades],
+      selectedPoint
+        ? {
+            start: new Date(selectedPoint.bucketTs).toISOString(),
+            end: new Date(selectedPoint.bucketTs + resolution * 1000).toISOString(),
+          }
+        : historyRange,
+    [historyRange, resolution, selectedPoint],
+  );
+  const pointTradeQuery = useFlowHistoryPage(
+    {
+      underlying,
+      venues: [selectedVenue],
+      range: pointRange,
+      expiry: activeExpiry ?? undefined,
+      cursor: pointCursor,
+      limit: 200,
+    },
+    selectedPoint != null && activeExpiry != null,
+  );
+  const pointTrades = useMemo(
+    () =>
+      (pointTradeQuery.data?.trades ?? []).filter(
+        (trade) =>
+          selectedPoint != null &&
+          trade.side === selectedPoint.side &&
+          optionTypeFromInstrument(trade.instrument) === selectedPoint.optionType,
+      ),
+    [pointTradeQuery.data?.trades, selectedPoint],
   );
 
-  useEffect(() => {
-    if (!seriesRef.current || !primitiveRef.current) return;
+  const contractQuery = useInstrumentTrades(
+    {
+      underlying,
+      venue: selectedVenue,
+      instrument: selectedInstrument ?? '',
+      range: historyRange,
+      limit: 500,
+    },
+    selectedInstrument != null,
+  );
+  const contractTrades = useMemo(
+    () =>
+      [...(contractQuery.data?.trades ?? [])]
+        .filter((trade) => optionPremiumUsd(trade) != null)
+        .sort((left, right) => left.timestamp - right.timestamp),
+    [contractQuery.data?.trades],
+  );
 
-    tradeIndexRef.current = new Map(trades.map((t) => [t.tradeUid, t]));
+  const selectPoint = (point: FlowStrikeMapPoint) => {
+    setSelectedPoint(point);
+    setSelectedInstrument(null);
+    setPointCursor(null);
+  };
 
-    const seen = new Set<number>();
-    const linePoints = bubbles
-      .slice()
-      .sort((a, b) => a.timeSec - b.timeSec)
-      .filter((b) => {
-        if (seen.has(b.timeSec)) return false;
-        seen.add(b.timeSec);
-        return true;
-      })
-      .map((b) => ({ time: b.timeSec as number, value: b.price }));
-
-    seriesRef.current.setData(linePoints as never);
-    primitiveRef.current.update(bubbles);
-    if (bubbles.length > 0 && fittedDataKeyRef.current !== chartDataKey) {
-      chartApiRef.current?.timeScale().fitContent();
-      fittedDataKeyRef.current = chartDataKey;
-    }
-  }, [bubbles, chartDataKey, trades, chartContainer]);
-
-  const stats = useMemo(() => {
-    if (!trades.length) return null;
-    let buyNotional = 0;
-    let sellNotional = 0;
-    let calls = 0;
-    let puts = 0;
-    let totalNotional = 0;
-    for (const trade of trades) {
-      const notional = trade.notionalUsd ?? trade.premiumUsd ?? 0;
-      totalNotional += notional;
-      if (trade.side === 'buy') buyNotional += notional;
-      else sellNotional += notional;
-      const type = optionTypeFromInstrument(trade.instrument);
-      if (type === 'C') calls += 1;
-      if (type === 'P') puts += 1;
-    }
-    const lastTrade = trades[0];
-    return {
-      count: trades.length,
-      totalNotional,
-      buyPct: totalNotional > 0 ? (buyNotional / totalNotional) * 100 : 0,
-      sellPct: totalNotional > 0 ? (sellNotional / totalNotional) * 100 : 0,
-      calls,
-      puts,
-      lastPrice: lastTrade ? optionPremiumUsd(lastTrade) : null,
-      lastIv: lastTrade?.iv ?? null,
-    };
-  }, [trades]);
+  const selectInstrument = (instrument: string) => {
+    setSelectedPoint(null);
+    setSelectedInstrument(instrument);
+    setPointCursor(null);
+  };
 
   const instrumentsAvailable = instrumentsQuery.data?.available !== false;
-  const instruments = instrumentsQuery.data?.instruments ?? [];
+  const flowSummary = flowMap;
+  const dateWindow = formatDateWindow(historyRange);
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.toolbar}>
-        <AssetPickerButton />
-        <div className={styles.venuePicker}>
-          {VENUE_IDS.filter((id) => activeVenues.includes(id)).map((id) => (
-            <button
-              key={id}
-              type="button"
-              className={styles.venueBtn}
-              data-active={id === selectedVenue}
-              onClick={() => setSelectedVenue(id)}
-              title={VENUES[id]?.label}
+      <div className={styles.controlPanel}>
+        <div className={styles.controlRow}>
+          <div className={styles.venuePicker} aria-label="Venue">
+            {VENUE_IDS.filter((venue) => activeVenues.includes(venue)).map((venue) => (
+              <button
+                key={venue}
+                type="button"
+                className={styles.venueBtn}
+                data-active={venue === selectedVenue}
+                onClick={() => {
+                  setSelectedVenue(venue);
+                  setSelectedExpiry(null);
+                  setSelectedPoint(null);
+                  setSelectedInstrument(null);
+                }}
+                title={VENUES[venue]?.label}
+              >
+                {VENUES[venue]?.shortLabel ?? venue}
+              </button>
+            ))}
+          </div>
+          <label className={styles.expiryControl}>
+            <span>{t('expiry')}</span>
+            <select
+              value={activeExpiry ?? ''}
+              disabled={expiryOptions.length === 0}
+              onChange={(event) => {
+                setSelectedExpiry(event.target.value || null);
+                setSelectedPoint(null);
+                setSelectedInstrument(null);
+              }}
             >
-              {VENUES[id]?.shortLabel ?? id}
-            </button>
-          ))}
+              {expiryOptions.length === 0 ? <option value="">{t('allExpiries')}</option> : null}
+              {expiryOptions.map((expiry) => <option value={expiry} key={expiry}>{formatExpiry(expiry)}</option>)}
+            </select>
+          </label>
+          <div className={styles.filterPicker} aria-label="Option type">
+            {(['all', 'call', 'put'] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                data-active={optionFilter === filter}
+                onClick={() => setOptionFilter(filter)}
+              >
+                {filter === 'all' ? t('allOptions') : filter === 'call' ? t('calls') : t('puts')}
+              </button>
+            ))}
+          </div>
+          <div className={styles.rangePicker} aria-label={t('historyRange')}>
+            {PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                data-active={historyPreset === preset}
+                onClick={() => onPresetChange(preset)}
+              >
+                {t(preset)}
+              </button>
+            ))}
+          </div>
+          {historyPreset === 'custom' ? (
+            <DateRangePicker range={historyRange} bounds={historyBounds.data} onApply={onRangeChange} />
+          ) : null}
         </div>
-        <InstrumentPicker
-          instruments={instruments}
-          selected={selectedInstrument}
-          onSelect={setSelectedInstrument}
-          loading={instrumentsQuery.isLoading}
-        />
-        <HistoryControls
-          preset={historyPreset}
-          range={historyRange}
-          summary={historySummary.data}
-          bounds={historyBounds.data}
-          activeVenues={[selectedVenue]}
-          page={1}
-          hasPreviousPage={false}
-          hasNextPage={false}
-          isPageLoading={tradesQuery.isFetching}
-          isSummaryLoading={historySummary.isLoading}
-          onPresetChange={onPresetChange}
-          onRangeChange={onRangeChange}
-          onPreviousPage={() => {}}
-          onNextPage={() => {}}
-        />
+        <div className={styles.rangeMeta}>
+          <span>{t('historyNote')}</span>
+          <span>{dateWindow}</span>
+        </div>
       </div>
 
-      {!instrumentsAvailable ? (
-        <EmptyState
-          title={t('needsStorage')}
-          detail={t('needsStorageDetail')}
-        />
+      {!supportedRange ? (
+        <div className={styles.inlineState} role="note">
+          <strong>{t('rangeTooWide')}</strong><span>{t('rangeTooWideDetail')}</span>
+        </div>
+      ) : !instrumentsAvailable ? (
+        <EmptyState title={t('storageNeeded')} detail={t('storageNeededDetail')} />
       ) : instrumentsQuery.isLoading ? (
-        <Spinner size="lg" label={t('loadingInstruments')} />
+        <div className={styles.loadingState}><Spinner size="lg" label={t('loading')} /></div>
       ) : instruments.length === 0 ? (
-        <EmptyState
-          title={t('noInstruments', { venue: VENUES[selectedVenue]?.label ?? selectedVenue })}
-          detail={t('noInstrumentsDetail')}
-        />
-      ) : !selectedInstrument ? (
-        <EmptyState
-          title={t('pickInstrument')}
-          detail={t('pickInstrumentDetail')}
-        />
+        <EmptyState title={t('noHistory')} detail={t('noHistoryDetail')} />
+      ) : flowQuery.error ? (
+        <EmptyState title={t('mapFailed')} detail={t('mapFailedDetail')} />
+      ) : activeExpiry == null ? (
+        <EmptyState title={t('noHistory')} detail={t('noHistoryDetail')} />
       ) : (
-        <div className={styles.chartCard}>
-          <div className={styles.chartHeader}>
-            <span className={styles.chartTitle}>{selectedInstrument}</span>
-            {stats ? (
-              <div className={styles.stats}>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>{t('trades')}</span>
-                  <span className={styles.statValue}>{stats.count}</span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>{t('notional')}</span>
-                  <span className={styles.statValue}>
-                    ${Math.round(stats.totalNotional).toLocaleString('en-US')}
-                  </span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>{t('last')}</span>
-                  <span className={styles.statValue}>
-                    {stats.lastPrice != null
-                      ? `$${stats.lastPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                      : '–'}
-                  </span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>{t('lastIv')}</span>
-                  <span className={styles.statValue}>
-                    {stats.lastIv != null ? fmtIv(stats.lastIv) : '–'}
-                  </span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>{t('buySell')}</span>
-                  <span className={styles.statValue}>
-                    {stats.buyPct.toFixed(0)}% / {stats.sellPct.toFixed(0)}%
-                  </span>
-                </div>
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>C/P</span>
-                  <span className={styles.statValue}>
-                    {stats.calls} / {stats.puts}
-                  </span>
-                </div>
-              </div>
-            ) : null}
+        <>
+          <div className={styles.summaryGrid}>
+            <SummaryCard label={t('trades')} value={flowSummary?.count.toLocaleString('en-US') ?? '…'} />
+            <SummaryCard label={t('notional')} value={flowSummary ? formatMoney(flowSummary.notionalUsd) : '…'} />
+            <SummaryCard
+              label={t('netFlow')}
+              value={flowSummary ? `${flowSummary.buyNotionalUsd >= flowSummary.sellNotionalUsd ? '+' : '−'}${formatMoney(Math.abs(flowSummary.buyNotionalUsd - flowSummary.sellNotionalUsd))}` : '…'}
+              dataTone={flowSummary == null ? undefined : flowSummary.buyNotionalUsd >= flowSummary.sellNotionalUsd ? 'buy' : 'sell'}
+            />
+            <SummaryCard label={t('premium')} value={flowSummary ? formatMoney(flowSummary.premiumUsd) : '…'} />
+            <SummaryCard label={t('dateWindow')} value={dateWindow} />
           </div>
-          <div className={styles.chartArea}>
-            <div className={styles.chartWrap} ref={setChartContainer} />
-            {tradesQuery.isLoading ? (
-              <div className={styles.chartOverlay}>
-                <Spinner size="lg" />
+
+          {flowQuery.isLoading && !flowMap ? (
+            <div className={styles.loadingState}><Spinner size="lg" label={t('loading')} /></div>
+          ) : !flowMap?.available ? (
+            <EmptyState title={t('storageNeeded')} detail={t('storageNeededDetail')} />
+          ) : (
+            <>
+              <div className={styles.mapGrid}>
+                <FlowSpotChart
+                  candles={candles}
+                  points={flowMap.points}
+                  range={historyRange}
+                  resolution={resolution}
+                  optionFilter={optionFilter}
+                  selectedPoint={selectedPoint}
+                  onSelectPoint={selectPoint}
+                />
+                <div className={styles.profileColumn}>
+                  <FlowStrikeLadder
+                    profile={profile}
+                    optionFilter={optionFilter}
+                    spot={lastSpot}
+                    selectedInstrument={selectedInstrument}
+                    onSelectInstrument={selectInstrument}
+                  />
+                  <FlowIvSmile
+                    points={flowMap.ivPoints}
+                    optionFilter={optionFilter}
+                    range={historyRange}
+                    selectedInstrument={selectedInstrument}
+                    coverageComplete={flowMap.ivCoverageComplete}
+                  />
+                </div>
               </div>
-            ) : null}
-            {!tradesQuery.isLoading && trades.length === 0 ? (
-              <div className={styles.chartOverlay}>
-                <EmptyState
-                  title={t('noInstrumentTrades')}
-                  detail={t('noInstrumentTradesDetail')}
+              <div className={styles.detailGrid}>
+                <section className={styles.detailPanel}>
+                  {selectedPoint ? (
+                    <>
+                      <div className={styles.detailHeader}>
+                        <div>
+                          <h3>{t('executions')}</h3>
+                          <span>
+                            {t('selectedInterval', {
+                              type: selectedPoint.optionType === 'call' ? t('c') : t('p'),
+                              side: selectedPoint.side === 'buy' ? t('buy') : t('sell'),
+                              time: new Date(selectedPoint.bucketTs).toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' }),
+                            })}
+                          </span>
+                        </div>
+                        <span>{t('showingPrints', { shown: pointTrades.length, total: selectedPoint.count })}</span>
+                      </div>
+                      <TradeRows
+                        trades={pointTrades}
+                        selectedInstrument={selectedInstrument}
+                        onSelect={selectInstrument}
+                        t={t}
+                        tf={tf}
+                      />
+                      {pointTradeQuery.isFetching ? <span className={styles.tableMeta}>{t('loading')}</span> : null}
+                      {pointTradeQuery.data?.trades.length === 200 ? (
+                        <button
+                          className={styles.moreButton}
+                          type="button"
+                          onClick={() => setPointCursor(pointTradeQuery.data?.nextCursor ?? null)}
+                          disabled={pointTradeQuery.isFetching || pointTradeQuery.data.nextCursor == null}
+                        >
+                          {t('nextPage')}
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div className={styles.detailPrompt}>
+                      <strong>{t('selectFlow')}</strong><span>{t('selectFlowDetail')}</span>
+                    </div>
+                  )}
+                </section>
+                <ContractDetail
+                  instrument={selectedInstrument}
+                  trades={contractTrades}
+                  loading={contractQuery.isFetching}
+                  t={t}
+                  tf={tf}
                 />
               </div>
-            ) : null}
-            {hoverTrade && hoverPos ? (
-              <div
-                className={styles.tooltip}
-                style={{ left: hoverPos.x + 12, top: hoverPos.y + 12 }}
-                role="status"
-              >
-                <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>{t('time')}</span>
-                  <span className={styles.tooltipValue}>
-                    {new Date(hoverTrade.timestamp).toLocaleTimeString('en-GB', { hour12: false })}
-                  </span>
-                </div>
-                <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>{t('side')}</span>
-                  <span className={styles.tooltipValue} data-side={hoverTrade.side}>
-                    {hoverTrade.side === 'buy' ? tf('buy') : tf('sell')}
-                  </span>
-                </div>
-                <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>{t('size')}</span>
-                  <span className={styles.tooltipValue}>{hoverTrade.size}</span>
-                </div>
-                <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>{t('price')}</span>
-                  <span className={styles.tooltipValue}>
-                    {(() => {
-                      const p = optionPremiumUsd(hoverTrade);
-                      return p != null
-                        ? `$${p.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                        : '–';
-                    })()}
-                  </span>
-                </div>
-                <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>IV</span>
-                  <span className={styles.tooltipValue}>
-                    {hoverTrade.iv != null ? fmtIv(hoverTrade.iv) : '–'}
-                  </span>
-                </div>
-                <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>{t('premium')}</span>
-                  <span className={styles.tooltipValue}>
-                    {hoverTrade.premiumUsd != null
-                      ? `$${Math.round(hoverTrade.premiumUsd).toLocaleString('en-US')}`
-                      : '–'}
-                  </span>
-                </div>
-                {hoverTrade.isBlock ? (
-                  <div className={styles.tooltipRow}>
-                    <span className={styles.tooltipBadge}>BLOCK</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <div className={styles.legend}>
-            <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-side="buy" /> {t('buy')}
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-side="sell" /> {t('sell')}
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-block /> {t('blockOutline')}
-            </span>
-          </div>
-        </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );
+}
+
+function SummaryCard({ label, value, dataTone }: { label: string; value: string; dataTone?: 'buy' | 'sell' }) {
+  return (
+    <div className={styles.summaryCard}>
+      <span>{label}</span>
+      <strong data-tone={dataTone}>{value}</strong>
+    </div>
+  );
+}
+
+function TradeRows({
+  trades,
+  selectedInstrument,
+  onSelect,
+  t,
+  tf,
+}: {
+  trades: TradeEvent[];
+  selectedInstrument: string | null;
+  onSelect: (instrument: string) => void;
+  t: Translate<typeof messages.en>;
+  tf: Translate<typeof flowMessages.en>;
+}) {
+  if (trades.length === 0) return <div className={styles.tableEmpty}>{t('noContractTrades')}</div>;
+  return (
+    <div className={styles.tradeTableWrap}>
+      <div className={styles.tradeTable} role="table">
+        <div className={styles.tradeTableHead} role="row">
+          <span>{t('time')}</span><span>{t('side')}</span><span>{t('instrument')}</span><span>{t('size')}</span><span>{t('premiumUsd')}</span>
+        </div>
+        {trades.map((trade) => (
+          <button
+            className={styles.tradeRow}
+            type="button"
+            key={`${trade.tradeUid}-${trade.timestamp}`}
+            data-selected={trade.instrument === selectedInstrument || undefined}
+            onClick={() => onSelect(trade.instrument)}
+          >
+            <span>{formatTime(trade.timestamp)}</span>
+            <span data-side={trade.side}>{trade.side === 'buy' ? tf('buy') : tf('sell')}</span>
+            <span className={styles.instrumentCell}>{trade.instrument}</span>
+            <span>{trade.size.toLocaleString('en-US')}</span>
+            <span>{formatMoney(optionPremiumUsd(trade) ?? 0)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContractDetail({
+  instrument,
+  trades,
+  loading,
+  t,
+  tf,
+}: {
+  instrument: string | null;
+  trades: TradeEvent[];
+  loading: boolean;
+  t: Translate<typeof messages.en>;
+  tf: Translate<typeof flowMessages.en>;
+}) {
+  if (!instrument) {
+    return (
+      <section className={styles.detailPanel}>
+        <div className={styles.detailPrompt}><strong>{t('selectContract')}</strong></div>
+      </section>
+    );
+  }
+  const priced = trades.flatMap((trade) => {
+    const price = optionPremiumUsd(trade);
+    return price == null ? [] : [{ trade, price }];
+  });
+  const last = priced.at(-1);
+  const maxPrice = Math.max(0, ...priced.map((point) => point.price));
+  const minPrice = Math.min(maxPrice, ...priced.map((point) => point.price));
+  const range = Math.max(maxPrice - minPrice, maxPrice * 0.01, 0.0001);
+  const line = priced
+    .map(({ price }, index) => {
+      const x = 18 + (index / Math.max(1, priced.length - 1)) * 564;
+      const y = 116 - ((price - minPrice) / range) * 96;
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+
+  return (
+    <section className={styles.detailPanel}>
+      <div className={styles.detailHeader}>
+        <div><h3>{t('contractHistory')}</h3><span className={styles.contractName}>{instrument}</span></div>
+        <div className={styles.contractStats}>
+          <span>{trades.length} {t('trades')}</span>
+          <span>{last ? formatMoney(last.price) : '—'}</span>
+          <span>{last?.trade.iv != null ? fmtIv(last.trade.iv) : '—'} {t('iv')}</span>
+        </div>
+      </div>
+      {loading ? <div className={styles.contractLoading}><Spinner size="sm" /></div> : trades.length === 0 ? (
+        <div className={styles.tableEmpty}>{t('noContractTrades')}</div>
+      ) : (
+        <>
+          <div className={styles.contractChartHeading}>{t('price')}</div>
+          <svg className={styles.contractChart} viewBox="0 0 600 140" role="img" aria-label={t('price')}>
+            {[0, 1, 2].map((index) => {
+              const y = 20 + index * 48;
+              return <line key={index} x1="18" x2="582" y1={y} y2={y} className={styles.chartGrid} />;
+            })}
+            <path d={line} className={styles.contractLine} />
+            {priced.map(({ trade, price }, index) => {
+              const x = 18 + (index / Math.max(1, priced.length - 1)) * 564;
+              const y = 116 - ((price - minPrice) / range) * 96;
+              return <circle key={trade.tradeUid} cx={x} cy={y} r="3" className={styles.contractPoint} data-side={trade.side} />;
+            })}
+          </svg>
+          <TradeRows
+            trades={trades.slice().reverse().slice(0, 8)}
+            selectedInstrument={instrument}
+            onSelect={() => {}}
+            t={t}
+            tf={tf}
+          />
+        </>
+      )}
+    </section>
+  );
+}
+
+function optionPremiumUsd(trade: TradeEvent): number | null {
+  const price = trade.price;
+  if (!Number.isFinite(price) || price <= 0) return null;
+  if (trade.venue !== 'deribit' && trade.venue !== 'okx') return price;
+  const referencePrice = trade.referencePriceUsd;
+  if (referencePrice == null || !Number.isFinite(referencePrice) || referencePrice <= 0) return null;
+  return price * referencePrice;
+}
+
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  });
+}
+
+function formatDateWindow(range: HistoryRange): string {
+  if (!range.start || !range.end) return '—';
+  return `${formatDate(range.start)} → ${formatDate(range.end)}`;
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }

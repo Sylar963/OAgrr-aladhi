@@ -12,6 +12,8 @@ import type {
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
+  StrikeFlowBucket,
+  StrikeFlowBucketQuery,
   TradeFilterQuery,
   TradeHistoryQuery,
   TradeHistorySummary,
@@ -329,6 +331,10 @@ class FakeTradeStore implements TradeStore {
     return [];
   }
 
+  async bucketStrikeFlow(_query: StrikeFlowBucketQuery): Promise<StrikeFlowBucket[]> {
+    return [];
+  }
+
   async summarizeHistory(
     query: TradeFilterQuery & { mode: PersistedTradeRecord['mode'] },
   ): Promise<TradeHistorySummary> {
@@ -376,6 +382,7 @@ function filterRows(rows: PersistedTradeRecord[], query: TradeFilterQuery): Pers
       (query.underlying == null || row.underlying === query.underlying.toUpperCase()) &&
       (query.venues == null || query.venues.length === 0 || query.venues.includes(row.venue)) &&
       (query.instrumentName == null || row.instrumentName === query.instrumentName) &&
+      (query.expiry == null || row.expiry === query.expiry) &&
       (query.startTs == null || row.tradeTs >= query.startTs) &&
       (query.endTs == null || row.tradeTs < query.endTs),
   );
@@ -389,12 +396,17 @@ function instrumentSummaries(rows: PersistedTradeRecord[]): InstrumentSummary[] 
     .map(([instrument, records]) => {
       const latest = records.sort(compareRows)[0];
       if (latest == null) throw new Error('missing latest record');
+      const latestIv = records
+        .filter((record) => record.iv != null)
+        .sort(compareRows)[0];
       return {
         instrument,
         count: records.length,
         lastTs: latest.tradeTs,
         lastPrice: latest.price,
         lastReferencePriceUsd: latest.referencePriceUsd,
+        lastIv: latestIv?.iv ?? null,
+        lastIvAt: latestIv?.tradeTs ?? null,
         optionType: latest.optionType,
         strike: latest.strike,
         expiry: latest.expiry,

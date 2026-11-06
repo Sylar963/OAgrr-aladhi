@@ -25,12 +25,14 @@ type ChainAdapter = OptionVenueAdapter & {
   addQuoteBatchRecorder?: (recorder: (events: readonly QuoteRecorderEvent[]) => void) => () => void;
 };
 
-// FEED_WORKER=1 moves socket handling, parsing and normalization for every chain venue onto a
-// worker thread; the main thread keeps only drop-in proxies.
-const feedWorker = process.env['FEED_WORKER'] === '1' ? new FeedWorkerHost() : null;
+const useFeedWorkers = process.env['FEED_WORKER'] === '1';
+const feedWorkers = new Map<OptionVenueAdapter['venue'], FeedWorkerHost>();
 
 function chainAdapter(venue: OptionVenueAdapter['venue'], create: () => ChainAdapter): ChainAdapter {
-  return feedWorker != null ? feedWorker.adapter(venue) : create();
+  if (!useFeedWorkers) return create();
+  const worker = new FeedWorkerHost();
+  feedWorkers.set(venue, worker);
+  return worker.adapter(venue);
 }
 
 const deribitAdapter = chainAdapter('deribit', () => new DeribitWsAdapter());
@@ -69,7 +71,7 @@ export async function bootstrapAdapters(
   log: FastifyBaseLogger,
   deps: AdapterBootstrapDeps = {},
 ) {
-  log.info({ feedWorker: feedWorker != null }, 'loading markets for all venues');
+  log.info({ feedWorker: useFeedWorkers, feedWorkers: feedWorkers.size }, 'loading markets for all venues');
   if (deps.flowOiRecorder) {
     const recorder = deps.flowOiRecorder;
     for (const adapter of adapters) {
@@ -198,5 +200,5 @@ export async function disposeAdapters(log: FastifyBaseLogger) {
       }
     }),
   );
-  await feedWorker?.shutdown();
+  await Promise.allSettled([...feedWorkers.values()].map((worker) => worker.shutdown()));
 }

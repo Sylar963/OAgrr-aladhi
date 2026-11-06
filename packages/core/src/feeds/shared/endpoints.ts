@@ -5,7 +5,7 @@ export const DERIBIT_GET_BLOCK_RFQ_TRADES = '/api/v2/public/get_block_rfq_trades
 export const DERIBIT_GET_LAST_TRADES_BY_CURRENCY = '/api/v2/public/get_last_trades_by_currency';
 
 // ── OKX ───────────────────────────────────────────────────────────
-export const OKX_WS_URL = 'wss://ws.okx.com:8443/ws/v5/public';
+export const OKX_WS_URL = 'wss://ws.okx.com/ws/v5/public';
 export const OKX_REST_BASE_URL = 'https://www.okx.com';
 export const OKX_INSTRUMENTS = '/api/v5/public/instruments';
 export const OKX_TICKERS = '/api/v5/market/tickers';

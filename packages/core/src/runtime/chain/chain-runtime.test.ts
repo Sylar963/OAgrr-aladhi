@@ -98,10 +98,51 @@ type ChainRuntimeInternals = {
     ) => void;
   };
   pendingBySymbol: Map<string, { version: number }>;
+  needsResync: boolean;
   listeners: Set<{ onEvent: (event: unknown) => void }>;
 };
 
 describe('ChainRuntime', () => {
+  it('coalesces a large burst for one contract without forcing full snapshots', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-26T12:00:00Z'));
+    fetchOptionChainMock.mockResolvedValue(makeChain(Date.now(), 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+    const events: Array<{ type: string }> = [];
+    runtime.subscribe({ onEvent: (event) => events.push(event) });
+    await runtime.fetchSnapshotData();
+    const fetches = fetchOptionChainMock.mock.calls.length;
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    internals.venueListener.onDelta(Array.from({ length: 6_000 }, (_, index) => ({
+      venue: 'okx' as const,
+      symbol: 'BTC/USD:BTC-260327-70000-C',
+      ts: Date.now() + index,
+      quote: { bid: { raw: 0.1, rawCurrency: 'BTC' as const, usd: 100 + index } },
+    })));
+    expect(internals.pendingBySymbol.size).toBe(1);
+    expect(internals.needsResync).toBe(false);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(events.at(-1)?.type).toBe('delta');
+    expect(runtime.getSnapshot()?.data.strikes[0]?.call.venues.okx?.bid).toBe(6_099);
+    expect(fetchOptionChainMock).toHaveBeenCalledTimes(fetches);
+    await runtime.dispose();
+  });
+
+  it('still bounds the buffer when a burst contains too many distinct contracts', async () => {
+    const runtime = new ChainRuntime('test', request());
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    internals.listeners.add({ onEvent: () => {} });
+    internals.venueListener.onDelta(Array.from({ length: 5_001 }, (_, index) => ({
+      venue: 'okx' as const, symbol: `contract-${index}`, ts: Date.now(),
+    })));
+    expect(internals.pendingBySymbol.size).toBe(0);
+    expect(internals.needsResync).toBe(true);
+    await runtime.dispose();
+  });
+
   it('acquires all venues in parallel during initialize', async () => {
     getRegisteredVenuesMock.mockReturnValue(['okx', 'deribit', 'binance']);
 

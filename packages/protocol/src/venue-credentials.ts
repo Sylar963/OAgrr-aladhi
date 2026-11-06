@@ -169,7 +169,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
   okx: {
     venue: 'okx',
     status: 'planned',
-    wsEndpoint: 'wss://ws.okx.com:8443/ws/v5/private',
+    wsEndpoint: 'wss://ws.okx.com/ws/v5/private',
     authScheme: 'hmac',
     connectMethod: 'credentials',
     subscribeMethod: 'subscribe',

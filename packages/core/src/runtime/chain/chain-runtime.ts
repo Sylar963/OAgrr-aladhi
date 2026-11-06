@@ -180,12 +180,6 @@ export class ChainRuntime {
           this.venueHealth.touch(firstDelta.venue, lastDeltaTs);
         }
 
-        if (this.pendingBySymbol.size + deltas.length > MAX_PENDING_DELTAS) {
-          this.pendingBySymbol.clear();
-          this.needsResync = true;
-          return;
-        }
-
         for (const delta of deltas) {
           const deltaKey = `${delta.venue}:${delta.symbol}`;
           const version = ++this.pendingDeltaVersion;
@@ -193,6 +187,11 @@ export class ChainRuntime {
             delta: mergeDelta(this.pendingBySymbol.get(deltaKey)?.delta, delta),
             version,
           });
+          if (this.pendingBySymbol.size > MAX_PENDING_DELTAS) {
+            this.pendingBySymbol.clear();
+            this.needsResync = true;
+            return;
+          }
         }
       },
       onStatus: (status) => {

@@ -59,7 +59,7 @@ describe('chatReducer trader stream', () => {
     closedTradesAvailable: true,
   };
 
-  it('applies live frames without rewriting the venue equity history', () => {
+  it('updates the current equity point while preserving earlier history and the source snapshot', () => {
     let state = chatReducer(INITIAL_CHAT_STATE, {
       type: 'server',
       message: { type: 'trader', trader },
@@ -78,7 +78,9 @@ describe('chatReducer trader stream', () => {
       },
     });
     expect(state.trader?.equityUsd).toBe(101_000);
-    expect(state.trader?.equityHistory.map((p) => p.equityUsd)).toEqual([100_000, 100_500]);
+    expect(state.trader?.equityHistory.map((p) => p.equityUsd)).toEqual([100_000, 101_000]);
+    expect(state.trader?.equityHistory[0]).toEqual(trader.equityHistory[0]);
+    expect(trader.equityHistory.map((p) => p.equityUsd)).toEqual([100_000, 100_500]);
   });
 
   it('ignores live frames for another trader and clears on unavailable', () => {

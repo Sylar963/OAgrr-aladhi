@@ -235,6 +235,7 @@ describe('FLOW OI context', () => {
             timestamp: time - 1000,
             observedAt: time - 999,
             openInterest: 100,
+            timing: 'exchange',
           },
           after: {
             venue: 'deribit',
@@ -243,6 +244,7 @@ describe('FLOW OI context', () => {
             timestamp: time + 1000,
             observedAt: time + 1001,
             openInterest: 102,
+            timing: 'exchange',
           },
         }),
       },

@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
 import type { FlowOiRecorder, QuoteRecorderEvent } from '@oggregator/core';
 
 const disposedVenues: string[] = [];
 const quoteBatches = new Map<string, (events: readonly QuoteRecorderEvent[]) => void>();
+const workerVenues: string[][] = [];
+const workerShutdown = vi.fn();
 
 function makeAdapterClass(venue: string) {
   return class {
@@ -30,6 +32,15 @@ const registerAdapter = vi.fn();
 
 vi.mock('@oggregator/core', () => ({
   registerAdapter,
+  FeedWorkerHost: class {
+    readonly venues: string[] = [];
+    constructor() { workerVenues.push(this.venues); }
+    adapter(venue: string) {
+      this.venues.push(venue);
+      return new (makeAdapterClass(venue))();
+    }
+    async shutdown() { workerShutdown(); }
+  },
   DeribitWsAdapter: makeAdapterClass('deribit'),
   OkxWsAdapter: makeAdapterClass('okx'),
   BinanceWsAdapter: makeAdapterClass('binance'),
@@ -43,9 +54,26 @@ vi.mock('@oggregator/core', () => ({
 
 describe('disposeAdapters', () => {
   beforeEach(() => {
+    vi.resetModules();
     disposedVenues.length = 0;
     registerAdapter.mockClear();
     quoteBatches.clear();
+    workerVenues.length = 0;
+    workerShutdown.mockClear();
+  });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('isolates venue ingest in separate workers and shuts down every worker', async () => {
+    vi.stubEnv('FEED_WORKER', '1');
+    const { bootstrapAdapters, disposeAdapters } = await import('./adapters.js');
+    const log = { info: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger;
+    await bootstrapAdapters(log);
+    expect(workerVenues).toHaveLength(9);
+    expect(workerVenues.every((venues) => venues.length === 1)).toBe(true);
+    expect(new Set(workerVenues.flat()).size).toBe(9);
+    await disposeAdapters(log);
+    expect(workerShutdown).toHaveBeenCalledTimes(9);
+    expect(new Set(disposedVenues).size).toBe(9);
   });
 
   it('passes each quote batch to the recorder with the transactional writer', async () => {

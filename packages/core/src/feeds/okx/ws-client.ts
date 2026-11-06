@@ -114,7 +114,7 @@ function batchArgs(args: object[]): object[][] {
  *   GET /api/v5/public/open-interest?instType=OPTION&instFamily=X — OI (refreshed every 5 min)
  *   GET /api/v5/public/mark-price?instType=OPTION&instFamily=X   — mark price (refreshed every 5 min)
  *
- * WebSocket (wss://ws.okx.com:8443/ws/v5/public):
+ * WebSocket (wss://ws.okx.com/ws/v5/public):
  *   opt-summary (instFamily)  — bulk greeks + IV for all options, no mark price
  *   tickers (per instId)      — bid/ask/last/volume; instFamily not supported for OPTION
  *   mark-price (per instId)   — live mark price for actively viewed chains (~1s)

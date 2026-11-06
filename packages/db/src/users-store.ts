@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { createPgPool } from './pg-pool.js';
+import { createPgPool, isPgConnectionError } from './pg-pool.js';
 
 export interface UserRow {
   id: string;
@@ -163,6 +163,15 @@ export class PostgresUsersStore implements UsersStore {
   }
 
   async getByClerkId(clerkUserId: string): Promise<UserRow | null> {
+    try {
+      return await this.readByClerkId(clerkUserId);
+    } catch (error: unknown) {
+      if (!isPgConnectionError(error)) throw error;
+      return this.readByClerkId(clerkUserId);
+    }
+  }
+
+  private async readByClerkId(clerkUserId: string): Promise<UserRow | null> {
     const res = await this.pool.query<UsersRowDb>(
       `SELECT id, clerk_user_id, email, display_name, country, default_account_id, created_at
        FROM users WHERE clerk_user_id = $1`,

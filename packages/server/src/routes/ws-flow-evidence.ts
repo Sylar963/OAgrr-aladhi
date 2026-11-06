@@ -24,11 +24,15 @@ export async function wsFlowEvidenceRoute(app: FastifyInstance) {
     let current: Awaited<ReturnType<typeof flowEvidenceService.get>> = null;
     const unsubscribe = flowOiStore.subscribe((tick) => {
       if (tick.venue !== query.data.venue) return;
-      if (tick.instrument !== query.data.instrument && !current?.analysis.legs.some((leg) => leg.instrument === tick.instrument)) return;
       if (initializing) {
         buffered = true;
         return;
       }
+      if (
+        tick.instrument !== query.data.instrument &&
+        !current?.analysis.legs.some((leg) => leg.instrument === tick.instrument)
+      )
+        return;
       void publish().catch((error: unknown) => {
         req.log.warn({ err: String(error) }, 'FLOW evidence push failed');
       });

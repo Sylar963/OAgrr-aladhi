@@ -352,6 +352,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       markOkxSubscribed(this.subscriptions, plan);
       log.info({ count: plan.args.length, underlying }, 'subscribed to channels');
     }
+    void this.fetchOiSnapshot(`${underlying}-USD`);
   }
 
   protected override async unsubscribeChain(

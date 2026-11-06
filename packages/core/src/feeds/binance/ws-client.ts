@@ -84,6 +84,10 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
 
   protected initClients(): void {}
 
+  protected override async afterMarketsLoaded(): Promise<void> {
+    void this.fetchOpenInterestSnapshot(this.instruments);
+  }
+
   // ── instrument loading ────────────────────────────────────────
 
   protected async fetchInstruments(): Promise<CachedInstrument[]> {
@@ -540,11 +544,10 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
   // ── REST supplement ───────────────────────────────────────────
 
   /**
-   * Fetch volume + lastPrice from REST ticker and OI from REST openInterest.
+   * Fetch volume + lastPrice from REST ticker.
    * Called at boot and every 5 minutes for volume (WS stream carries neither).
-   * OI is seeded here once; the WS openInterest stream keeps it current after.
    */
-  private async fetchTickerSnapshot(instruments: CachedInstrument[]): Promise<void> {
+  private async fetchTickerSnapshot(_instruments: CachedInstrument[]): Promise<void> {
     this.sweepExpiredState();
 
     try {
@@ -570,13 +573,10 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
       log.warn({ err: String(err) }, 'ticker snapshot failed');
     }
 
-    // OI REST call only on first run — WS openInterest streams keep it updated.
-    if (
-      this.quoteStore.size > 0 &&
-      [...this.quoteStore.values()].some((q) => q.openInterest != null)
-    )
-      return;
+  }
 
+  private async fetchOpenInterestSnapshot(instruments: CachedInstrument[]): Promise<void> {
+    // OI REST call seeds a baseline; the WS stream refreshes it after startup.
     const oiPairs = new Set<string>();
     for (const inst of instruments) {
       const match = inst.exchangeSymbol.match(/-(\d{6})-/);

@@ -196,6 +196,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private oiTimer: ReturnType<typeof setInterval> | null = null;
   private oiRefreshInFlight = false;
+  private pendingOiRefreshKeys = new Set<string>();
 
   private readonly subscriptions = createCoincallSubscriptionState();
   protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
@@ -356,6 +357,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     }
     if (expiryTs != null && ensureCoincallTOptionSub(this.subscriptions, pairRoot, expiryTs)) {
       this.wsClient?.send(buildTOptionSubscribeMessage(pairRoot, expiryTs));
+      void this.refreshOpenInterest(`${pairRoot}:${expiryTs}`);
     }
 
     const newBsInfoSymbols = buildCoincallNewBsInfoSymbols(this.subscriptions, instruments);
@@ -637,14 +639,16 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
    * volume. This periodically overlays both onto the subscribed quotes — a pure
    * read-only enricher that never touches transport / subscription / health state.
    */
-  private async refreshOpenInterest(): Promise<void> {
-    // A slow venue must not let the 60s cycles pile up on top of each other.
-    if (this.oiRefreshInFlight) return;
+  private async refreshOpenInterest(onlyKey?: string): Promise<void> {
+    if (this.oiRefreshInFlight) {
+      if (onlyKey) this.pendingOiRefreshKeys.add(onlyKey);
+      return;
+    }
     this.oiRefreshInFlight = true;
     let chainFailures = 0;
     let detailFailures = 0;
     try {
-      for (const key of [...this.subscriptions.tOptionKeys]) {
+      for (const key of [...this.subscriptions.tOptionKeys].filter((item) => !onlyKey || item === onlyKey)) {
         const sep = key.lastIndexOf(':');
         if (sep < 0) continue;
         const pairRoot = key.slice(0, sep);
@@ -716,6 +720,11 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
       }
     } finally {
       this.oiRefreshInFlight = false;
+      const nextKey = this.pendingOiRefreshKeys.values().next().value;
+      if (nextKey) {
+        this.pendingOiRefreshKeys.delete(nextKey);
+        void this.refreshOpenInterest(nextKey);
+      }
     }
     // One aggregated warn per cycle instead of one per failed expiry/symbol —
     // a full Coincall REST outage would otherwise flood the log every 60s.

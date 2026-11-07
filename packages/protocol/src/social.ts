@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { DeltaHedgeStateSchema } from './portfolio.js';
+import { DeltaHedgeStateSchema, LinearPositionSchema } from './portfolio.js';
 
 export const CHAT_MESSAGE_MAX_CHARS = 500;
 export const CHAT_GLOBAL_ROOM = 'global';
@@ -136,6 +136,7 @@ export const TraderLiveDtoSchema = z.object({
   /** Fractional equity change from the first funded close; deposits and withdrawals count. */
   returnPct: z.number(),
   openPositions: z.array(PublicPositionDtoSchema),
+  linearPositions: z.array(LinearPositionSchema).optional(),
   /** Combined marked P&L for open options and linear hedges; null if any held mark is missing. */
   totalUnrealizedPnlUsd: z.number().nullable().optional(),
   deltaStatusByUnderlying: z.array(PublicDeltaStatusSchema).optional(),

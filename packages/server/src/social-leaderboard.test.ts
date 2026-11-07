@@ -74,6 +74,32 @@ describe('LeaderboardService', () => {
     ]);
   });
 
+  it('counts Thalex perpetuals as open positions', async () => {
+    const { registry, equity } = create([BETA]);
+    const service = new LeaderboardService(
+      registry,
+      equity,
+      () => [],
+      LOG,
+      () => NOW,
+      undefined,
+      () => [
+        {
+          instrumentName: 'BTC-PERPETUAL',
+          underlying: 'BTC',
+          kind: 'perpetual',
+          expiry: null,
+          sizeCoin: -0.1,
+          entryPriceUsd: 90_000,
+          markPriceUsd: 89_000,
+          source: 'thalex',
+        },
+      ],
+    );
+    const result = await service.get('all', null);
+    expect(result.entries[0]?.openPositions).toBe(1);
+  });
+
   it('leaves out members whose history cannot be read', async () => {
     const { service, equity } = create();
     equity.get.mockImplementation(async (accountId: string) => {

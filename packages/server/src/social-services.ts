@@ -5,7 +5,10 @@ import { type SocialVenue, SocialVenueSchema } from '@oggregator/protocol';
 import { fetchClerkUsername } from './clerk-users.js';
 import { derivePositionStore } from './derive-position-store.js';
 import { paradexPositionStore } from './paradex-position-store.js';
-import { isMainnetVenueConnected, restoreStoredVenue } from './routes/portfolio/venue-credentials.js';
+import {
+  isMainnetVenueConnected,
+  restoreStoredVenue,
+} from './routes/portfolio/venue-credentials.js';
 import {
   BroadcastRegistry,
   type VenueAccountAccess,
@@ -51,7 +54,8 @@ const venueAccess: VenueAccountAccess = {
   isConnected: (accountId, venue) => isMainnetVenueConnected(accountId, venue),
   restore: (accountId, venue) => restoreStoredVenue(accountId, venue),
   keepAlive: (accountId, venue, enabled) => VENUE_STORES[venue].keepAlive(accountId, enabled),
-  listLegs: (accountId, venue) => (onTestnet(accountId, venue) ? [] : VENUE_STORES[venue].list(accountId)),
+  listLegs: (accountId, venue) =>
+    onTestnet(accountId, venue) ? [] : VENUE_STORES[venue].list(accountId),
   listLinear: (accountId, venue) =>
     venue === 'thalex' && !onTestnet(accountId, venue)
       ? thalexPositionStore.listLinear(accountId)
@@ -83,6 +87,9 @@ export const leaderboardService = new LeaderboardService(
   equityCache,
   venueAccess.listLegs,
   logger,
+  Date.now,
+  undefined,
+  venueAccess.listLinear,
 );
 
 export const traderStreamService = new TraderStreamService({

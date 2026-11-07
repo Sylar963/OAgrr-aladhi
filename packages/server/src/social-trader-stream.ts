@@ -24,9 +24,9 @@ export interface TraderStreamDeps {
   listLegs: (target: TraderTarget) => PositionLeg[];
   listLinear?: (target: TraderTarget) => LinearPosition[];
   getCurrentEquity?: (target: TraderTarget) => { equityUsd: number; updatedAt: number } | null;
-  getDeltaByUnderlying?: (target: TraderTarget) =>
-    | PublicDeltaStatus[]
-    | Promise<PublicDeltaStatus[]>;
+  getDeltaByUnderlying?: (
+    target: TraderTarget,
+  ) => PublicDeltaStatus[] | Promise<PublicDeltaStatus[]>;
   /** Null when the venue keeps no fill history. */
   loadClosedTrades: (target: TraderTarget) => Promise<PublicClosedTradeDto[] | null>;
   getMark: MarkLookup;
@@ -59,10 +59,12 @@ function entryKey(target: { accountId: string; venue: SocialVenue }): string {
 }
 
 function unknownDeltaRows(legs: PositionLeg[], linear: LinearPosition[]): PublicDeltaStatus[] {
-  return [...new Set([
-    ...legs.map((leg) => leg.underlying.toUpperCase()),
-    ...linear.map((position) => position.underlying.toUpperCase()),
-  ])]
+  return [
+    ...new Set([
+      ...legs.map((leg) => leg.underlying.toUpperCase()),
+      ...linear.map((position) => position.underlying.toUpperCase()),
+    ]),
+  ]
     .sort()
     .map((underlying) => ({ underlying, netDeltaCoin: null, hedgeState: 'unknown' }));
 }
@@ -305,10 +307,7 @@ export class TraderStreamService {
       entry.lastDeltaErrorAt = null;
     } catch (err) {
       deltaStatusByUnderlying = [];
-      if (
-        entry.lastDeltaErrorAt == null ||
-        nowMs - entry.lastDeltaErrorAt >= 60_000
-      ) {
+      if (entry.lastDeltaErrorAt == null || nowMs - entry.lastDeltaErrorAt >= 60_000) {
         this.deps.log?.warn(
           { venue: target.venue, handle: target.handle, err: String(err) },
           'social delta exposure calculation failed',
@@ -341,10 +340,13 @@ export class TraderStreamService {
       handle: target.handle,
       venue: target.venue,
       equityUsd,
-      equityAsOf: new Date(liveEquity?.updatedAt ?? summary?.equityAsOf ?? data.equity.fetchedAt).toISOString(),
+      equityAsOf: new Date(
+        liveEquity?.updatedAt ?? summary?.equityAsOf ?? data.equity.fetchedAt,
+      ).toISOString(),
       pnlUsd,
       returnPct,
       openPositions,
+      linearPositions: [...linear].sort((a, b) => a.instrumentName.localeCompare(b.instrumentName)),
       totalUnrealizedPnlUsd,
       deltaStatusByUnderlying,
       generatedAt: new Date(nowMs).toISOString(),

@@ -1,4 +1,4 @@
-import type { PublicPositionDto } from '@oggregator/protocol';
+import type { LinearPosition, PublicPositionDto } from '@oggregator/protocol';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,6 +23,17 @@ function leg(strike: number, netQuantity: number, entry: number, mark: number): 
   };
 }
 
+const PERP: LinearPosition = {
+  instrumentName: 'BTC-PERPETUAL',
+  underlying: 'BTC',
+  kind: 'perpetual',
+  expiry: null,
+  sizeCoin: -0.1,
+  entryPriceUsd: 90_000,
+  markPriceUsd: 89_000,
+  source: 'thalex',
+};
+
 describe('OpenPositions', () => {
   afterEach(cleanup);
 
@@ -42,5 +53,49 @@ describe('OpenPositions', () => {
     expect(within(card).getByText('Long')).toBeDefined();
     expect(within(card).getByText(/spot 88k/)).toBeDefined();
     expect(screen.getByText('1 long · 1 short')).toBeDefined();
+  });
+
+  it('shows perps and dated futures with direction, coin size, prices and signed P&L', () => {
+    render(
+      <OpenPositions
+        positions={[]}
+        linearPositions={[
+          PERP,
+          {
+            ...PERP,
+            instrumentName: 'BTC-25DEC26',
+            kind: 'future',
+            expiry: '2026-12-25',
+            sizeCoin: 0.2,
+          },
+        ]}
+      />,
+    );
+
+    const table = screen.getByRole('table', { name: 'Perpetuals & futures' });
+    const short = within(table).getByText('BTC-PERPETUAL').closest('tr')!;
+    expect(within(short).getByText('Short')).toBeDefined();
+    expect(within(short).getByText('0.1 BTC')).toBeDefined();
+    expect(within(short).getByText('$90,000')).toBeDefined();
+    expect(within(short).getByText('$89,000')).toBeDefined();
+    expect(within(short).getByText('+$100')).toBeDefined();
+    const long = within(table).getByText('BTC-25DEC26').closest('tr')!;
+    expect(within(long).getByText('Long')).toBeDefined();
+    expect(within(long).getByText('-$200')).toBeDefined();
+    expect(screen.getByText('-$100')).toBeDefined();
+    expect(screen.queryByText('Net credit')).toBeNull();
+    expect(screen.queryByRole('img', { name: /Payoff at expiry/ })).toBeNull();
+  });
+
+  it('combines option and perp P&L and leaves missing marks unknown', () => {
+    const { rerender } = render(
+      <OpenPositions positions={[leg(90_000, -0.01, 7025, 6800)]} linearPositions={[PERP]} />,
+    );
+    expect(screen.getByText('+$102')).toBeDefined();
+    expect(screen.getByText('0 long · 2 short')).toBeDefined();
+
+    rerender(<OpenPositions positions={[]} linearPositions={[{ ...PERP, markPriceUsd: null }]} />);
+    const table = screen.getByRole('table', { name: 'Perpetuals & futures' });
+    expect(within(table).getAllByText('–')).toHaveLength(2);
   });
 });

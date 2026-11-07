@@ -1,4 +1,4 @@
-import type { PositionLeg } from '@oggregator/core';
+import type { LinearPosition, PositionLeg } from '@oggregator/core';
 import type {
   EquityHistoryPoint,
   LeaderboardEntryDto,
@@ -81,6 +81,10 @@ export class LeaderboardService {
     private readonly log: { warn: (obj: object, msg: string) => void },
     private readonly now: () => number = Date.now,
     private readonly ttlMs = LEADERBOARD_TTL_MS,
+    private readonly listLinear: (
+      accountId: string,
+      venue: SocialVenue,
+    ) => LinearPosition[] = () => [],
   ) {}
 
   invalidate(): void {
@@ -123,7 +127,9 @@ export class LeaderboardService {
         members.push({
           broadcaster,
           points: result.value.points,
-          openPositions: this.listLegs(broadcaster.accountId, broadcaster.venue).length,
+          openPositions:
+            this.listLegs(broadcaster.accountId, broadcaster.venue).length +
+            this.listLinear(broadcaster.accountId, broadcaster.venue).length,
         });
       }
       const next: LeaderboardCache = { generatedAt: this.now(), members };

@@ -1,5 +1,5 @@
-import type { PositionLeg } from '@oggregator/core';
-import type { ChatServerMessage } from '@oggregator/protocol';
+import type { LinearPosition, PositionLeg } from '@oggregator/core';
+import { ChatServerMessageSchema, type ChatServerMessage } from '@oggregator/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TraderStreamService } from './social-trader-stream.js';
@@ -30,6 +30,17 @@ const LEG: PositionLeg = {
   source: 'derive',
   venueMarkPriceUsd: 1_500,
   venueMarkTs: NOW,
+};
+
+const PERP: LinearPosition = {
+  instrumentName: 'BTC-PERPETUAL',
+  underlying: 'BTC',
+  kind: 'perpetual',
+  expiry: null,
+  sizeCoin: -0.1,
+  entryPriceUsd: 90_000,
+  markPriceUsd: 89_000,
+  source: 'thalex',
 };
 
 function viewer(userId: string) {
@@ -121,6 +132,48 @@ describe('TraderStreamService', () => {
     const full = messages[0];
     if (full?.type !== 'trader') throw new Error('expected trader frame');
     expect(full.trader.openPositions[0]?.markPriceUsd).toBe(1_200);
+  });
+
+  it('publishes Thalex perps alongside options through the validated socket contract', async () => {
+    let linear = [PERP];
+    const { service } = create(deps({ listLinear: () => linear }));
+    const { watcher, messages } = viewer('usr_t');
+    await service.watch(watcher, { ...TARGET, venue: 'thalex' });
+    const full = ChatServerMessageSchema.parse(messages[0]);
+    if (full.type !== 'trader') throw new Error('expected trader frame');
+    expect(full.trader.openPositions).toHaveLength(1);
+    expect(full.trader.linearPositions).toEqual([PERP]);
+    expect(full.trader.totalUnrealizedPnlUsd).toBe(600);
+
+    linear = [{ ...PERP, markPriceUsd: 88_000 }];
+    await service.tick();
+    const live = ChatServerMessageSchema.parse(messages.at(-1));
+    if (live.type !== 'trader_live') throw new Error('expected trader_live frame');
+    expect(live.live.linearPositions?.[0]?.markPriceUsd).toBe(88_000);
+    expect(live.live.totalUnrealizedPnlUsd).toBe(700);
+
+    linear = [];
+    await service.tick();
+    const closed = ChatServerMessageSchema.parse(messages.at(-1));
+    if (closed.type !== 'trader_live') throw new Error('expected trader_live frame');
+    expect(closed.live.linearPositions).toEqual([]);
+    expect(closed.live.totalUnrealizedPnlUsd).toBe(500);
+  });
+
+  it('keeps perp-only positions visible with unknown P&L when their mark is missing', async () => {
+    const { service } = create(
+      deps({
+        listLegs: () => [],
+        listLinear: () => [{ ...PERP, markPriceUsd: null }],
+      }),
+    );
+    const { watcher, messages } = viewer('usr_t');
+    await service.watch(watcher, { ...TARGET, venue: 'thalex' });
+    const full = messages[0];
+    if (full?.type !== 'trader') throw new Error('expected trader frame');
+    expect(full.trader.openPositions).toEqual([]);
+    expect(full.trader.linearPositions).toHaveLength(1);
+    expect(full.trader.totalUnrealizedPnlUsd).toBeNull();
   });
 
   it('reports a member whose venue is not connected as waiting', async () => {

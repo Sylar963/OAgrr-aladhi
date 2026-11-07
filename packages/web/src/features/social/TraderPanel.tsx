@@ -15,16 +15,18 @@ const messages = defineMessages(
     live: 'live',
     closeTrader: 'Close trader',
     left: '@{handle} is no longer sharing on the leaderboard.',
-    waiting: "Waiting for @{handle}'s venue account to connect. Their book streams again once it does.",
+    waiting:
+      "Waiting for @{handle}'s venue account to connect. Their book streams again once it does.",
     loading: 'Loading @{handle}…',
     equity: 'Equity · {date}',
     pnlSince: 'Equity change since {date}',
     return: 'Equity change %',
-    equityBasisNote: 'Equity is venue account value. Equity change includes deposits and withdrawals.',
+    equityBasisNote:
+      'Equity is venue account value. Equity change includes deposits and withdrawals.',
     sharingSince: 'Sharing since',
     openPositions: 'Open positions · {n}',
     noOpenPositions: 'No open positions.',
-    deltaExposure: 'Delta hedge · live',
+    deltaExposure: 'Net delta · options + perps / futures',
     deltaMissing: 'No live delta exposure is available.',
     underlying: 'Underlying',
     netDelta: 'Net Δ',
@@ -57,11 +59,12 @@ const messages = defineMessages(
     equity: 'Equity · {date}',
     pnlSince: 'Cambio de equity desde {date}',
     return: 'Cambio de equity %',
-    equityBasisNote: 'Equity es el valor de la cuenta en el exchange. El cambio incluye depósitos y retiros.',
+    equityBasisNote:
+      'Equity es el valor de la cuenta en el exchange. El cambio incluye depósitos y retiros.',
     sharingSince: 'Comparte desde',
     openPositions: 'Posiciones abiertas · {n}',
     noOpenPositions: 'Sin posiciones abiertas.',
-    deltaExposure: 'Cobertura delta · en vivo',
+    deltaExposure: 'Delta neto · opciones + perpetuos / futuros',
     deltaMissing: 'No hay exposición delta en vivo disponible.',
     underlying: 'Subyacente',
     netDelta: 'Δ neto',
@@ -220,13 +223,16 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
           )}
 
           <h4 className={styles.sectionTitle}>
-            {t('openPositions', { n: trader.openPositions.length })}
+            {t('openPositions', {
+              n: trader.openPositions.length + (trader.linearPositions?.length ?? 0),
+            })}
           </h4>
-          {trader.openPositions.length === 0 ? (
+          {trader.openPositions.length === 0 && !trader.linearPositions?.length ? (
             <p className={styles.empty}>{t('noOpenPositions')}</p>
           ) : (
             <OpenPositions
               positions={trader.openPositions}
+              linearPositions={trader.linearPositions}
               totalUnrealizedPnlUsd={trader.totalUnrealizedPnlUsd}
             />
           )}

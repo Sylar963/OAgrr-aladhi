@@ -10,6 +10,41 @@
   gap: var(--space-2);
 }
 
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--text-dim);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.table td {
+  color: var(--text-secondary);
+}
+
+.num {
+  text-align: right !important;
+}
+
 .metric {
   display: flex;
   align-items: baseline;

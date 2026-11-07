@@ -1,7 +1,7 @@
 import { useSpots } from '@hooks/useSpots';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
-import type { PublicPositionDto } from '@oggregator/protocol';
+import type { LinearPosition, PublicPositionDto } from '@oggregator/protocol';
 import { useId, useMemo, useState, type PointerEvent } from 'react';
 
 import { socialMessages } from './i18n';
@@ -33,6 +33,13 @@ const messages = defineMessages(
     payoffAtExpiry: 'Payoff at expiry',
     spot: 'spot',
     payoffAria: 'Payoff at expiry by underlying price',
+    linearPositions: 'Perpetuals & futures',
+    instrument: 'Instrument',
+    side: 'Side',
+    quantity: 'Size (coin)',
+    entry: 'Entry',
+    mark: 'Mark',
+    pnl: 'Open P&L',
   },
   {
     unrealized: 'P&L abierto · todas las posiciones',
@@ -50,6 +57,13 @@ const messages = defineMessages(
     payoffAtExpiry: 'Payoff al vencimiento',
     spot: 'spot',
     payoffAria: 'Payoff al vencimiento según el precio del subyacente',
+    linearPositions: 'Perpetuos y futuros',
+    instrument: 'Instrumento',
+    side: 'Lado',
+    quantity: 'Tamaño (moneda)',
+    entry: 'Entrada',
+    mark: 'Marca',
+    pnl: 'P&L abierto',
   },
 );
 
@@ -76,25 +90,35 @@ function compactPrice(price: number): string {
 
 export default function OpenPositions({
   positions,
+  linearPositions = [],
   totalUnrealizedPnlUsd,
 }: {
   positions: PublicPositionDto[];
+  linearPositions?: LinearPosition[];
   totalUnrealizedPnlUsd?: number | null;
 }) {
   const t = useT(messages);
+  const ts = useT(socialMessages);
   const { data: spots } = useSpots();
   const groups = useMemo(() => groupPositions(positions), [positions]);
   const pnlScale = Math.max(1e-9, ...positions.map((leg) => Math.abs(leg.unrealizedPnlUsd ?? 0)));
 
-  const known = positions.filter((leg) => leg.unrealizedPnlUsd != null);
+  const linearPnls = linearPositions.map((position) =>
+    position.markPriceUsd == null
+      ? null
+      : (position.markPriceUsd - position.entryPriceUsd) * position.sizeCoin,
+  );
+  const pnls = [...positions.map((leg) => leg.unrealizedPnlUsd), ...linearPnls];
   const totalPnl =
     totalUnrealizedPnlUsd !== undefined
       ? totalUnrealizedPnlUsd
-      : known.length
-        ? known.reduce((s, leg) => s + leg.unrealizedPnlUsd!, 0)
+      : pnls.length > 0 && pnls.every((pnl) => pnl != null)
+        ? pnls.reduce<number>((sum, pnl) => sum + (pnl ?? 0), 0)
         : null;
   const netPremium = positions.reduce((s, leg) => s - leg.netQuantity * leg.avgEntryPriceUsd, 0);
-  const longs = positions.filter((leg) => leg.netQuantity > 0).length;
+  const longs =
+    positions.filter((leg) => leg.netQuantity > 0).length +
+    linearPositions.filter((position) => position.sizeCoin > 0).length;
 
   function spotFor(underlying: string): number | null {
     return spots?.find((item) => item.symbol === `${underlying}USDT`)?.lastPrice ?? null;
@@ -104,16 +128,54 @@ export default function OpenPositions({
     <div className={styles.root}>
       <div className={styles.summary}>
         <Metric label={t('unrealized')} value={signedUsd(totalPnl)} tone={tone(totalPnl)} />
-        <Metric
-          label={netPremium >= 0 ? t('netCredit') : t('netDebit')}
-          value={signedUsd(Math.abs(netPremium)).replace('+', '')}
-        />
+        {positions.length > 0 && (
+          <Metric
+            label={netPremium >= 0 ? t('netCredit') : t('netDebit')}
+            value={signedUsd(Math.abs(netPremium)).replace('+', '')}
+          />
+        )}
         <Metric
           label={t('legs')}
-          value={t('legsValue', { long: longs, short: positions.length - longs })}
+          value={t('legsValue', {
+            long: longs,
+            short: positions.length + linearPositions.length - longs,
+          })}
         />
-        <Metric label={t('expiries')} value={String(groups.length)} />
+        {positions.length > 0 && <Metric label={t('expiries')} value={String(groups.length)} />}
       </div>
+
+      {linearPositions.length > 0 && (
+        <div className={styles.tableWrap}>
+          <table className={styles.table} aria-label={t('linearPositions')}>
+            <thead>
+              <tr>
+                <th>{t('instrument')}</th>
+                <th>{t('side')}</th>
+                <th className={styles.num}>{t('quantity')}</th>
+                <th className={styles.num}>{t('entry')}</th>
+                <th className={styles.num}>{t('mark')}</th>
+                <th className={styles.num}>{t('pnl')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {linearPositions.map((position, index) => (
+                <tr key={position.instrumentName}>
+                  <td>{position.instrumentName}</td>
+                  <td>{ts(position.sizeCoin > 0 ? 'long' : 'short')}</td>
+                  <td className={styles.num}>
+                    {Math.abs(position.sizeCoin)} {position.underlying}
+                  </td>
+                  <td className={styles.num}>{fmtUsd(position.entryPriceUsd)}</td>
+                  <td className={styles.num}>{fmtUsd(position.markPriceUsd)}</td>
+                  <td className={styles.num} data-tone={tone(linearPnls[index] ?? null)}>
+                    {signedUsd(linearPnls[index] ?? null)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className={styles.grid}>
         {groups.map((group) => (

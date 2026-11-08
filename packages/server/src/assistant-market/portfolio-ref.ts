@@ -6,6 +6,7 @@ export interface PortfolioRefScope {
   accountId: string;
   source: PortfolioSource;
   underlying: string | null;
+  network?: 'mainnet' | 'testnet' | null;
   generatedAt: number;
   expiresAt: number;
 }

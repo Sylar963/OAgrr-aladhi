@@ -573,6 +573,11 @@ export {
   type ThalexAccountMargin,
   type ThalexCashHolding,
   type ThalexCashTransaction,
+  formatThalexOptionInstrument,
+  ThalexMarginPreviewRequestSchema,
+  ThalexMarginPreviewSchema,
+  type ThalexMarginPreviewRequest,
+  type ThalexMarginPreview,
 } from './feeds/thalex-private/index.js';
 
 // feeds — venue adapters

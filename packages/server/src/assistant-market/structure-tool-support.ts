@@ -1,4 +1,10 @@
-import type { EvaluateStructureInput, ProposedLegQuote, VenueId } from '@oggregator/core';
+import type {
+  EvaluateStructureInput,
+  ProposedLegQuote,
+  VenueId,
+  ThalexMarginPreview,
+  ThalexMarginPreviewRequest,
+} from '@oggregator/core';
 import { VENUE_IDS } from '@oggregator/protocol';
 
 import type { ExecutableQuoteSet, VenueExecutableQuote } from './market-data-compaction.js';
@@ -9,6 +15,10 @@ export type HeldLegsWithMarks = EvaluateStructureInput['held'];
 export interface StructureToolPortfolioAccess {
   refs: PortfolioRefStore;
   resolveHeldLegs: (scope: PortfolioRefScope) => Promise<HeldLegsWithMarks | null>;
+  previewThalexMargin?: (
+    scope: PortfolioRefScope,
+    request: ThalexMarginPreviewRequest,
+  ) => Promise<ThalexMarginPreview | null>;
 }
 
 export interface ResolvedQuote {

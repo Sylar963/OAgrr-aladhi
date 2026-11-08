@@ -36,6 +36,17 @@ function setup(options: ConstructorParameters<typeof FlowOiWorkerStore>[1] = {})
 }
 
 describe('isolated FLOW OI persistence', () => {
+  it('rejects invalid samples before queueing and snapshots accepted values', async () => {
+    const { store } = setup();
+    expect(() => store.append({ ...tick, timestamp: -1 })).toThrow();
+    expect(store.getStatus().pendingTicks).toBe(0);
+    const sample = { ...tick };
+    store.append(sample);
+    sample.openInterest = 0;
+    await store.flush();
+    expect((await store.bracket('deribit', tick.instrument, 1500)).before).toEqual(tick);
+  });
+
   it('deduplicates writes, publishes only committed samples and reads persisted brackets', async () => {
     const { store } = setup();
     const observed: number[] = [];

@@ -13,6 +13,7 @@ export {
   thalexPortfolioToLegs,
   thalexPortfolioToLinear,
   parseThalexLinearInstrument,
+  formatThalexOptionInstrument,
   type ThalexAccountEquity,
   type ThalexAccountMargin,
   type ThalexCashHolding,
@@ -24,3 +25,9 @@ export {
   type ThalexPortfolioEntry,
   type ThalexPortfolioNotification,
 } from './types.js';
+export {
+  ThalexMarginPreviewRequestSchema,
+  ThalexMarginPreviewSchema,
+  type ThalexMarginPreviewRequest,
+  type ThalexMarginPreview,
+} from './margin-preview.js';

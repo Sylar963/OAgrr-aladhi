@@ -1150,6 +1150,7 @@ export class PortfolioAssistantContextBuilder {
         source: input.source,
         underlying: input.underlying,
         generatedAt: snapshot.metrics.generatedAt,
+        network: accountEquityFacts?.network ?? this.sessionNetwork(input.accountId, input.source),
       }),
       computation: snapshot,
       legsWithMarks: runtime.legsWithMarks(),

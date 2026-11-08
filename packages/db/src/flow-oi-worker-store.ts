@@ -66,7 +66,7 @@ export class FlowOiWorkerStore {
       this.rejectedTicks += ticks.length;
       throw new Error('FLOW OI persistence queue is full');
     }
-    this.ticks.push(...ticks);
+    this.ticks.push(...FlowOiTickSchema.array().parse(ticks));
     this.schedule();
   }
 

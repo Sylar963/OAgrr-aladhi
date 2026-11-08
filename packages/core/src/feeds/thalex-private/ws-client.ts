@@ -10,6 +10,12 @@ import { feedLogger } from '../../utils/logger.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import { mintAuthToken } from './auth.js';
 import {
+  ThalexMarginPreviewRequestSchema,
+  ThalexMarginPreviewSchema,
+  type ThalexMarginPreviewRequest,
+  type ThalexMarginPreview,
+} from './margin-preview.js';
+import {
   thalexAccountEquity,
   thalexAccountMargin,
   thalexCashReplayEquity,
@@ -207,6 +213,12 @@ export class ThalexPrivateClient {
 
   getLatestAccountEquity(): ThalexAccountEquity | null {
     return this.latestEquity;
+  }
+
+  async previewMargin(request: ThalexMarginPreviewRequest): Promise<ThalexMarginPreview> {
+    const params = ThalexMarginPreviewRequestSchema.parse(request);
+    const result = await this.call('private/required_margin_for_order', params);
+    return ThalexMarginPreviewSchema.parse(result);
   }
 
   async fetchEquityHistory(fromMs: number, nowMs = Date.now()): Promise<EquityHistoryPoint[]> {

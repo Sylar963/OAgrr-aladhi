@@ -1,6 +1,8 @@
 import {
   ThalexPrivateClient,
   type ThalexAccountLedger,
+  type ThalexMarginPreviewRequest,
+  type ThalexMarginPreview,
   type ThalexAccountMargin,
   type ThalexBookAuth,
   type ThalexPrivateCreds,
@@ -384,6 +386,14 @@ export class ThalexPositionStore implements PositionStore {
   async fetchAccountLedger(accountId: string, fromMs: number): Promise<ThalexAccountLedger | null> {
     const client = this.clients.get(accountId);
     return client == null ? null : client.fetchAccountLedger(fromMs);
+  }
+
+  async previewMargin(
+    accountId: string,
+    request: ThalexMarginPreviewRequest,
+  ): Promise<ThalexMarginPreview | null> {
+    const client = this.clients.get(accountId);
+    return client == null ? null : client.previewMargin(request);
   }
 
   isConnected(accountId: string): boolean {

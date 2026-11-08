@@ -1,4 +1,5 @@
 import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type { ThalexMarginPreview } from '@oggregator/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
@@ -8,6 +9,7 @@ const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
     trades: Listener<unknown[]> | null = null;
     settlements: (() => void) | null = null;
     realizedPnl: number | null = null;
+    previewMargin = vi.fn<() => Promise<ThalexMarginPreview>>();
     constructor(readonly creds: { env?: string }) {
       clients.push(this);
     }
@@ -95,6 +97,18 @@ describe('ThalexPositionStore environments', () => {
     expect(ledgerMock.loadPositions).not.toHaveBeenCalled();
     expect(ledgerMock.replacePositions).not.toHaveBeenCalled();
     expect(ledgerMock.upsertTrades).not.toHaveBeenCalled();
+  });
+
+  it('discards a preview if the connected client changed while the venue read was in flight', async () => {
+    const creds = { accountId: 'a1', kid: 'k', privateKeyPem: 'p', env: 'test' as const };
+    await store.connect(creds);
+    let finish!: (preview: ThalexMarginPreview) => void;
+    clients[0]!.previewMargin.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const pending = store.previewMargin('a1', { instrument_name: 'BTC-27NOV26-75000-P', price: 120, amount: 0.1 });
+    await store.connect(creds);
+    finish({ current: { required_margin: 1_000 }, with_buy: { required_margin: 800 }, with_sell: { required_margin: 1_100 } });
+    expect(await pending).toBeNull();
+    expect(await store.previewMargin('not-connected', { instrument_name: 'BTC-27NOV26-75000-P', price: 120, amount: 0.1 })).toBeNull();
   });
 
   it('requires a position snapshot from the current session before its book is live', async () => {

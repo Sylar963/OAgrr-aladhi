@@ -92,6 +92,7 @@ describe('assistant MCP server', () => {
       annotations: { readOnlyHint: boolean };
     }>;
     expect(tools.map((entry) => entry.name)).toContain('oggregator_option_chain');
+    expect(tools.map((entry) => entry.name)).toContain('oggregator_preview_thalex_margin');
     expect(tools.every((entry) => entry.annotations.readOnlyHint)).toBe(true);
   });
 
@@ -105,6 +106,18 @@ describe('assistant MCP server', () => {
     const result = response.json().result;
     expect(result.isError).toBeUndefined();
     expect(JSON.parse(result.content[0].text).expiries[0].expiry).toBe('2026-10-02');
+  });
+
+  it('rejects an unscoped margin preview as recoverable without reading private data', async () => {
+    const response = await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: {
+      name: 'oggregator_preview_thalex_margin', arguments: {
+        portfolioRef: 'pref_unknown', underlying: 'BTC',
+        legs: [{ expiry: '2026-11-27', strike: 75_000, right: 'put', side: 'buy', size: 0.1 }],
+      },
+    } });
+    const result = response.json().result;
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toMatchObject({ ok: false, code: 'portfolio_ref_unresolved' });
   });
 
   it('returns a loading upstream as a structured, retryable result that is not an error result', async () => {

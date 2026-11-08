@@ -50,6 +50,7 @@ export const EVAL_TOOL_SOURCES: Record<string, EvalDatasetSource> = {
   oggregator_iv_history: 'synthetic',
   oggregator_evaluate_structure: 'synthetic',
   oggregator_structure_search: 'synthetic',
+  oggregator_preview_thalex_margin: 'unavailable',
   oggregator_trade_flow: 'live',
   oggregator_feed_health: 'live',
   oggregator_news: 'live',

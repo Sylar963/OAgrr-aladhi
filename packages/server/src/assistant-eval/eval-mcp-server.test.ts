@@ -86,6 +86,17 @@ describe('eval MCP server', () => {
     expect(listing.expiries[0]).toEqual({ expiry: '2026-10-09', daysToExpiry: 1.83 });
   });
 
+  it('does not use a live private account to preview a synthetic portfolio margin', async () => {
+    const mcp = evalMcp();
+    const { portfolioRef } = mcp.beginRun({ requestId: 'margin-run', threadId: 'margin-thread', context: fixture.context });
+    const result = await call(mcp, 'oggregator_preview_thalex_margin', {
+      portfolioRef, underlying: 'BTC',
+      legs: [{ expiry: '2026-10-30', strike: 90_000, right: 'call', side: 'buy', size: 1 }],
+    });
+    expect(result.isError).toBe(false);
+    expect(result.json()).toMatchObject({ ok: false, code: 'unavailable' });
+  });
+
   it('resolves a minted ref to the fixture book and attributes the call to the run', async () => {
     const mcp = evalMcp();
     const { portfolioRef } = mcp.beginRun({ requestId: 'r1', threadId: 't1', context: fixture.context });

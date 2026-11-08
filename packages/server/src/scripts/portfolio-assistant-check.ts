@@ -18,13 +18,20 @@ const REQUIRED_TOOLS = [
 ];
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: {
-    'transport-only': { type: 'boolean' },
-    'wait-ms': { type: 'string' },
-  } });
+  const { values } = parseArgs({
+    options: {
+      'transport-only': { type: 'boolean' },
+      'wait-ms': { type: 'string' },
+    },
+  });
   const args = ArgsSchema.parse(values);
   const token = process.env['OGG_ASSISTANT_MCP_TOKEN']?.trim();
-  const port = z.coerce.number().int().min(1).max(65535).parse(process.env['OGG_ASSISTANT_MCP_PORT'] ?? 3191);
+  const port = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(65535)
+    .parse(process.env['OGG_ASSISTANT_MCP_PORT'] ?? 3191);
   if (!token) throw new Error('OGG_ASSISTANT_MCP_TOKEN is required');
   let rpcId = 0;
   const rpc = async (method: string) => {
@@ -43,7 +50,8 @@ async function main(): Promise<void> {
       await rpc('ping');
       const list = ToolListSchema.parse(await rpc('tools/list'));
       const names = new Set(list.tools.map((tool) => tool.name));
-      if (REQUIRED_TOOLS.some((name) => !names.has(name))) throw new Error('MCP registry is missing required portfolio tools');
+      if (REQUIRED_TOOLS.some((name) => !names.has(name)))
+        throw new Error('MCP registry is missing required portfolio tools');
       process.stdout.write(`MCP transport ready; ${list.tools.length} tools registered.\n`);
       break;
     } catch (error) {
@@ -59,20 +67,39 @@ async function main(): Promise<void> {
       completed.add(event.toolCallId);
     }
   });
-  if (await gateway.checkPortfolioAssistantModelAvailability() !== 'available') throw new Error('Hermes model endpoint is unavailable');
-  for await (const _event of gateway.streamPortfolioAnswer({
-    threadId: 'public-tool-smoke-check',
-    systemInstructions: 'This is a read-only integration check. Call oggregator_list_underlyings exactly once, then report the number of symbols. Do not use skills, memory, private data or any other tool. If the tool is absent, say so. Do not guess.',
-    contextMessage: 'There is no private portfolio in this integration check.',
-    conversationMessages: [{ role: 'user', content: 'Fetch the listed underlyings from the Oggregator tool now.' }],
-  }, AbortSignal.timeout(configuration.requestTimeoutMs))) {}
-  if (completed.size === 0) {
-    throw new Error('Hermes answered without a completed Oggregator tool call. Check MCP discovery, profile toolsets and connection recovery.');
+  const modelDeadline = Date.now() + args['wait-ms'];
+  while ((await gateway.checkPortfolioAssistantModelAvailability()) !== 'available') {
+    if (Date.now() >= modelDeadline) throw new Error('Hermes model endpoint is unavailable');
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(1_000, modelDeadline - Date.now())),
+    );
   }
-  process.stdout.write(`Hermes integration ready; ${completed.size} Oggregator tool call(s) completed.\n`);
+  for await (const _event of gateway.streamPortfolioAnswer(
+    {
+      threadId: 'public-tool-smoke-check',
+      systemInstructions:
+        'This is a read-only integration check. Call oggregator_list_underlyings exactly once, then report the number of symbols. Do not use skills, memory, private data or any other tool. If the tool is absent, say so. Do not guess.',
+      contextMessage: 'There is no private portfolio in this integration check.',
+      conversationMessages: [
+        { role: 'user', content: 'Fetch the listed underlyings from the Oggregator tool now.' },
+      ],
+    },
+    AbortSignal.timeout(configuration.requestTimeoutMs),
+  )) {
+  }
+  if (completed.size === 0) {
+    throw new Error(
+      'Hermes answered without a completed Oggregator tool call. Check MCP discovery, profile toolsets and connection recovery.',
+    );
+  }
+  process.stdout.write(
+    `Hermes integration ready; ${completed.size} Oggregator tool call(s) completed.\n`,
+  );
 }
 
 await main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : 'Portfolio assistant check failed'}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.message : 'Portfolio assistant check failed'}\n`,
+  );
   process.exitCode = 1;
 });

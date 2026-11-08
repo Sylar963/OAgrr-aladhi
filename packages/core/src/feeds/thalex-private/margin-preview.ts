@@ -3,7 +3,10 @@ import { z } from 'zod';
 const instrument = z.string().min(1).max(100);
 const combinationLeg = z.object({
   instrument_name: instrument,
-  quantity: z.number().finite().refine((value) => value !== 0),
+  quantity: z
+    .number()
+    .finite()
+    .refine((value) => value !== 0),
 });
 const order = {
   price: z.number().finite(),

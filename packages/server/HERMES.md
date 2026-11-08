@@ -1,7 +1,7 @@
 # Hermes platform data access
 
 Oggregator sends authenticated portfolio context with each chat question. Hermes's
-`portfolio-chat` profile executes public market tools through the separate loopback
+`portfolio-chat` profile executes public market tools and scoped margin previews through the separate loopback
 MCP listener. The Oggregator chat gateway itself does not execute model tool calls.
 
 ## Connection
@@ -24,6 +24,7 @@ mcp_servers:
     trust: full
     timeout: 30
     connect_timeout: 15
+    keepalive_interval: 30
     supports_parallel_tool_calls: true
     tools:
       resources: false
@@ -31,7 +32,7 @@ mcp_servers:
 ```
 
 `trust: full` applies only to this controlled, read-only server. The server exposes
-an explicit tool registry; no arbitrary URLs, SQL, shell, private account queries,
+an explicit tool registry; no arbitrary URLs, SQL, shell, unscoped private account queries,
 or order mutations. Every tool requires bearer authentication. Keep the listener
 on loopback; a remote or containerized Hermes needs a private network arrangement.
 
@@ -57,6 +58,7 @@ on loopback; a remote or containerized Hermes needs a private network arrangemen
 | lotto_scanner | Existing Alpha scan with explicit premium cap and buying power |
 | put_scanner | Alpha Long Put scan, ranked by protection for a hedge quantity or by convexity for outright bearish puts |
 | search_options_library | Indexed book passages with page citations |
+| preview_thalex_margin | Thalex mainnet required margin with 1–4 hypothetical option order legs inserted; uses Thalex quotes and the current context's `portfolioRef` |
 | evaluate_structure | Proposed legs (± held book via `portfolioRef`) at executable quotes: cost, fees, worst loss, best profit and breakevens per expiry window, budget fit, horizon and expiry P&L |
 | structure_search | Candidates for a view (bearish, bullish, long_vol, hedge_held_shorts) within a book-wide risk budget, ranked by P&L at a target move per dollar of worst loss; repair + view packages when the held book is unbounded or over budget; `nearestInfeasible`, `repairOnly` and the shortfall when nothing fits |
 
@@ -99,6 +101,65 @@ Backend log lines:
 
 A successful direct `tools/list` request proves server availability, not agent
 integration. A fluent answer is not sufficient evidence of tool use.
+
+## Checked restart and recovery
+
+After building core and server, run from the repository root:
+
+```bash
+bash scripts/restart-portfolio-assistant.sh
+```
+
+It restarts the backend, waits up to 60 seconds for an authenticated MCP ping and
+the required tool registry, restarts the shared Hermes gateway, then verifies a
+completed Oggregator tool call through a fresh isolated Hermes session. Restarting
+the gateway affects all profiles it serves. The final check makes one public-data
+model request, consuming model allowance; it sends no private portfolio and writes
+no conversation to Oggregator. There is no recurring paid probe.
+
+Check without restarting:
+
+```bash
+node --env-file-if-exists=.env packages/server/dist/scripts/portfolio-assistant-check.js
+```
+
+Add `--transport-only` for a free transport/registry check, or `--wait-ms 60000`
+during startup. The full check requires a `hermes.tool.progress` completed event;
+an answer without it fails the check. A completed event proves invocation, not
+successful data retrieval: inspect the backend tool outcome for upstream failures.
+
+Hermes parks a failing connection after repeated retries, removes its tools, and
+self-probes every 300 seconds. Its chat endpoint can remain healthy meanwhile.
+`keepalive_interval: 30` shortens detection of an idle broken connection; it does
+not change the parked retry interval. The MCP listener shares the API process,
+so backend event-loop stalls can also time it out. Diagnose blocking workloads
+instead of repeatedly extending tool timeouts.
+
+## Margin evidence and payoff evidence
+
+`oggregator_preview_thalex_margin` requires the current context's `portfolioRef`,
+an underlying, and 1–4 option legs. Account and network are resolved server-side;
+the model cannot choose an account. Only mainnet references are supported because
+the public quote reader supplies mainnet prices. A disconnected, replaced or
+testnet session returns a recoverable error instead of using another account.
+
+Each leg uses only the Thalex ask to buy or bid to sell. A combination's signed
+quantity ratios and net outright price form one request; Thalex can reject a
+package outside its combination constraints. Private reads time out after 10
+seconds, below the 30-second MCP timeout. No order endpoint is called.
+
+The result is an **order-insertion preview**: current required margin versus
+required margin with the proposed order inserted, including existing orders.
+It is not an exact filled-position simulation or promised margin release.
+Positive `requiredMarginChangeUsd` means more required margin. Never sum isolated
+leg previews as a package's margin change. Use `oggregator_evaluate_structure`
+separately for the same proposed legs and sizes plus held-book expiry payoff and
+estimated fees, setting every proposed leg's venue to `thalex`.
+An unbounded call tail is a known payoff result, not absent data.
+
+The native RPC and response shape are documented in
+`references/options-docs/thalex/api.yaml` (`required_margin_for_order`,
+`MarginBreakdownWithOrder`) and the [official Thalex API docs](https://thalex.com/docs/).
 
 ## Session isolation
 
@@ -372,7 +433,7 @@ user scope; never accept a model-provided account ID as authorization.
 ## Portfolio context fields for tools
 
 - `portfolioRef`: opaque handle to the book in this context. Pass it to the two structure
-  tools; no other tool accepts it (scope below).
+  tools and `preview_thalex_margin` (scope below).
 - `riskBudgetFacts`: per-expiry `riskWindows`, book-wide `worstLossUsd` (null when unbounded
   or unavailable; `note` says which), `unboundedAfter`, and `uncoveredShorts`. Answers about
   max loss or budgets for mixed-expiry books read this, not the final-expiry payoff alone.

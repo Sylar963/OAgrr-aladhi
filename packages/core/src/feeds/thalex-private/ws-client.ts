@@ -217,7 +217,7 @@ export class ThalexPrivateClient {
 
   async previewMargin(request: ThalexMarginPreviewRequest): Promise<ThalexMarginPreview> {
     const params = ThalexMarginPreviewRequestSchema.parse(request);
-    const result = await this.call('private/required_margin_for_order', params);
+    const result = await this.call('private/required_margin_for_order', params, 10_000);
     return ThalexMarginPreviewSchema.parse(result);
   }
 
@@ -405,7 +405,7 @@ export class ThalexPrivateClient {
       'thalex private trade history bootstrap ok',
     );
   }
-  private call(method: string, params: Record<string, unknown>): Promise<unknown> {
+  private call(method: string, params: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     if (!this.client.isConnected) {
       return Promise.reject(new Error('[thalex-private] not connected'));
     }
@@ -413,8 +413,8 @@ export class ThalexPrivateClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`[thalex-private] ${method} timed out`));
-      }, REQUEST_TIMEOUT_MS);
+        reject(Object.assign(new Error(`[thalex-private] ${method} timed out`), { name: 'TimeoutError' }));
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       this.client.send({ jsonrpc: '2.0', id, method, params });
     });

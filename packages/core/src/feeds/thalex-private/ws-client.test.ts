@@ -20,6 +20,7 @@ const thalexWsMockState = vi.hoisted(() => ({
     with_buy: { required_margin: 800 },
     with_sell: { required_margin: 1_100 },
   } as unknown,
+  suppressMarginPreview: false,
 }));
 
 const ACCOUNT_SUMMARY = vi.hoisted(() => ({
@@ -81,6 +82,7 @@ vi.mock('../shared/topic-ws-client.js', () => ({
           ? (msg.params as Record<string, unknown>)
           : {};
       thalexWsMockState.sentPayloads.push({ id, method, params });
+      if (method === 'private/required_margin_for_order' && thalexWsMockState.suppressMarginPreview) return;
 
       const result =
         method === 'public/login'
@@ -125,9 +127,27 @@ afterEach(() => {
   thalexWsMockState.marginPreviewResult = {
     current: { required_margin: 1_000 }, with_buy: { required_margin: 800 }, with_sell: { required_margin: 1_100 },
   };
+  thalexWsMockState.suppressMarginPreview = false;
 });
 
 describe('ThalexPrivateClient', () => {
+  it('bounds preview requests below the MCP deadline and clears timed-out pending calls', async () => {
+    vi.useFakeTimers();
+    const client = new ThalexPrivateClient({ kid: 'kid-1', privateKeyPem: 'pem' });
+    try {
+      await client.start();
+      thalexWsMockState.suppressMarginPreview = true;
+      const pending = expect(client.previewMargin({ instrument_name: 'BTC-27NOV26-75000-P', price: 120, amount: 0.1 })).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await pending;
+      thalexWsMockState.suppressMarginPreview = false;
+      expect(await client.previewMargin({ instrument_name: 'BTC-27NOV26-75000-P', price: 120, amount: 0.1 })).toMatchObject({ current: { required_margin: 1_000 } });
+    } finally {
+      await client.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('uses only the read-only margin RPC and rejects incomplete exchange responses', async () => {
     const client = new ThalexPrivateClient({ kid: 'kid-1', privateKeyPem: 'pem' });
     await client.start();

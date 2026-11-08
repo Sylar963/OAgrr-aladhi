@@ -35,7 +35,8 @@ interface Options {
       venue: string,
       instrument: string,
       timestamp: number,
-    ) => { before: FlowOiTick | null; after: FlowOiTick | null };
+    ) => { before: FlowOiTick | null; after: FlowOiTick | null }
+      | Promise<{ before: FlowOiTick | null; after: FlowOiTick | null }>;
   };
   trades: TradeHistoryReader;
   oi: Pick<OiSnapshotStore, 'enabled' | 'loadWindow'> & Partial<OiSnapshotStore>;
@@ -135,10 +136,14 @@ export class FlowEvidenceService {
       flowOiSymbol(trade.venue, trade.underlying, instrument),
     );
     const fastBrackets = new Map(
-      instruments.map((instrument) => [
-        instrument,
-        this.options.fastOi?.bracket(trade.venue, instrument, trade.timestamp),
-      ]),
+      await Promise.all(instruments.map(async (instrument) => {
+        try {
+          return [instrument, await this.options.fastOi?.bracket(trade.venue, instrument, trade.timestamp)] as const;
+        } catch (error: unknown) {
+          this.options.log?.warn({ err: String(error), venue: trade.venue }, 'fast FLOW OI context unavailable');
+          return [instrument, undefined] as const;
+        }
+      })),
     );
     const hasFastBrackets = instruments.every((instrument) => {
       const fast = fastBrackets.get(instrument);

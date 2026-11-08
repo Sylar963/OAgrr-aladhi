@@ -111,4 +111,19 @@ describe('disposeAdapters', () => {
       ]),
     );
   });
+
+  it('contains persistence backpressure without crashing the feed and rate limits warnings', async () => {
+    const { bootstrapAdapters } = await import('./adapters.js');
+    const recordBatch = vi.fn(() => { throw new Error('queue is full'); });
+    const log = { info: vi.fn(), warn: vi.fn() };
+    await bootstrapAdapters(log as unknown as FastifyBaseLogger, {
+      flowOiRecorder: { recordBatch } as unknown as FlowOiRecorder,
+    });
+    expect(() => {
+      quoteBatches.get('deribit')!([]);
+      quoteBatches.get('deribit')!([]);
+    }).not.toThrow();
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(recordBatch).toHaveBeenCalledTimes(2);
+  });
 });

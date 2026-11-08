@@ -240,13 +240,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     ivHistoryService.dispose();
     await shortStraddleSnapshotStore?.dispose();
     disposeFundedSettlementJob();
-    disposeServiceStores();
     await disposeChainWarmup();
     await disposePortfolioAssistantServices();
     await disposeThesisServices();
     await disposePortfolioServices();
     await disposeSocialServices();
     await disposeAdapters(app.log);
+    await disposeServiceStores();
     await ivHistoryStore.dispose();
     await gexWallStore.dispose();
     await breakEvenStore.dispose();

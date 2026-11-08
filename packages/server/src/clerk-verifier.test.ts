@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+import { errors } from 'jose';
 import { parseFactorVerificationAge, verifyClerkTokenWith } from './clerk-verifier.js';
 
 describe('verifyClerkTokenWith', () => {
+  it('reports safe failure categories without exposing the token or error details', async () => {
+    const onFailure = vi.fn();
+    const verify = vi.fn().mockRejectedValue(new errors.JWTExpired('private error detail', {
+      claim: 'exp', reason: 'check_failed', payload: {},
+    }));
+    expect(await verifyClerkTokenWith('private-token', verify, null, onFailure)).toBeNull();
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('expired');
+  });
+
   it('returns null for an empty token without calling verify', async () => {
     const verify = vi.fn();
     const result = await verifyClerkTokenWith('', verify);

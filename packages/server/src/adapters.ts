@@ -74,13 +74,23 @@ export async function bootstrapAdapters(
   log.info({ feedWorker: useFeedWorkers, feedWorkers: feedWorkers.size }, 'loading markets for all venues');
   if (deps.flowOiRecorder) {
     const recorder = deps.flowOiRecorder;
+    let lastWriteWarning = 0;
+    const recordBatch = (events: readonly QuoteRecorderEvent[]) => {
+      try { recorder.recordBatch(events, deps.writeFlowOiBatch); }
+      catch (error: unknown) {
+        if (Date.now() - lastWriteWarning >= 30_000) {
+          lastWriteWarning = Date.now();
+          log.warn({ err: String(error) }, 'FLOW OI capture unavailable; samples may be missing');
+        }
+      }
+    };
     for (const adapter of adapters) {
       if (adapter.addQuoteBatchRecorder)
         quoteRecorderUnsubs.push(
-          adapter.addQuoteBatchRecorder((events) => recorder.recordBatch(events, deps.writeFlowOiBatch)),
+          adapter.addQuoteBatchRecorder(recordBatch),
         );
       else if (adapter.addQuoteRecorder)
-        quoteRecorderUnsubs.push(adapter.addQuoteRecorder((event) => recorder.record(event)));
+        quoteRecorderUnsubs.push(adapter.addQuoteRecorder((event) => recordBatch([event])));
     }
     if (deps.tradeRuntime) {
       quoteRecorderUnsubs.push(

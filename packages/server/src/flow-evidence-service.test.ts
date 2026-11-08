@@ -227,7 +227,7 @@ describe('FLOW OI context', () => {
         }),
       },
       fastOi: {
-        bracket: () => ({
+        bracket: async () => ({
           before: {
             venue: 'deribit',
             instrument,

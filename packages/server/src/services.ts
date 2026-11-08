@@ -39,7 +39,7 @@ import {
   type LeadsStore,
   type NewsStore,
   MergedTradeStore,
-  FlowOiStore,
+  FlowOiWorkerStore,
   readOiWindow,
   NoopBreakEvenSnapshotStore,
   NoopDealerBookStore,
@@ -302,15 +302,15 @@ export const oiSnapshotStore: OiSnapshotStore = databaseUrl
   ? createOiSnapshotStore(databaseUrl)
   : new NoopOiSnapshotStore();
 
-export const flowOiStore = new FlowOiStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite', {
+export const flowOiStore = new FlowOiWorkerStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite', {
   connectionString: databaseUrl,
   flushIntervalMs: Math.max(86_400_000, Number(process.env['MARKET_DATA_DB_FLUSH_INTERVAL_MS']) || 86_400_000),
   log: logger,
 });
 export const flowOiRecorder = new FlowOiRecorder((tick) => flowOiStore.append(tick));
 const flowOiPruneTimer = setInterval(() => {
-  try { flowOiStore.prune(Date.now() - 7 * 86_400_000); }
-  catch (err: unknown) { logger.warn({ err: String(err) }, 'flow OI retention failed'); }
+  void flowOiStore.prune(Date.now() - 7 * 86_400_000)
+    .catch((err: unknown) => logger.warn({ err: String(err) }, 'flow OI retention failed'));
 }, 3_600_000);
 flowOiPruneTimer.unref();
 
@@ -776,9 +776,8 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   log.info({ ms: Date.now() - start, health: serviceHealth }, 'services bootstrapped');
 }
 
-export function disposeServiceStores(): void {
+export async function disposeServiceStores(): Promise<void> {
   clearInterval(flowOiPruneTimer);
-  void flowOiStore.dispose().catch((err: unknown) => logger.warn({ err: String(err) }, 'flow OI store shutdown failed'));
   if (tradeStreamPollTimer) {
     clearInterval(tradeStreamPollTimer);
     tradeStreamPollTimer = null;
@@ -792,6 +791,7 @@ export function disposeServiceStores(): void {
   breakEvenService.dispose();
   newsService?.dispose();
   disposeSettlementJob();
+  await flowOiStore.dispose();
 }
 
 function createOiSnapshotStore(connectionString: string): OiSnapshotStore {

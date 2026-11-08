@@ -128,6 +128,12 @@ during startup. The full check requires a `hermes.tool.progress` completed event
 an answer without it fails the check. A completed event proves invocation, not
 successful data retrieval: inspect the backend tool outcome for upstream failures.
 
+The message-list route reports a saved `streaming` assistant message as `failed`
+when no live run exists for that authenticated user and thread. This clears the
+stale Thinking state after a restart or failed persistence while preserving any
+checkpointed answer text. Actual live runs remain resumable; saved history is not
+rewritten by this read.
+
 Hermes parks a failing connection after repeated retries, removes its tools, and
 self-probes every 300 seconds. Its chat endpoint can remain healthy meanwhile.
 `keepalive_interval: 30` shortens detection of an idle broken connection; it does
@@ -487,7 +493,7 @@ proposed legs' fees. Tool logs carry a short hash of the ref, never the ref.
 `oggregator_structure_search` reads up to 6 listed expiries (the held legs' expiries first,
 for closing and cover quotes, then the DTE window), strikes within ±20% of each forward plus
 the held strikes, and evaluates at most 600 candidates, nearest the money first, with the same
-engine as `evaluate_structure`, under an 8-second evaluation budget (`stats.stoppedEarly`).
+engine as `evaluate_structure`, under a 3-second evaluation budget (`stats.stoppedEarly`).
 Each chain read has the 5-second reader timeout and runs in parallel, so a search stays well
 inside the profile's 30-second MCP timeout; the reference-book package search on the eval
 fixture chain takes under 1 s (asserted below 5 s in `eval-mcp-server.test.ts`).

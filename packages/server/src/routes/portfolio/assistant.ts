@@ -225,11 +225,20 @@ export async function portfolioAssistantRoutes(app: FastifyInstance) {
         .status(400)
         .send({ error: 'invalid_query', message: 'Message query is invalid.', retryable: false });
     try {
-      return await portfolioAssistantConversationService.loadPortfolioAssistantMessages(
+      const page = await portfolioAssistantConversationService.loadPortfolioAssistantMessages(
         request.user!.id,
         params.data.threadId,
         query.data.cursor,
       );
+      if (portfolioAssistantLiveRuns.find(request.user!.id, params.data.threadId)) return page;
+      return {
+        ...page,
+        messages: page.messages.map((message) =>
+          message.role === 'assistant' && message.status === 'streaming'
+            ? { ...message, status: 'failed' as const }
+            : message,
+        ),
+      };
     } catch (error) {
       return sendAssistantError(reply, error);
     }

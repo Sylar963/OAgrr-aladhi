@@ -57,6 +57,7 @@ vi.mock('../services.js', () => ({
       })),
   },
   blockFlowService: { getHealth: () => [] },
+  flowOiStore: { getStatus: () => ({ workerRunning: true, pendingTicks: 0, rejectedTicks: 0 }) },
 }));
 
 import * as services from '../services.js';
@@ -93,6 +94,11 @@ describe('GET /health', () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
 
     expect(res.statusCode).toBe(200);
+    expect(res.json().persistence.flowOi).toEqual({
+      workerRunning: true,
+      pendingTicks: 0,
+      rejectedTicks: 0,
+    });
     expect(res.json().services).toMatchObject({
       ivHistory: true,
       ivHistoryStorage: {

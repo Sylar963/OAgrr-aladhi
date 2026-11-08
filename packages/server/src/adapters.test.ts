@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FastifyBaseLogger } from 'fastify';
 import type { FlowOiRecorder, QuoteRecorderEvent } from '@oggregator/core';
+import type { FastifyBaseLogger } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const disposedVenues: string[] = [];
 const quoteBatches = new Map<string, (events: readonly QuoteRecorderEvent[]) => void>();
@@ -19,7 +19,9 @@ function makeAdapterClass(venue: string) {
 
     addQuoteBatchRecorder(recorder: (events: readonly QuoteRecorderEvent[]) => void): () => void {
       quoteBatches.set(venue, recorder);
-      return () => { quoteBatches.delete(venue); };
+      return () => {
+        quoteBatches.delete(venue);
+      };
     }
 
     async dispose(): Promise<void> {
@@ -34,12 +36,16 @@ vi.mock('@oggregator/core', () => ({
   registerAdapter,
   FeedWorkerHost: class {
     readonly venues: string[] = [];
-    constructor() { workerVenues.push(this.venues); }
+    constructor() {
+      workerVenues.push(this.venues);
+    }
     adapter(venue: string) {
       this.venues.push(venue);
       return new (makeAdapterClass(venue))();
     }
-    async shutdown() { workerShutdown(); }
+    async shutdown() {
+      workerShutdown();
+    }
   },
   DeribitWsAdapter: makeAdapterClass('deribit'),
   OkxWsAdapter: makeAdapterClass('okx'),
@@ -61,7 +67,9 @@ describe('disposeAdapters', () => {
     workerVenues.length = 0;
     workerShutdown.mockClear();
   });
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('isolates venue ingest in separate workers and shuts down every worker', async () => {
     vi.stubEnv('FEED_WORKER', '1');
@@ -114,7 +122,9 @@ describe('disposeAdapters', () => {
 
   it('contains persistence backpressure without crashing the feed and rate limits warnings', async () => {
     const { bootstrapAdapters } = await import('./adapters.js');
-    const recordBatch = vi.fn(() => { throw new Error('queue is full'); });
+    const recordBatch = vi.fn(() => {
+      throw new Error('queue is full');
+    });
     const log = { info: vi.fn(), warn: vi.fn() };
     await bootstrapAdapters(log as unknown as FastifyBaseLogger, {
       flowOiRecorder: { recordBatch } as unknown as FlowOiRecorder,

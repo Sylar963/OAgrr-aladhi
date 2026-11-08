@@ -1,9 +1,11 @@
 import { Worker } from 'node:worker_threads';
-import { FlowOiTickSchema, type FlowOiTick } from '@oggregator/protocol';
+import { type FlowOiTick, FlowOiTickSchema } from '@oggregator/protocol';
 import type { DeferredLog } from './deferred-persistence.js';
 import {
-  FlowOiBracketSchema, FlowOiWorkerResponseSchema,
-  type FlowOiBracket, type FlowOiWorkerRequest,
+  type FlowOiBracket,
+  FlowOiBracketSchema,
+  type FlowOiWorkerRequest,
+  FlowOiWorkerResponseSchema,
 } from './flow-oi-worker-protocol.js';
 
 interface Options {
@@ -15,15 +17,21 @@ interface Options {
 }
 
 type Request = FlowOiWorkerRequest extends infer T
-  ? T extends FlowOiWorkerRequest ? Omit<T, 'id'> : never : never;
+  ? T extends FlowOiWorkerRequest
+    ? Omit<T, 'id'>
+    : never
+  : never;
 
 export class FlowOiWorkerStore {
   private worker: Worker | null = null;
-  private readonly pending = new Map<number, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }>();
+  private readonly pending = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private readonly listeners = new Set<(tick: FlowOiTick) => void>();
   private ticks: FlowOiTick[] = [];
   private inFlight: Promise<void> | null = null;
@@ -33,26 +41,44 @@ export class FlowOiWorkerStore {
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private closing = false;
   private disposed = false;
+  private committedTicks = 0;
+  private rejectedTicks = 0;
+  private restarts = 0;
+  private lastCommitAt: number | null = null;
 
-  constructor(private readonly path: string, private readonly options: Options = {}) {
+  constructor(
+    private readonly path: string,
+    private readonly options: Options = {},
+  ) {
     this.start();
   }
 
-  append(tick: FlowOiTick): void { this.appendBatch([tick]); }
+  append(tick: FlowOiTick): void {
+    this.appendBatch([tick]);
+  }
 
   appendBatch(ticks: readonly FlowOiTick[]): void {
     if (this.closing) throw new Error('FLOW OI store is closing');
-    if (this.ticks.length + this.batchSize + ticks.length > (this.options.maxPendingTicks ?? 50_000))
+    if (
+      this.ticks.length + this.batchSize + ticks.length >
+      (this.options.maxPendingTicks ?? 50_000)
+    ) {
+      this.rejectedTicks += ticks.length;
       throw new Error('FLOW OI persistence queue is full');
+    }
     this.ticks.push(...ticks);
     this.schedule();
   }
 
   async bracket(venue: string, instrument: string, timestamp: number): Promise<FlowOiBracket> {
-    return FlowOiBracketSchema.parse(await this.request({ method: 'bracket', venue, instrument, timestamp }));
+    return FlowOiBracketSchema.parse(
+      await this.request({ method: 'bracket', venue, instrument, timestamp }),
+    );
   }
 
-  async prune(before: number): Promise<void> { await this.request({ method: 'prune', before }); }
+  async prune(before: number): Promise<void> {
+    await this.request({ method: 'prune', before });
+  }
 
   async flush(): Promise<void> {
     await this.drain();
@@ -61,7 +87,21 @@ export class FlowOiWorkerStore {
 
   subscribe(listener: (tick: FlowOiTick) => void): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  getStatus() {
+    return {
+      workerRunning: this.worker !== null,
+      pendingTicks: this.ticks.length + this.batchSize,
+      maxPendingTicks: this.options.maxPendingTicks ?? 50_000,
+      committedTicks: this.committedTicks,
+      rejectedTicks: this.rejectedTicks,
+      restarts: this.restarts,
+      lastCommitAt: this.lastCommitAt,
+    };
   }
 
   async dispose(): Promise<void> {
@@ -87,8 +127,10 @@ export class FlowOiWorkerStore {
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.writeBatch().catch((error: unknown) => {
-        this.options.log?.warn({ err: String(error), pendingTicks: this.ticks.length },
-          'FLOW OI write failed; retaining batch for retry');
+        this.options.log?.warn(
+          { err: String(error), pendingTicks: this.ticks.length },
+          'FLOW OI write failed; retaining batch for retry',
+        );
         this.schedule(1_000);
       });
     }, delay);
@@ -100,23 +142,35 @@ export class FlowOiWorkerStore {
     if (this.ticks.length === 0) return Promise.resolve();
     const batch = this.ticks.splice(0, 5_000);
     this.batchSize = batch.length;
-    const operation = this.request({ method: 'append', ticks: batch }).then((value) => {
-      const inserted = FlowOiTickSchema.array().parse(value);
-      for (const tick of inserted) for (const listener of this.listeners) {
-        try { listener(tick); }
-        catch (error: unknown) {
-          this.options.log?.warn({ err: String(error) }, 'FLOW OI listener failed');
-        }
-      }
-    }).catch((error: unknown) => {
-      this.ticks.unshift(...batch);
-      throw error;
-    }).finally(() => {
-      this.batchSize = 0;
-      this.inFlight = null;
-    });
+    const operation = this.request({ method: 'append', ticks: batch })
+      .then((value) => {
+        const inserted = FlowOiTickSchema.array().parse(value);
+        this.committedTicks += inserted.length;
+        this.lastCommitAt = Date.now();
+        for (const tick of inserted)
+          for (const listener of this.listeners) {
+            try {
+              listener(tick);
+            } catch (error: unknown) {
+              this.options.log?.warn({ err: String(error) }, 'FLOW OI listener failed');
+            }
+          }
+      })
+      .catch((error: unknown) => {
+        this.ticks.unshift(...batch);
+        throw error;
+      })
+      .finally(() => {
+        this.batchSize = 0;
+        this.inFlight = null;
+      });
     this.inFlight = operation;
-    void operation.then(() => { if (this.ticks.length > 0) this.schedule(); }, () => {});
+    void operation.then(
+      () => {
+        if (this.ticks.length > 0) this.schedule();
+      },
+      () => {},
+    );
     return operation;
   }
 
@@ -143,11 +197,17 @@ export class FlowOiWorkerStore {
   }
 
   private start(): void {
-    const worker = new Worker(this.options.workerUrl ?? new URL('./flow-oi-worker.js', import.meta.url), {
-      workerData: { path: this.path, connectionString: this.options.connectionString,
-        flushIntervalMs: this.options.flushIntervalMs },
-      execArgv: [],
-    });
+    const worker = new Worker(
+      this.options.workerUrl ?? new URL('./flow-oi-worker.js', import.meta.url),
+      {
+        workerData: {
+          path: this.path,
+          connectionString: this.options.connectionString,
+          flushIntervalMs: this.options.flushIntervalMs,
+        },
+        execArgv: [],
+      },
+    );
     this.worker = worker;
     worker.on('message', (raw: unknown) => {
       const parsed = FlowOiWorkerResponseSchema.safeParse(raw);
@@ -175,6 +235,7 @@ export class FlowOiWorkerStore {
       this.options.log?.warn({ code }, 'FLOW OI worker exited; restarting');
       this.restartTimer = setTimeout(() => {
         this.restartTimer = null;
+        this.restarts++;
         this.start();
         if (this.ticks.length > 0) this.schedule();
       }, 1_000);

@@ -1,17 +1,22 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FlowOiWorkerStore } from './flow-oi-worker-store.js';
 import { FlowOiStore } from './flow-oi-store.js';
+import { FlowOiWorkerStore } from './flow-oi-worker-store.js';
 
 const workerUrl = new URL('../dist/flow-oi-worker.js', import.meta.url);
 const tick = {
-  venue: 'deribit' as const, instrument: 'BTC-30OCT26-83000-C', underlying: 'BTC',
-  timestamp: 1000, observedAt: 1001, openInterest: 1196.8, timing: 'sampled' as const,
+  venue: 'deribit' as const,
+  instrument: 'BTC-30OCT26-83000-C',
+  underlying: 'BTC',
+  timestamp: 1000,
+  observedAt: 1001,
+  openInterest: 1196.8,
+  timing: 'sampled' as const,
 };
 const stores: FlowOiWorkerStore[] = [];
 const dirs: string[] = [];
@@ -40,7 +45,8 @@ describe('isolated FLOW OI persistence', () => {
     await store.flush();
     expect(observed).toEqual([1000, 2000]);
     expect(await store.bracket('deribit', tick.instrument, 1500)).toEqual({
-      before: tick, after: { ...tick, timestamp: 2000 },
+      before: tick,
+      after: { ...tick, timestamp: 2000 },
     });
   });
 
@@ -52,8 +58,9 @@ describe('isolated FLOW OI persistence', () => {
     try {
       store.append(tick);
       const persisted = store.flush();
-      expect(await Promise.race([persisted.then(() => 'persisted'), delay(150, 'responsive')]))
-        .toBe('responsive');
+      expect(
+        await Promise.race([persisted.then(() => 'persisted'), delay(150, 'responsive')]),
+      ).toBe('responsive');
       db.exec('ROLLBACK');
       await persisted;
       expect((await store.bracket('deribit', tick.instrument, 1500)).before).toEqual(tick);
@@ -79,7 +86,9 @@ describe('isolated FLOW OI persistence', () => {
       db.exec('DROP TRIGGER reject_oi');
       await store.flush();
       expect(listener).toHaveBeenCalledTimes(2);
-    } finally { db.close(); }
+    } finally {
+      db.close();
+    }
   });
 
   it('drains accepted writes on shutdown without uploading to Postgres', async () => {
@@ -87,8 +96,11 @@ describe('isolated FLOW OI persistence', () => {
     store.append(tick);
     await store.dispose();
     const reopened = new FlowOiStore(path);
-    try { expect(reopened.bracket('deribit', tick.instrument, 1500).before).toEqual(tick); }
-    finally { await reopened.dispose(); }
+    try {
+      expect(reopened.bracket('deribit', tick.instrument, 1500).before).toEqual(tick);
+    } finally {
+      await reopened.dispose();
+    }
   });
 
   it('restarts a crashed worker and retries its unacknowledged batch', async () => {
@@ -96,14 +108,17 @@ describe('isolated FLOW OI persistence', () => {
     dirs.push(dir);
     const entry = join(dir, 'crash-once.mjs');
     const marker = join(dir, 'crashed');
-    writeFileSync(entry, `
+    writeFileSync(
+      entry,
+      `
       import { existsSync, writeFileSync } from 'node:fs';
       import { parentPort } from 'node:worker_threads';
       if (!existsSync(${JSON.stringify(marker)})) {
         writeFileSync(${JSON.stringify(marker)}, '1');
         parentPort.once('message', () => process.exit(1));
       } else { await import(${JSON.stringify(workerUrl.href)}); }
-    `);
+    `,
+    );
     const warn = vi.fn();
     const { store } = setup({ workerUrl: pathToFileURL(entry), log: { warn } });
     const saved = new Promise<void>((resolve) => store.subscribe(() => resolve()));

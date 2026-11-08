@@ -1,24 +1,24 @@
-import type { FastifyBaseLogger } from 'fastify';
 import {
-  registerAdapter,
-  DeribitWsAdapter,
-  OkxWsAdapter,
   BinanceWsAdapter,
   BybitWsAdapter,
-  DeriveWsAdapter,
   CoincallWsAdapter,
-  ThalexWsAdapter,
-  GateioWsAdapter,
-  ParadexWsAdapter,
+  DeribitWsAdapter,
+  DeriveWsAdapter,
   FeedWorkerHost,
-  type MarkHistoryBuffer,
-  type OptionVenueAdapter,
-  type QuoteRecorderEvent,
   type FlowOiRecorder,
-  type TradeRuntime,
-  type StreamHandlers,
+  GateioWsAdapter,
+  type MarkHistoryBuffer,
+  OkxWsAdapter,
+  type OptionVenueAdapter,
+  ParadexWsAdapter,
   parseTradeInstrument,
+  type QuoteRecorderEvent,
+  registerAdapter,
+  type StreamHandlers,
+  ThalexWsAdapter,
+  type TradeRuntime,
 } from '@oggregator/core';
+import type { FastifyBaseLogger } from 'fastify';
 
 type ChainAdapter = OptionVenueAdapter & {
   addQuoteRecorder?: (recorder: (event: QuoteRecorderEvent) => void) => () => void;
@@ -28,7 +28,10 @@ type ChainAdapter = OptionVenueAdapter & {
 const useFeedWorkers = process.env['FEED_WORKER'] === '1';
 const feedWorkers = new Map<OptionVenueAdapter['venue'], FeedWorkerHost>();
 
-function chainAdapter(venue: OptionVenueAdapter['venue'], create: () => ChainAdapter): ChainAdapter {
+function chainAdapter(
+  venue: OptionVenueAdapter['venue'],
+  create: () => ChainAdapter,
+): ChainAdapter {
   if (!useFeedWorkers) return create();
   const worker = new FeedWorkerHost();
   feedWorkers.set(venue, worker);
@@ -67,17 +70,18 @@ export interface AdapterBootstrapDeps {
   tradeRuntime?: TradeRuntime;
 }
 
-export async function bootstrapAdapters(
-  log: FastifyBaseLogger,
-  deps: AdapterBootstrapDeps = {},
-) {
-  log.info({ feedWorker: useFeedWorkers, feedWorkers: feedWorkers.size }, 'loading markets for all venues');
+export async function bootstrapAdapters(log: FastifyBaseLogger, deps: AdapterBootstrapDeps = {}) {
+  log.info(
+    { feedWorker: useFeedWorkers, feedWorkers: feedWorkers.size },
+    'loading markets for all venues',
+  );
   if (deps.flowOiRecorder) {
     const recorder = deps.flowOiRecorder;
     let lastWriteWarning = 0;
     const recordBatch = (events: readonly QuoteRecorderEvent[]) => {
-      try { recorder.recordBatch(events, deps.writeFlowOiBatch); }
-      catch (error: unknown) {
+      try {
+        recorder.recordBatch(events, deps.writeFlowOiBatch);
+      } catch (error: unknown) {
         if (Date.now() - lastWriteWarning >= 30_000) {
           lastWriteWarning = Date.now();
           log.warn({ err: String(error) }, 'FLOW OI capture unavailable; samples may be missing');
@@ -86,9 +90,7 @@ export async function bootstrapAdapters(
     };
     for (const adapter of adapters) {
       if (adapter.addQuoteBatchRecorder)
-        quoteRecorderUnsubs.push(
-          adapter.addQuoteBatchRecorder(recordBatch),
-        );
+        quoteRecorderUnsubs.push(adapter.addQuoteBatchRecorder(recordBatch));
       else if (adapter.addQuoteRecorder)
         quoteRecorderUnsubs.push(adapter.addQuoteRecorder((event) => recordBatch([event])));
     }
@@ -104,11 +106,16 @@ export async function bootstrapAdapters(
           const existing = flowOiSubscriptions.get(key);
           if (existing?.timer) clearTimeout(existing.timer);
           const entry = existing ?? {
-            release: adapter.subscribe({ underlying: trade.underlying, expiry }, flowOiHandlers).catch((error: unknown) => {
-              flowOiSubscriptions.delete(key);
-              log.warn({ err: String(error), venue: trade.venue, underlying: trade.underlying, expiry }, 'FLOW OI subscription failed');
-              return async () => {};
-            }),
+            release: adapter
+              .subscribe({ underlying: trade.underlying, expiry }, flowOiHandlers)
+              .catch((error: unknown) => {
+                flowOiSubscriptions.delete(key);
+                log.warn(
+                  { err: String(error), venue: trade.venue, underlying: trade.underlying, expiry },
+                  'FLOW OI subscription failed',
+                );
+                return async () => {};
+              }),
             timer: null,
           };
           entry.timer = setTimeout(() => {
@@ -156,13 +163,7 @@ export async function bootstrapAdapters(
     const TRADE_BUFFER_VENUES = new Set(['derive', 'coincall', 'gateio']);
     tradeRuntimeRecorder = deps.tradeRuntime.subscribe((trade) => {
       if (!TRADE_BUFFER_VENUES.has(trade.venue)) return;
-      buffer.recordTrade(
-        trade.venue,
-        trade.instrument,
-        trade.timestamp,
-        trade.price,
-        trade.size,
-      );
+      buffer.recordTrade(trade.venue, trade.instrument, trade.timestamp, trade.price, trade.size);
     });
   }
 

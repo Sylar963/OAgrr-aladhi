@@ -1,13 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
 import { errors } from 'jose';
+import { describe, expect, it, vi } from 'vitest';
 import { parseFactorVerificationAge, verifyClerkTokenWith } from './clerk-verifier.js';
 
 describe('verifyClerkTokenWith', () => {
   it('reports safe failure categories without exposing the token or error details', async () => {
     const onFailure = vi.fn();
-    const verify = vi.fn().mockRejectedValue(new errors.JWTExpired('private error detail', {
-      claim: 'exp', reason: 'check_failed', payload: {},
-    }));
+    const verify = vi
+      .fn()
+      .mockRejectedValue(new errors.JWTExpired('private error detail', {}, 'exp', 'check_failed'));
     expect(await verifyClerkTokenWith('private-token', verify, null, onFailure)).toBeNull();
     expect(onFailure).toHaveBeenCalledExactlyOnceWith('expired');
   });

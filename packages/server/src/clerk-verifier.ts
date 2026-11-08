@@ -1,5 +1,11 @@
-import { createRemoteJWKSet, errors, type JWTPayload, type JWTVerifyOptions, jwtVerify } from 'jose';
 import { logger } from '@oggregator/core';
+import {
+  createRemoteJWKSet,
+  errors,
+  type JWTPayload,
+  type JWTVerifyOptions,
+  jwtVerify,
+} from 'jose';
 import { allowedOrigins } from './security-configuration.js';
 
 /** Minutes since each factor was last verified (Clerk `fva`); null = never or no such factor. */
@@ -16,7 +22,13 @@ export interface ClerkIdentity {
 }
 
 type VerifyFn = (token: string) => Promise<{ payload: JWTPayload }>;
-type FailureReason = 'expired' | 'invalid_signature' | 'jwks_timeout' | 'invalid_token' | 'missing_subject' | 'unauthorized_origin';
+type FailureReason =
+  | 'expired'
+  | 'invalid_signature'
+  | 'jwks_timeout'
+  | 'invalid_token'
+  | 'missing_subject'
+  | 'unauthorized_origin';
 
 function failureReason(error: unknown): FailureReason {
   if (error instanceof errors.JWTExpired) return 'expired';

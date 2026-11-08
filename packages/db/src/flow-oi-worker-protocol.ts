@@ -1,5 +1,7 @@
-import { FlowOiTickSchema } from '@oggregator/protocol';
-import { z } from 'zod/v3';
+import { type FlowOiTick, FlowOiTickSchema } from '@oggregator/protocol';
+import { z } from 'zod';
+
+const tickSchema = z.custom<FlowOiTick>((value) => FlowOiTickSchema.safeParse(value).success);
 
 export const FlowOiWorkerOptionsSchema = z.object({
   path: z.string(),
@@ -8,10 +10,13 @@ export const FlowOiWorkerOptionsSchema = z.object({
 });
 
 export const FlowOiWorkerRequestSchema = z.discriminatedUnion('method', [
-  z.object({ id: z.number(), method: z.literal('append'), ticks: z.array(FlowOiTickSchema) }),
+  z.object({ id: z.number(), method: z.literal('append'), ticks: z.array(tickSchema) }),
   z.object({
-    id: z.number(), method: z.literal('bracket'), venue: z.string(),
-    instrument: z.string(), timestamp: z.number(),
+    id: z.number(),
+    method: z.literal('bracket'),
+    venue: z.string(),
+    instrument: z.string(),
+    timestamp: z.number(),
   }),
   z.object({ id: z.number(), method: z.literal('prune'), before: z.number() }),
   z.object({ id: z.number(), method: z.literal('flush') }),
@@ -25,8 +30,8 @@ export const FlowOiWorkerResponseSchema = z.discriminatedUnion('type', [
 ]);
 
 export const FlowOiBracketSchema = z.object({
-  before: FlowOiTickSchema.nullable(),
-  after: FlowOiTickSchema.nullable(),
+  before: tickSchema.nullable(),
+  after: tickSchema.nullable(),
 });
 
 export type FlowOiBracket = z.infer<typeof FlowOiBracketSchema>;

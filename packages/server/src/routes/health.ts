@@ -6,6 +6,7 @@ import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
 import { getRuntimeMetricsSnapshot } from '../runtime-metrics.js';
 import {
   blockFlowService,
+  flowOiStore,
   flowService,
   getIvHistoryStorageStats,
   isBlockFlowReady,
@@ -36,6 +37,7 @@ export async function healthRoute(app: FastifyInstance) {
         ivHistoryStorage,
       },
       runtime: getRuntimeMetricsSnapshot(),
+      persistence: { flowOi: flowOiStore.getStatus() },
       feeds: getFeedHealthSnapshot({
         spot: spotService,
         flow: flowService,

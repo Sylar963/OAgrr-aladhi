@@ -298,6 +298,7 @@ export const PORTFOLIO_ASSISTANT_TOOL_HINTS: readonly string[] = [
   'oggregator_evaluate_structure and oggregator_structure_search accept portfolioRef; no other tool does.',
   'oggregator_evaluate_structure with portfolioRef: price proposed legs together with this book (cost, fees, worst loss per expiry window, budget fit). Use it before quoting any combined max loss.',
   'oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts. When this book is unbounded or over the budget, bearish, bullish and long_vol results are packages: a repair of the book plus the view trade.',
+  'oggregator_preview_thalex_margin with portfolioRef: Thalex mainnet required margin with a hypothetical order inserted (1-4 option legs). This is distinct from expiry payoff and guaranteed post-fill margin relief.',
 ];
 
 function isLedgerVenue(source: PortfolioSource): source is ExchangePortfolioVenue {

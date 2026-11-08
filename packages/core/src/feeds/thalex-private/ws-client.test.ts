@@ -15,6 +15,11 @@ const thalexWsMockState = vi.hoisted(() => ({
   ] as Array<Record<string, unknown>>,
   tradeHistoryResult: { trades: [] as Array<Record<string, unknown>> },
   dailyMarksResult: { daily_marks: [] as Array<Record<string, unknown>>, bookmark: null },
+  marginPreviewResult: {
+    current: { required_margin: 1_000 },
+    with_buy: { required_margin: 800 },
+    with_sell: { required_margin: 1_100 },
+  } as unknown,
 }));
 
 const ACCOUNT_SUMMARY = vi.hoisted(() => ({
@@ -88,6 +93,8 @@ vi.mock('../shared/topic-ws-client.js', () => ({
                 ? thalexWsMockState.tradeHistoryResult
                 : method === 'private/account_summary'
                   ? ACCOUNT_SUMMARY
+                  : method === 'private/required_margin_for_order'
+                    ? thalexWsMockState.marginPreviewResult
                   : method === 'private/daily_mark_history'
                     ? thalexWsMockState.dailyMarksResult
                     : null;
@@ -115,9 +122,28 @@ afterEach(() => {
   ];
   thalexWsMockState.tradeHistoryResult = { trades: [] };
   thalexWsMockState.dailyMarksResult = { daily_marks: [], bookmark: null };
+  thalexWsMockState.marginPreviewResult = {
+    current: { required_margin: 1_000 }, with_buy: { required_margin: 800 }, with_sell: { required_margin: 1_100 },
+  };
 });
 
 describe('ThalexPrivateClient', () => {
+  it('uses only the read-only margin RPC and rejects incomplete exchange responses', async () => {
+    const client = new ThalexPrivateClient({ kid: 'kid-1', privateKeyPem: 'pem' });
+    await client.start();
+    thalexWsMockState.sentPayloads.length = 0;
+    const order = { instrument_name: 'BTC-27NOV26-75000-P', price: 120, amount: 0.1 };
+    try {
+      expect(await client.previewMargin(order)).toMatchObject({ with_buy: { required_margin: 800 } });
+      expect(thalexWsMockState.sentPayloads.map((payload) => payload.method)).toEqual(['private/required_margin_for_order']);
+      expect(thalexWsMockState.sentPayloads[0]?.params).toEqual(order);
+      thalexWsMockState.marginPreviewResult = { current: { required_margin: 0 } };
+      await expect(client.previewMargin(order)).rejects.toThrow();
+    } finally {
+      await client.dispose();
+    }
+  });
+
   it('bootstraps positions from private/portfolio after login and subscribe', async () => {
     const client = new ThalexPrivateClient({
       kid: 'kid-1',

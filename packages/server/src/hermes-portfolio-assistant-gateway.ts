@@ -57,8 +57,16 @@ const CompletionChunkSchema = z
   })
   .passthrough();
 
+const ToolProgressSchema = z.object({
+  tool: z.string(),
+  toolCallId: z.string(),
+  status: z.enum(['running', 'completed']),
+});
+export type HermesToolProgress = z.infer<typeof ToolProgressSchema>;
+
 async function* parseUpstreamEvents(
   stream: ReadableStream<Uint8Array>,
+  onToolProgress?: (event: HermesToolProgress) => void,
 ): AsyncIterable<PortfolioAssistantModelEvent> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -76,6 +84,13 @@ async function* parseUpstreamEvents(
           .map((line) => line.slice(5).trimStart())
           .join('\n');
         if (!data || data === '[DONE]') continue;
+        const eventName = frame.split(/\r?\n/).find((line) => line.startsWith('event:'))?.slice(6).trim();
+        if (eventName === 'hermes.tool.progress') {
+          const progress = ToolProgressSchema.safeParse(JSON.parse(data));
+          if (progress.success) onToolProgress?.(progress.data);
+          continue;
+        }
+        if (eventName && eventName !== 'message') continue;
         const parsedJson: unknown = JSON.parse(data);
         const parsed = CompletionChunkSchema.safeParse(parsedJson);
         if (!parsed.success) {
@@ -128,6 +143,7 @@ export class HermesPortfolioAssistantGateway implements PortfolioAssistantModelG
     private readonly configuration: PortfolioAssistantConfiguration,
     private readonly fetchImplementation: typeof fetch = fetch,
     private readonly createSessionScope: () => string = createHermesSessionScope,
+    private readonly onToolProgress?: (event: HermesToolProgress) => void,
   ) {}
 
   async checkPortfolioAssistantModelAvailability(): Promise<'available' | 'unavailable'> {
@@ -220,7 +236,7 @@ export class HermesPortfolioAssistantGateway implements PortfolioAssistantModelG
         true,
       );
     try {
-      yield* parseUpstreamEvents(response.body);
+      yield* parseUpstreamEvents(response.body, this.onToolProgress);
     } catch (error) {
       if (signal.aborted)
         throw new PortfolioAssistantServiceError(

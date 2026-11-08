@@ -21,6 +21,18 @@ function byteStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('Hermes stream parser', () => {
+  it('observes completed tool calls from split Hermes lifecycle events without treating them as answer text', async () => {
+    const progress: unknown[] = [];
+    const events = [];
+    for await (const event of parseUpstreamEvents(byteStream([
+      'event: hermes.tool.progress\ndata: {"tool":"mcp__oggregator__oggregator_list_underlyings","toolCallId":"call-1","sta',
+      'tus":"completed"}\n\nevent: hermes.status\ndata: {"state":"working"}\n\ndata: {"choices":[{"delta":{"content":"5 symbols"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ]), (event) => progress.push(event))) events.push(event);
+    expect(progress).toEqual([{ tool: 'mcp__oggregator__oggregator_list_underlyings', toolCallId: 'call-1', status: 'completed' }]);
+    expect(events).toEqual([{ type: 'text_delta', delta: '5 symbols' }]);
+  });
+
   it('parses split deltas, usage, heartbeats, and DONE', async () => {
     const events = [];
     for await (const event of parseUpstreamEvents(

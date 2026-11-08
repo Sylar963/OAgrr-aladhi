@@ -1,4 +1,4 @@
-import { logger } from '@oggregator/core';
+import { logger, type ThalexMarginPreviewRequest } from '@oggregator/core';
 import {
   NoopPortfolioAssistantFeedbackStore,
   NoopPortfolioAssistantStore,
@@ -85,6 +85,14 @@ async function resolveHeldLegs(scope: PortfolioRefScope) {
   return getOrCreatePortfolioRuntime(scope.accountId, scope.source, underlying).legsWithMarks();
 }
 
+async function previewThalexMargin(scope: PortfolioRefScope, request: ThalexMarginPreviewRequest) {
+  if (
+    scope.source !== 'thalex' || scope.network !== 'mainnet' ||
+    thalexPositionStore.environment(scope.accountId) !== 'prod'
+  ) return null;
+  return thalexPositionStore.previewMargin(scope.accountId, request);
+}
+
 const gateway = new HermesPortfolioAssistantGateway(configuration);
 export const portfolioAssistantAccessService = new PortfolioAssistantAccessService(
   store,
@@ -141,6 +149,7 @@ export const portfolioAssistantConversationService = new PortfolioAssistantConve
   new StructureSearchPrefetch(assistantMarketDataReader, {
     refs: portfolioRefStore,
     resolveHeldLegs,
+    previewThalexMargin,
   }),
 );
 
@@ -267,7 +276,7 @@ export async function startAssistantMcpFromEnv(log: FastifyBaseLogger): Promise<
       handler: createAssistantMcpHandler({
         reader: assistantMarketDataReader,
         library: optionsLibrary,
-        portfolio: { refs: portfolioRefStore, resolveHeldLegs },
+        portfolio: { refs: portfolioRefStore, resolveHeldLegs, previewThalexMargin },
         runs: assistantRuns,
         log,
       }),

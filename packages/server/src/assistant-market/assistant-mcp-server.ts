@@ -17,6 +17,7 @@ import {
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import type { OptionsLibrary } from './options-library.js';
 import { runStructureSearchTool, StructureSearchToolInputSchema } from './structure-search-tool.js';
+import { runThalexMarginPreviewTool, ThalexMarginPreviewToolInputSchema } from './thalex-margin-preview-tool.js';
 import type { StructureToolPortfolioAccess } from './structure-tool-support.js';
 import { type ToolErrorCode, type ToolErrorPayload, toolErrorPayload } from './tool-errors.js';
 
@@ -380,6 +381,13 @@ export function buildAssistantMcpTools(
         'Find trades that fit a risk budget. Use for questions like "find a bearish trade within $X total risk", bullish, long-vol, or "hedge my short calls". Enumerates long options and debit verticals (bearish/bullish), long straddles and strangles (long_vol), or buy-backs and same-expiry further-OTM covers of each uncovered held short (hedge_held_shorts) across listed expiries in the DTE window. Prices every leg at live executable quotes (buy at ask, sell at bid, venue or conservative default fees), evaluates each against the held book via portfolioRef, keeps candidates whose book-wide worst loss fits maxTotalRiskUsd, and ranks them by P&L at the target move and horizon per dollar of worst loss added. When the held book is unbounded or already over maxTotalRiskUsd, bearish, bullish and long_vol candidates are packages: the best repair of the book (cover, buy-back or close, chosen by book-wide worst loss) plus the view structure, evaluated together with components labelled repair and view. When nothing fits, nearestInfeasible gives the closest candidates and the dollar shortfall, and repairOnly the repair alone. An unknown or expired portfolioRef searches without the book and says so in heldBook. Verify the chosen candidate with oggregator_evaluate_structure before recommending it. No orders.',
       input: StructureSearchToolInputSchema,
       run: async (args) => unwrap(await runStructureSearchTool(reader, portfolio, args, now())),
+    }),
+    tool({
+      name: 'oggregator_preview_thalex_margin',
+      description:
+        'Read-only Thalex margin preview for 1-4 proposed option legs against the connected mainnet account. Requires portfolioRef from the latest context. Uses only Thalex bid/ask quotes and calls private/required_margin_for_order; no orders are placed. Returns current and hypothetical order-insertion required margin, not guaranteed post-fill margin relief or maximum expiry loss. Call evaluate_structure separately for book-wide payoff. Packages are subject to Thalex combination constraints.',
+      input: ThalexMarginPreviewToolInputSchema,
+      run: async (args) => unwrap(await runThalexMarginPreviewTool(reader, portfolio, args, now)),
     }),
     tool({
       name: 'search_options_library',

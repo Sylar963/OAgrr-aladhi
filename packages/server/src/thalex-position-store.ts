@@ -393,7 +393,9 @@ export class ThalexPositionStore implements PositionStore {
     request: ThalexMarginPreviewRequest,
   ): Promise<ThalexMarginPreview | null> {
     const client = this.clients.get(accountId);
-    return client == null ? null : client.previewMargin(request);
+    if (client == null) return null;
+    const preview = await client.previewMargin(request);
+    return this.clients.get(accountId) === client ? preview : null;
   }
 
   isConnected(accountId: string): boolean {

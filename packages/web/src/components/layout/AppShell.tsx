@@ -47,7 +47,6 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
-  const hasCustomTabs = useAppStore((s) => s.customTabs.length > 0);
 
   const showToolbar = isMobile && WIDGET_TRAITS[activeTab].mobileToolbar;
 
@@ -116,7 +115,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setHelpOpen(true)}
         />
-        {!isMobile && hasCustomTabs && (
+        {!isMobile && (
           <Suspense fallback={null}>
             <WorkspaceBar />
           </Suspense>

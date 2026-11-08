@@ -10,17 +10,16 @@ import 'dockview-react/dist/styles/dockview.css';
 import './dockview-theme.css';
 import { readLayout, removeLayout, writeLayout } from '@lib/custom-tabs';
 import { defineMessages, useT } from '@lib/i18n';
-import { isWidgetKind, type WidgetKind } from '@lib/tabs';
-import { useAppStore } from '@stores/app-store';
-import { useCallback, useEffect, useState } from 'react';
+import { builtinTabFromLayoutId, PRESETS, type WidgetInstance } from '@lib/workspace-layouts';
+import { selectLayoutPanels, useAppStore } from '@stores/app-store';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './DockHost.module.css';
-import { useWidgetCatalog } from './widget-catalog';
 import WidgetFrame from './WidgetFrame';
+import { useWidgetCatalog } from './widget-catalog';
 
 const LAYOUT_SAVE_DELAY_MS = 300;
 const GROUP_CONSTRAINTS = { minimumWidth: 320, minimumHeight: 200 };
-const NO_KINDS: WidgetKind[] = [];
 
 const messages = defineMessages(
   { empty: 'Add a widget to start this tab.' },
@@ -29,7 +28,7 @@ const messages = defineMessages(
 
 // Dockview's default renderer only detaches a hidden panel's DOM and leaves its React tree mounted,
 // which would keep the widget's sockets and timers running. Rendering nothing unmounts them.
-export function WidgetPanel({ api, params }: IDockviewPanelProps<{ kind: WidgetKind }>) {
+export function WidgetPanel({ api, params }: IDockviewPanelProps<WidgetInstance>) {
   const catalog = useWidgetCatalog();
   const [visible, setVisible] = useState(api.isVisible);
 
@@ -45,6 +44,7 @@ export function WidgetPanel({ api, params }: IDockviewPanelProps<{ kind: WidgetK
       <WidgetFrame
         kind={params.kind}
         label={catalog.find((widget) => widget.kind === params.kind)?.label}
+        underlying={params.underlying}
       />
     </div>
   );
@@ -57,67 +57,87 @@ function EmptyTabHint() {
 
 const COMPONENTS = { widget: WidgetPanel };
 
-function panelKinds(api: DockviewApi): WidgetKind[] {
-  return api.panels.map((panel) => panel.id).filter(isWidgetKind);
-}
-
-export default function DockHost({ tabId }: { tabId: string }) {
-  const kinds = useAppStore(
-    (s) => s.customTabs.find((tab) => tab.id === tabId)?.kinds ?? NO_KINDS,
-  );
+export default function DockHost({ layoutId }: { layoutId: string }) {
+  const panels = useAppStore((s) => selectLayoutPanels(s, layoutId));
+  const revision = useAppStore((s) => s.layoutRevision);
   const focusRequest = useAppStore((s) => s.widgetFocusRequest);
   const clearWidgetFocus = useAppStore((s) => s.clearWidgetFocus);
-  const setCustomTabKinds = useAppStore((s) => s.setCustomTabKinds);
+  const setLayoutPanels = useAppStore((s) => s.setLayoutPanels);
   const catalog = useWidgetCatalog();
   const [api, setApi] = useState<DockviewApi | null>(null);
+  const [restored, setRestored] = useState(false);
+  const initialized = useRef(false);
 
   const onReady = useCallback(
     (event: DockviewReadyEvent) => {
-      const saved = readLayout(tabId);
+      const saved = readLayout(layoutId);
       if (saved != null) {
         try {
-          event.api.fromJSON(saved as SerializedDockview);
+          const layout = saved as SerializedDockview;
+          const expected = selectLayoutPanels(useAppStore.getState(), layoutId);
+          const valid = Object.entries(layout.panels).every(([id, panel]) =>
+            expected.some(
+              (entry) =>
+                entry.id === id &&
+                entry.kind === panel.params?.kind &&
+                entry.underlying === panel.params?.underlying,
+            ),
+          );
+          if (!valid) throw new Error('Invalid layout panels');
+          event.api.fromJSON(layout);
+          setRestored(true);
         } catch {
           event.api.clear();
-          removeLayout(tabId);
+          removeLayout(layoutId);
         }
       }
       setApi(event.api);
     },
-    [tabId],
+    [layoutId],
   );
 
   useEffect(() => {
     if (api == null) return;
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     let syncTimer: ReturnType<typeof setTimeout> | null = null;
+    const canSave = () => {
+      const s = useAppStore.getState();
+      return (
+        s.layoutRevision === revision &&
+        (builtinTabFromLayoutId(layoutId) != null ||
+          s.customTabs.some((tab) => tab.id === layoutId))
+      );
+    };
+    const syncPanels = () => {
+      if (!canSave()) return;
+      const current = selectLayoutPanels(useAppStore.getState(), layoutId);
+      const next = current.filter((panel) => api.getPanel(panel.id) != null);
+      if (next.length !== current.length) setLayoutPanels(layoutId, next);
+    };
+    const save = () => {
+      if (!canSave()) return;
+      syncPanels();
+      writeLayout(layoutId, api.toJSON());
+    };
 
-    // Resize drags fire this continuously; serializing belongs after the drag, never during it.
     const layoutChange = api.onDidLayoutChange(() => {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        writeLayout(tabId, api.toJSON());
+        save();
       }, LAYOUT_SAVE_DELAY_MS);
     });
-
-    // Moving a panel between groups fires remove then add, so read the result once they settle.
-    const syncKinds = () => {
+    const onPanelsChanged = () => {
       if (syncTimer) clearTimeout(syncTimer);
       syncTimer = setTimeout(() => {
         syncTimer = null;
-        const next = panelKinds(api);
-        const current = useAppStore.getState().customTabs.find((tab) => tab.id === tabId)?.kinds;
-        if (current == null) return;
-        const same =
-          current.length === next.length && current.every((kind) => next.includes(kind));
-        if (!same) setCustomTabKinds(tabId, next);
+        syncPanels();
       }, 0);
     };
     for (const group of api.groups) group.api.setConstraints(GROUP_CONSTRAINTS);
     const groupAdded = api.onDidAddGroup((group) => group.api.setConstraints(GROUP_CONSTRAINTS));
-    const added = api.onDidAddPanel(syncKinds);
-    const removed = api.onDidRemovePanel(syncKinds);
+    const added = api.onDidAddPanel(onPanelsChanged);
+    const removed = api.onDidRemovePanel(onPanelsChanged);
 
     return () => {
       layoutChange.dispose();
@@ -127,28 +147,60 @@ export default function DockHost({ tabId }: { tabId: string }) {
       if (syncTimer) clearTimeout(syncTimer);
       if (saveTimer) {
         clearTimeout(saveTimer);
-        // Closing a tab unmounts this after deleting its layout, which must stay deleted.
-        const stillOpen = useAppStore.getState().customTabs.some((tab) => tab.id === tabId);
-        if (stillOpen) writeLayout(tabId, api.toJSON());
+        save();
       }
     };
-  }, [api, tabId, setCustomTabKinds]);
+  }, [api, layoutId, revision, setLayoutPanels]);
 
   useEffect(() => {
     if (api == null) return;
     for (const panel of api.panels) {
-      if (!kinds.includes(panel.id as WidgetKind)) panel.api.close();
+      if (!panels.some((entry) => entry.id === panel.id)) panel.api.close();
     }
-    for (const kind of kinds) {
-      const title = catalog.find((widget) => widget.kind === kind)?.label ?? kind;
-      const existing = api.getPanel(kind);
+    const builtin = builtinTabFromLayoutId(layoutId);
+    const preset = builtin ? PRESETS[builtin] : [];
+    const groupAnchors = new Map<number, string>();
+    for (const panel of panels) {
+      const label = catalog.find((widget) => widget.kind === panel.kind)?.label ?? panel.kind;
+      const title = panel.underlying ? `${panel.underlying} · ${label}` : label;
+      const group = preset.find((entry) => entry.id === panel.id)?.group ?? 0;
+      const anchor = groupAnchors.get(group);
+      groupAnchors.set(group, anchor ?? panel.id);
+      const existing = api.getPanel(panel.id);
       if (existing) {
         if (existing.title !== title) existing.api.setTitle(title);
         continue;
       }
-      api.addPanel({ id: kind, component: 'widget', title, params: { kind } });
+      const usePreset = !initialized.current && !restored && builtin != null;
+      const reference = anchor ?? groupAnchors.get(group === 3 ? 1 : 0);
+      api.addPanel({
+        id: panel.id,
+        component: 'widget',
+        title,
+        params: panel,
+        inactive: !initialized.current && anchor != null,
+        ...(usePreset && reference && reference !== panel.id
+          ? {
+              position: {
+                referencePanel: reference,
+                direction: anchor
+                  ? 'within'
+                  : builtin === 'chain'
+                    ? group === 1
+                      ? 'above'
+                      : 'left'
+                    : group === 1
+                      ? 'right'
+                      : 'below',
+              },
+              ...(builtin === 'chain' && group === 1 ? { initialHeight: 200 } : {}),
+              ...(builtin === 'chain' && group === 2 ? { initialWidth: 320 } : {}),
+            }
+          : {}),
+      });
     }
-  }, [api, kinds, catalog]);
+    initialized.current = true;
+  }, [api, panels, catalog, layoutId, restored]);
 
   useEffect(() => {
     if (api == null || focusRequest == null) return;

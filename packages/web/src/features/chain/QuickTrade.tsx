@@ -1,10 +1,11 @@
-import type { EnrichedSide } from '@shared/enriched';
 import { VenueCard, type VenueCardDetail } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
-import { selectIsWidgetOpen, useAppStore } from '@stores/app-store';
+import { useIsMobile } from '@hooks/useIsMobile';
 import { defineMessages, useT } from '@lib/i18n';
-import { isActionableQuote } from './quote-selection';
+import type { EnrichedSide } from '@shared/enriched';
+import { selectIsWidgetOpen, useAppStore } from '@stores/app-store';
 import styles from './QuickTrade.module.css';
+import { isActionableQuote } from './quote-selection';
 
 const messages = defineMessages(
   {
@@ -56,7 +57,8 @@ export default function QuickTrade({
   const addLeg = useStrategyStore((s) => s.addLeg);
   const navigateToWidget = useAppStore((s) => s.navigateToWidget);
   const setTradfiPage = useAppStore((s) => s.setTradfiPage);
-  const builderOpen = useAppStore((s) => selectIsWidgetOpen(s, 'architect'));
+  const isMobile = useIsMobile();
+  const builderOpen = useAppStore((s) => selectIsWidgetOpen(s, 'architect', !isMobile));
   const tradfiPage = useAppStore((s) => s.tradfiPage);
 
   const venues = Object.entries(side.venues)
@@ -108,8 +110,7 @@ export default function QuickTrade({
       return best;
     }, null)?.id ?? null;
 
-  const isOnBuilder =
-    builderMode === 'tradfi' ? tradfiPage === 'builder' : builderOpen;
+  const isOnBuilder = builderMode === 'tradfi' ? tradfiPage === 'builder' : builderOpen;
 
   function handleAdd(v: (typeof venues)[0]) {
     addLeg(
@@ -188,9 +189,7 @@ export default function QuickTrade({
             />
           );
         })}
-        {venues.length === 0 && (
-          <div className={styles.empty}>{t('noQuotes')}</div>
-        )}
+        {venues.length === 0 && <div className={styles.empty}>{t('noQuotes')}</div>}
       </div>
     </div>
   );

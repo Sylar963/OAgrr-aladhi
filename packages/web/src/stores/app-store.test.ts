@@ -1,7 +1,13 @@
+import {
+  MAX_CUSTOM_TABS,
+  MAX_WIDGETS_PER_TAB,
+  readCustomTabs,
+  writeLayout,
+} from '@lib/custom-tabs';
+import { TABS } from '@lib/tabs';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { MAX_CUSTOM_TABS, MAX_WIDGETS_PER_TAB, readCustomTabs, writeLayout } from '@lib/custom-tabs';
-import { TABS } from '@lib/tabs';
+import { setTestMarket } from '@/test/market-state';
 import {
   MAIN_MARKET_ID,
   selectActiveCustomTab,
@@ -10,7 +16,6 @@ import {
   useAppStore,
   useMarket,
 } from './app-store';
-import { setTestMarket } from '@/test/market-state';
 
 describe('app-store', () => {
   beforeEach(() => {
@@ -268,11 +273,11 @@ describe('custom tabs', () => {
   it('adds each widget kind once, up to the limit', () => {
     openNewTab();
     const { addWidget } = useAppStore.getState();
-    addWidget('chain');
-    addWidget('chain');
+    addWidget({ id: 'chain', kind: 'chain' });
+    addWidget({ id: 'chain', kind: 'chain' });
     expect(selectActiveCustomTab(useAppStore.getState())?.kinds).toEqual(['chain']);
 
-    for (const kind of TABS.map((tab) => tab.id)) addWidget(kind);
+    for (const kind of TABS.map((tab) => tab.id)) addWidget({ id: kind, kind });
     expect(selectActiveCustomTab(useAppStore.getState())?.kinds).toHaveLength(MAX_WIDGETS_PER_TAB);
   });
 
@@ -308,7 +313,7 @@ describe('custom tabs', () => {
   describe('navigateToWidget from a custom tab', () => {
     it('focuses a widget already in the tab and stays there', () => {
       const id = openNewTab();
-      useAppStore.getState().addWidget('architect');
+      useAppStore.getState().addWidget({ id: 'architect', kind: 'architect' });
 
       useAppStore.getState().navigateToWidget('architect', { expiry: '2026-09-25' });
 
@@ -321,7 +326,7 @@ describe('custom tabs', () => {
 
     it('asks for focus again after the last request was handled', () => {
       openNewTab();
-      useAppStore.getState().addWidget('architect');
+      useAppStore.getState().addWidget({ id: 'architect', kind: 'architect' });
 
       useAppStore.getState().navigateToWidget('architect');
       useAppStore.getState().clearWidgetFocus();
@@ -354,7 +359,7 @@ describe('custom tabs', () => {
       openNewTab();
       expect(selectIsWidgetOpen(useAppStore.getState(), 'architect')).toBe(false);
 
-      useAppStore.getState().addWidget('architect');
+      useAppStore.getState().addWidget({ id: 'architect', kind: 'architect' });
       expect(selectIsWidgetOpen(useAppStore.getState(), 'architect')).toBe(true);
     });
   });

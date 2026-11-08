@@ -1,12 +1,23 @@
+import { AssetPickerButton, VenuePickerButton } from '@components/ui';
 import DropdownPicker from '@components/ui/DropdownPicker';
-import { MAX_TAB_NAME_LENGTH, MAX_WIDGETS_PER_TAB } from '@lib/custom-tabs';
+import { MAX_TAB_NAME_LENGTH } from '@lib/custom-tabs';
 import { defineMessages, useT } from '@lib/i18n';
-import { isWidgetKind } from '@lib/tabs';
-import { selectActiveCustomTab, useAppStore } from '@stores/app-store';
+import { useTabs } from '@lib/tabs';
+import {
+  builtinTabFromLayoutId,
+  canAddPanel,
+  PRESETS,
+  type WidgetInstance,
+} from '@lib/workspace-layouts';
+import {
+  selectActiveCustomTab,
+  selectActiveLayoutId,
+  selectLayoutPanels,
+  useAppStore,
+} from '@stores/app-store';
 import { type PointerEvent as ReactPointerEvent, useState } from 'react';
-
-import { useWidgetCatalog } from './widget-catalog';
 import styles from './WorkspaceBar.module.css';
+import { useWidgetCatalog } from './widget-catalog';
 
 const messages = defineMessages(
   {
@@ -14,12 +25,22 @@ const messages = defineMessages(
     rename: 'Double-click to rename, drag to reorder',
     close: 'Close {name}',
     closeConfirm: 'Close {name}? Its layout will be deleted.',
+    reset: 'Reset layout',
+    clear: 'Clear layout',
+    resetConfirm: 'Restore the default panel arrangement? Your layout changes will be removed.',
+    clearConfirm: 'Remove all panels from this custom tab?',
+    panels: '{n} panels',
   },
   {
     addWidget: '+ Widget',
     rename: 'Doble clic para renombrar, arrastra para reordenar',
     close: 'Cerrar {name}',
     closeConfirm: '¿Cerrar {name}? Se borrará su diseño.',
+    reset: 'Restablecer diseño',
+    clear: 'Vaciar diseño',
+    resetConfirm: '¿Restaurar la disposición predeterminada? Se quitarán tus cambios al diseño.',
+    clearConfirm: '¿Quitar todos los paneles de esta pestaña personalizada?',
+    panels: '{n} paneles',
   },
 );
 
@@ -42,16 +63,29 @@ export default function WorkspaceBar() {
   const renameCustomTab = useAppStore((s) => s.renameCustomTab);
   const closeCustomTab = useAppStore((s) => s.closeCustomTab);
   const moveCustomTab = useAppStore((s) => s.moveCustomTab);
+  const layoutId = useAppStore(selectActiveLayoutId);
+  const panels = useAppStore((s) => selectLayoutPanels(s, layoutId));
+  const builtin = builtinTabFromLayoutId(layoutId);
   const addWidget = useAppStore((s) => s.addWidget);
+  const resetActiveLayout = useAppStore((s) => s.resetActiveLayout);
+  const tabs = useTabs();
   const catalog = useWidgetCatalog();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const available = activeTab
-    ? catalog.filter((widget) => !activeTab.kinds.includes(widget.kind))
-    : [];
-  const canAdd =
-    activeTab != null && activeTab.kinds.length < MAX_WIDGETS_PER_TAB && available.length > 0;
+  const candidates: WidgetInstance[] = [
+    ...(builtin ? PRESETS[builtin].map(({ group: _group, ...panel }) => panel) : []),
+    ...catalog.map(({ kind }) => ({ id: kind, kind })),
+  ];
+  const available = candidates.filter(
+    (panel, index) =>
+      candidates.findIndex((entry) => entry.id === panel.id) === index &&
+      canAddPanel(panels, panel, builtin),
+  );
+  const panelLabel = (panel: WidgetInstance) => {
+    const label = catalog.find((entry) => entry.kind === panel.kind)?.label ?? panel.kind;
+    return panel.underlying ? `${panel.underlying} · ${label}` : label;
+  };
 
   // Tracked on the window, because pointer capture is lost when React moves the dragged tab's node.
   function startReorder(id: string, event: ReactPointerEvent<HTMLDivElement>) {
@@ -101,6 +135,14 @@ export default function WorkspaceBar() {
 
   return (
     <div className={styles.bar}>
+      <div className={styles.context}>
+        <span className={styles.layoutName}>
+          {activeTab?.name ?? tabs.find((tab) => tab.id === builtin)?.label}
+        </span>
+        <span className={styles.count}>{t('panels', { n: panels.length })}</span>
+        <AssetPickerButton />
+        <VenuePickerButton />
+      </div>
       <div className={styles.tabs} role="tablist">
         {customTabs.map((tab) => (
           <div
@@ -151,16 +193,28 @@ export default function WorkspaceBar() {
           </div>
         ))}
       </div>
-      {canAdd && (
-        <DropdownPicker
-          size="sm"
-          value={t('addWidget')}
-          options={available.map((widget) => ({ value: widget.kind, label: widget.label }))}
-          onChange={(kind) => {
-            if (isWidgetKind(kind)) addWidget(kind);
+      <div className={styles.actions}>
+        {available.length > 0 && (
+          <DropdownPicker
+            size="sm"
+            value={t('addWidget')}
+            options={available.map((panel) => ({ value: panel.id, label: panelLabel(panel) }))}
+            onChange={(id) => {
+              const panel = available.find((entry) => entry.id === id);
+              if (panel) addWidget(panel);
+            }}
+          />
+        )}
+        <button
+          type="button"
+          className={styles.reset}
+          onClick={() => {
+            if (window.confirm(t(builtin ? 'resetConfirm' : 'clearConfirm'))) resetActiveLayout();
           }}
-        />
-      )}
+        >
+          {t(builtin ? 'reset' : 'clear')}
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,15 +1,15 @@
 import { AppShell } from '@components/layout';
-import { TradfiApp } from '@features/tradfi';
 import { SessionNotice } from '@components/ui';
 import { ChartPanelLayer, useUnderlyings } from '@features/chain';
-import { CustomTabView, WidgetFrame } from '@features/workspace';
+import { TradfiApp } from '@features/tradfi';
+import { WidgetFrame, WorkspaceView } from '@features/workspace';
 import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
 import { useTabs } from '@lib/tabs';
-import { MAIN_MARKET_ID, useAppStore, useMarket } from '@stores/app-store';
+import { MAIN_MARKET_ID, selectActiveLayoutId, useAppStore, useMarket } from '@stores/app-store';
 import { useEffect } from 'react';
 
 import styles from './App.module.css';
@@ -22,6 +22,8 @@ export default function App() {
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
+  const layoutId = useAppStore(selectActiveLayoutId);
+  const layoutRevision = useAppStore((s) => s.layoutRevision);
   const activeMarketId = useAppStore((s) => s.activeMarketId);
   const isMobile = useIsMobile();
   useGlobalFeedStatus(useAppStore((s) => s.mainFeedClaims > 0));
@@ -60,8 +62,8 @@ export default function App() {
   return (
     <AppShell underlyings={underlyings} tabs={tabs}>
       <div className={styles.panel}>
-        {customTabOpen && !isMobile ? (
-          <CustomTabView key={activeMarketId} tabId={activeMarketId} />
+        {!isMobile ? (
+          <WorkspaceView key={`${layoutId}:${layoutRevision}`} layoutId={layoutId} />
         ) : (
           <WidgetFrame key={activeTab} kind={activeTab} />
         )}

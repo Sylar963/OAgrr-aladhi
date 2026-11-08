@@ -1,13 +1,23 @@
+import { MOBILE_QUERY } from '@lib/breakpoints';
 import {
   type CustomTab,
   MAX_CUSTOM_TABS,
-  MAX_WIDGETS_PER_TAB,
   readCustomTabs,
   removeLayout,
   writeCustomTabs,
 } from '@lib/custom-tabs';
-import type { TabId, WidgetKind } from '@lib/tabs';
+import { TABS, type TabId, type WidgetKind } from '@lib/tabs';
 import { VENUE_IDS } from '@lib/venue-meta';
+import {
+  builtinLayoutId,
+  builtinTabFromLayoutId,
+  canAddPanel,
+  defaultPanels,
+  matchesDestination,
+  readBuiltinLayouts,
+  type WidgetInstance,
+  writeBuiltinLayouts,
+} from '@lib/workspace-layouts';
 import type {
   SystemAnnouncement,
   VenueFailure,
@@ -109,9 +119,11 @@ interface AppState {
   activeMarketId: string;
   activeTab: TabId;
   customTabs: CustomTab[];
+  builtinLayouts: Partial<Record<TabId, WidgetInstance[]>>;
+  layoutRevision: number;
   /** Visible widgets holding the main chain socket open. */
   mainFeedClaims: number;
-  widgetFocusRequest: WidgetKind | null;
+  widgetFocusRequest: string | null;
   assetMode: 'crypto' | 'tradfi';
   tradfiUnderlying: string;
   tradfiExpiry: string;
@@ -144,8 +156,9 @@ interface AppState {
   renameCustomTab: (id: string, name: string) => void;
   closeCustomTab: (id: string) => void;
   moveCustomTab: (id: string, toIndex: number) => void;
-  addWidget: (kind: WidgetKind) => void;
-  setCustomTabKinds: (id: string, kinds: WidgetKind[]) => void;
+  addWidget: (panel: WidgetInstance) => void;
+  setLayoutPanels: (id: string, panels: WidgetInstance[]) => void;
+  resetActiveLayout: () => void;
   setAssetMode: (m: 'crypto' | 'tradfi') => void;
   setTradfiUnderlying: (u: string) => void;
   setTradfiExpiry: (e: string) => void;
@@ -198,11 +211,56 @@ export function selectActiveCustomTab(
 }
 
 export function selectIsWidgetOpen(
-  s: Pick<AppState, 'customTabs' | 'activeMarketId' | 'activeTab'>,
+  s: Pick<AppState, 'customTabs' | 'builtinLayouts' | 'activeMarketId' | 'activeTab'>,
   kind: WidgetKind,
+  docked = true,
 ): boolean {
-  const tab = selectActiveCustomTab(s);
-  return tab ? tab.kinds.includes(kind) : s.activeTab === kind;
+  if (!docked) return s.activeMarketId === MAIN_MARKET_ID && s.activeTab === kind;
+  return selectLayoutPanels(s, selectActiveLayoutId(s)).some((panel) =>
+    matchesDestination(panel, kind),
+  );
+}
+
+type LayoutState = Pick<AppState, 'customTabs' | 'builtinLayouts' | 'activeMarketId' | 'activeTab'>;
+const EMPTY_PANELS: WidgetInstance[] = [];
+const DEFAULT_PANELS = Object.fromEntries(TABS.map(({ id }) => [id, defaultPanels(id)])) as Record<
+  TabId,
+  WidgetInstance[]
+>;
+const customPanelCache = new WeakMap<WidgetKind[], WidgetInstance[]>();
+
+export function selectActiveLayoutId(s: Pick<AppState, 'activeMarketId' | 'activeTab'>): string {
+  return s.activeMarketId === MAIN_MARKET_ID ? builtinLayoutId(s.activeTab) : s.activeMarketId;
+}
+
+export function selectLayoutPanels(
+  s: Pick<LayoutState, 'customTabs' | 'builtinLayouts'>,
+  id: string,
+): WidgetInstance[] {
+  const builtin = builtinTabFromLayoutId(id);
+  if (builtin) return s.builtinLayouts[builtin] ?? DEFAULT_PANELS[builtin];
+  const tab = s.customTabs.find((entry) => entry.id === id);
+  if (!tab) return EMPTY_PANELS;
+  let panels = customPanelCache.get(tab.kinds);
+  if (!panels) {
+    panels = tab.kinds.map((kind) => ({ id: kind, kind }));
+    customPanelCache.set(tab.kinds, panels);
+  }
+  return panels;
+}
+
+function updateLayoutPanels(
+  s: LayoutState,
+  id: string,
+  panels: WidgetInstance[],
+): Partial<AppState> {
+  const builtin = builtinTabFromLayoutId(id);
+  if (builtin) return { builtinLayouts: { ...s.builtinLayouts, [builtin]: panels } };
+  return {
+    customTabs: s.customTabs.map((tab) =>
+      tab.id === id ? { ...tab, kinds: panels.map((panel) => panel.kind) } : tab,
+    ),
+  };
 }
 
 const restoredTabs = readCustomTabs();
@@ -220,6 +278,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeMarketId: MAIN_MARKET_ID,
   activeTab: 'chain',
   customTabs: restoredTabs.map(({ id, name, kinds }) => ({ id, name, kinds })),
+  builtinLayouts: readBuiltinLayouts(),
+  layoutRevision: 0,
   mainFeedClaims: 0,
   widgetFocusRequest: null,
   assetMode: 'crypto',
@@ -251,23 +311,39 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setUnderlying: (underlying) => set((s) => patchActiveMarket(s, { underlying, expiry: '' })),
   setExpiry: (expiry) => set((s) => patchActiveMarket(s, { expiry })),
-  setActiveTab: (activeTab) => set({ activeTab, activeMarketId: MAIN_MARKET_ID }),
+  setActiveTab: (activeTab) =>
+    set({ activeTab, activeMarketId: MAIN_MARKET_ID, widgetFocusRequest: null }),
   navigateToWidget: (kind, target) =>
     set((s) => {
       const patch = target ? marketPatchFromTarget(target) : {};
       const tab = selectActiveCustomTab(s);
-      if (tab?.kinds.includes(kind)) {
+      const layoutId = selectActiveLayoutId(s);
+      const docked = !window.matchMedia?.(MOBILE_QUERY).matches;
+      const present =
+        docked && selectLayoutPanels(s, layoutId).find((panel) => matchesDestination(panel, kind));
+      if (present) {
         return {
           ...patchActiveMarket(s, patch),
-          widgetFocusRequest: kind,
+          widgetFocusRequest: present.id,
         };
       }
       // Whatever sent the user here was looking at the custom tab's market, so it comes along.
       const source = tab ? selectActiveMarket(s) : null;
       const carried = source ? { underlying: source.underlying, expiry: source.expiry } : {};
+      const destinationId = builtinLayoutId(kind);
+      const destinationPanels = selectLayoutPanels(s, destinationId);
+      const destination =
+        destinationPanels.find((panel) => matchesDestination(panel, kind)) ??
+        DEFAULT_PANELS[kind][0]!;
+      const restored =
+        !docked || destinationPanels.some((panel) => panel.id === destination.id)
+          ? {}
+          : updateLayoutPanels(s, destinationId, [...destinationPanels, destination]);
       return {
+        ...restored,
         activeTab: kind,
         activeMarketId: MAIN_MARKET_ID,
+        widgetFocusRequest: docked ? destination.id : null,
         markets: {
           ...s.markets,
           [MAIN_MARKET_ID]: { ...s.markets[MAIN_MARKET_ID], ...carried, ...patch },
@@ -316,22 +392,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       customTabs.splice(toIndex, 0, moved!);
       return { customTabs };
     }),
-  addWidget: (kind) =>
+  addWidget: (panel) =>
     set((s) => {
-      const active = selectActiveCustomTab(s);
-      if (!active || active.kinds.includes(kind) || active.kinds.length >= MAX_WIDGETS_PER_TAB) {
-        return {};
-      }
-      return {
-        customTabs: s.customTabs.map((tab) =>
-          tab.id === active.id ? { ...tab, kinds: [...tab.kinds, kind] } : tab,
-        ),
-      };
+      const id = selectActiveLayoutId(s);
+      const builtin = builtinTabFromLayoutId(id);
+      if (!builtin) {
+        const tab = selectActiveCustomTab(s);
+        if (
+          !tab ||
+          panel.underlying ||
+          !canAddPanel(
+            tab.kinds.map((kind) => ({ id: kind, kind })),
+            panel,
+          )
+        )
+          return {};
+      } else if (!canAddPanel(selectLayoutPanels(s, id), panel, builtin)) return {};
+      return updateLayoutPanels(s, id, [...selectLayoutPanels(s, id), panel]);
     }),
-  setCustomTabKinds: (id, kinds) =>
-    set((s) => ({
-      customTabs: s.customTabs.map((tab) => (tab.id === id ? { ...tab, kinds } : tab)),
-    })),
+  setLayoutPanels: (id, panels) => set((s) => updateLayoutPanels(s, id, panels)),
+  resetActiveLayout: () => {
+    const s = get();
+    const id = selectActiveLayoutId(s);
+    removeLayout(id);
+    const builtin = builtinTabFromLayoutId(id);
+    if (builtin) {
+      const { [builtin]: _removed, ...builtinLayouts } = s.builtinLayouts;
+      set({ builtinLayouts, layoutRevision: s.layoutRevision + 1, widgetFocusRequest: null });
+    } else {
+      set({
+        ...updateLayoutPanels(s, id, []),
+        layoutRevision: s.layoutRevision + 1,
+        widgetFocusRequest: null,
+      });
+    }
+  },
   setAssetMode: (assetMode) => set({ assetMode }),
   setTradfiUnderlying: (tradfiUnderlying) => set({ tradfiUnderlying, tradfiExpiry: '' }),
   setTradfiExpiry: (tradfiExpiry) => set({ tradfiExpiry }),
@@ -409,6 +504,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 }));
 
 useAppStore.subscribe((s, prev) => {
+  if (s.builtinLayouts !== prev.builtinLayouts) writeBuiltinLayouts(s.builtinLayouts);
   if (s.customTabs === prev.customTabs && s.markets === prev.markets) return;
   writeCustomTabs(
     s.customTabs.map((tab) => {

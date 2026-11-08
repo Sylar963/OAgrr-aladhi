@@ -93,7 +93,9 @@ describe('WIDGET_TRAITS', () => {
 describe('main feed claim', () => {
   afterEach(cleanup);
 
-  it.each(TABS.map((tab) => tab.id))('claims the socket only for feed widgets: %s', async (kind) => {
+  it.each(
+    TABS.map((tab) => tab.id),
+  )('claims the socket only for feed widgets: %s', async (kind) => {
     useAppStore.setState({ mainFeedClaims: 0 });
     const { unmount } = render(<WidgetFrame kind={kind} />);
     await screen.findByText(`view:${kind}`);

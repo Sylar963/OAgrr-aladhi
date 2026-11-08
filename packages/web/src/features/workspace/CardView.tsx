@@ -2,7 +2,7 @@ import { ChainStatsWidget, ChainTableWidget, ChainVenuesWidget } from '@features
 import type { CardKind } from '@lib/tabs';
 import { type ComponentType, lazy } from 'react';
 
-const CARD_VIEWS: Record<CardKind, ComponentType> = {
+const CARD_VIEWS: Record<CardKind, ComponentType<{ underlying?: string }>> = {
   'chain-table': ChainTableWidget,
   'chain-stats': ChainStatsWidget,
   'chain-venues': ChainVenuesWidget,
@@ -50,7 +50,7 @@ const CARD_VIEWS: Record<CardKind, ComponentType> = {
   ),
 };
 
-export default function CardView({ kind }: { kind: CardKind }) {
+export default function CardView({ kind, underlying }: { kind: CardKind; underlying?: string }) {
   const View = CARD_VIEWS[kind];
-  return <View />;
+  return <View underlying={underlying} />;
 }

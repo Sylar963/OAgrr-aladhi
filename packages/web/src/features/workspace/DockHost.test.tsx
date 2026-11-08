@@ -1,6 +1,8 @@
+import { readLayout } from '@lib/custom-tabs';
+import { builtinLayoutId, readBuiltinLayouts } from '@lib/workspace-layouts';
+import { MAIN_MARKET_ID, useAppStore } from '@stores/app-store';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { MAIN_MARKET_ID, useAppStore } from '@stores/app-store';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,7 +50,8 @@ function fakePanelApi(isVisible: boolean) {
 }
 
 function renderPanel(api: ReturnType<typeof fakePanelApi>) {
-  const props = { api, params: { kind: 'chain' } } as unknown as IDockviewPanelProps<{
+  const props = { api, params: { id: 'chain', kind: 'chain' } } as unknown as IDockviewPanelProps<{
+    id: 'chain';
     kind: 'chain';
   }>;
   return render(<WidgetPanel {...props} />);
@@ -106,12 +109,20 @@ describe('WidgetPanel', () => {
 // Drives DockHost through a fake dockview, so the behaviour around its teardown is under test.
 describe('DockHost', () => {
   function fakeDock() {
-    const listeners = { layout: new Set<() => void>(), add: new Set<() => void>(), remove: new Set<() => void>() };
+    const listeners = {
+      layout: new Set<() => void>(),
+      add: new Set<() => void>(),
+      remove: new Set<() => void>(),
+    };
     const on = (set: Set<() => void>) => (listener: () => void) => {
       set.add(listener);
       return { dispose: () => set.delete(listener) };
     };
-    const panels: { id: string; title: string; api: { close: () => void; setTitle: (t: string) => void; setActive: () => void } }[] = [];
+    const panels: {
+      id: string;
+      title: string;
+      api: { close: () => void; setTitle: (t: string) => void; setActive: () => void };
+    }[] = [];
     const setActive = vi.fn();
     const api = {
       panels,
@@ -125,11 +136,31 @@ describe('DockHost', () => {
       clear: vi.fn(),
       toJSON: () => ({ grid: {}, panels: {} }),
       getPanel: (id: string) => panels.find((panel) => panel.id === id),
-      addPanel: ({ id, title }: { id: string; title: string }) => {
-        panels.push({ id, title, api: { close: () => {}, setTitle: () => {}, setActive: () => setActive(id) } });
+      addPanel: vi.fn(({ id, title }: { id: string; title: string }) => {
+        panels.push({
+          id,
+          title,
+          api: {
+            close: () => {
+              panels.splice(
+                panels.findIndex((panel) => panel.id === id),
+                1,
+              );
+              for (const listener of listeners.remove) listener();
+              for (const listener of listeners.layout) listener();
+            },
+            setTitle: () => {},
+            setActive: () => setActive(id),
+          },
+        });
+      }),
+    };
+    return {
+      api,
+      fireLayout: () => {
+        for (const listener of listeners.layout) listener();
       },
     };
-    return { api, fireLayout: () => listeners.layout.forEach((l) => l()) };
   }
 
   let dock = fakeDock();
@@ -139,7 +170,14 @@ describe('DockHost', () => {
     currentDock = () => dock.api;
     vi.useFakeTimers();
     localStorage.clear();
-    useAppStore.setState({ customTabs: [], widgetFocusRequest: null, activeMarketId: MAIN_MARKET_ID });
+    useAppStore.setState({
+      customTabs: [],
+      builtinLayouts: {},
+      layoutRevision: 0,
+      activeTab: 'chain',
+      widgetFocusRequest: null,
+      activeMarketId: MAIN_MARKET_ID,
+    });
     useAppStore.getState().createCustomTab('Desk');
   });
 
@@ -151,10 +189,10 @@ describe('DockHost', () => {
   const tabId = () => useAppStore.getState().activeMarketId;
   const layoutKey = () => `ogg.customTabLayout.v1.${tabId()}`;
 
-  it('keeps a closed tab\'s layout deleted when a save was still pending', () => {
+  it("keeps a closed tab's layout deleted when a save was still pending", () => {
     const id = tabId();
     const key = layoutKey();
-    const { unmount } = render(<DockHost tabId={id} />);
+    const { unmount } = render(<DockHost layoutId={id} />);
     act(() => dock.fireLayout());
 
     act(() => useAppStore.getState().closeCustomTab(id));
@@ -166,7 +204,7 @@ describe('DockHost', () => {
 
   it('saves a pending layout when leaving a tab that stays open', () => {
     const key = layoutKey();
-    const { unmount } = render(<DockHost tabId={tabId()} />);
+    const { unmount } = render(<DockHost layoutId={tabId()} />);
     act(() => dock.fireLayout());
 
     unmount();
@@ -176,7 +214,7 @@ describe('DockHost', () => {
 
   it('waits for the layout to settle before serializing', () => {
     const key = layoutKey();
-    render(<DockHost tabId={tabId()} />);
+    render(<DockHost layoutId={tabId()} />);
     act(() => dock.fireLayout());
     act(() => {
       vi.advanceTimersByTime(299);
@@ -190,15 +228,70 @@ describe('DockHost', () => {
   });
 
   it('focuses a requested widget once, not again on the next mount', () => {
-    useAppStore.getState().addWidget('architect');
+    useAppStore.getState().addWidget({ id: 'architect', kind: 'architect' });
     useAppStore.getState().navigateToWidget('architect');
 
-    const first = render(<DockHost tabId={tabId()} />);
+    const first = render(<DockHost layoutId={tabId()} />);
     expect(dock.api.setActive).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().widgetFocusRequest).toBeNull();
     first.unmount();
 
-    render(<DockHost tabId={tabId()} />);
+    render(<DockHost layoutId={tabId()} />);
     expect(dock.api.setActive).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts Chain as three positioned panels and preserves membership on resize', () => {
+    const id = builtinLayoutId('chain');
+    render(<DockHost layoutId={id} />);
+    expect(dock.api.panels.map((panel) => panel.id)).toEqual([
+      'chain-table',
+      'chain-stats',
+      'chain-venues',
+    ]);
+    expect(dock.api.addPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'chain-stats',
+        position: { referencePanel: 'chain-table', direction: 'above' },
+      }),
+    );
+    const membership = useAppStore.getState().builtinLayouts;
+    act(() => {
+      dock.fireLayout();
+      vi.advanceTimersByTime(300);
+    });
+    expect(useAppStore.getState().builtinLayouts).toBe(membership);
+  });
+
+  it('flushes panel removal to metadata even when leaving before its debounce', () => {
+    const id = builtinLayoutId('chain');
+    const { unmount } = render(<DockHost layoutId={id} />);
+    act(() => dock.api.getPanel('chain-venues')?.api.close());
+    unmount();
+    expect(readBuiltinLayouts().chain?.map((panel) => panel.id)).toEqual([
+      'chain-table',
+      'chain-stats',
+    ]);
+  });
+
+  it('does not resurrect a saved arrangement when reset interrupts a pending save', () => {
+    const id = builtinLayoutId('chain');
+    useAppStore.getState().setActiveTab('chain');
+    const { unmount } = render(<DockHost layoutId={id} />);
+    act(() => dock.fireLayout());
+    act(() => useAppStore.getState().resetActiveLayout());
+    unmount();
+    vi.advanceTimersByTime(1000);
+    expect(readLayout(id)).toBeNull();
+    expect(readBuiltinLayouts().chain).toBeUndefined();
+  });
+
+  it('retains a deliberately empty built-in layout', () => {
+    const id = builtinLayoutId('chain');
+    render(<DockHost layoutId={id} />);
+    act(() => {
+      for (const panel of [...dock.api.panels]) panel.api.close();
+      vi.advanceTimersByTime(300);
+    });
+    expect(readBuiltinLayouts().chain).toEqual([]);
   });
 });

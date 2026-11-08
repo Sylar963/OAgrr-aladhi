@@ -6,9 +6,8 @@ import AtmTermStructure from './AtmTermStructure';
 import IvRankPanel from './IvRankPanel';
 import RealizedVsImplied from './RealizedVsImplied';
 import SkewHistory from './SkewHistory';
-import VolSmile from './VolSmile';
-
 import styles from './SurfaceCards.module.css';
+import VolSmile from './VolSmile';
 
 const VolSurface3D = lazy(() => import('./VolSurface3D'));
 
@@ -18,8 +17,9 @@ function Card({ children }: { children: ReactNode }) {
 
 // These panels keep their own ticker picker, seeded once from their default, so a new tab ticker
 // has to remount them.
-export function VolSmileWidget() {
-  const underlying = useMarket((m) => m.underlying);
+export function VolSmileWidget({ underlying: pinned }: { underlying?: string } = {}) {
+  const selected = useMarket((m) => m.underlying);
+  const underlying = pinned ?? selected;
   return (
     <Card>
       <VolSmile key={underlying} defaultUnderlying={underlying} />
@@ -27,8 +27,9 @@ export function VolSmileWidget() {
   );
 }
 
-export function AtmTermWidget() {
-  const underlying = useMarket((m) => m.underlying);
+export function AtmTermWidget({ underlying: pinned }: { underlying?: string } = {}) {
+  const selected = useMarket((m) => m.underlying);
+  const underlying = pinned ?? selected;
   return (
     <Card>
       <AtmTermStructure key={underlying} defaultUnderlying={underlying} />
@@ -36,8 +37,9 @@ export function AtmTermWidget() {
   );
 }
 
-export function RealizedVsImpliedWidget() {
-  const underlying = useMarket((m) => m.underlying);
+export function RealizedVsImpliedWidget({ underlying: pinned }: { underlying?: string } = {}) {
+  const selected = useMarket((m) => m.underlying);
+  const underlying = pinned ?? selected;
   return (
     <Card>
       <RealizedVsImplied key={underlying} defaultUnderlying={underlying} />
@@ -45,8 +47,9 @@ export function RealizedVsImpliedWidget() {
   );
 }
 
-export function Surface3DWidget() {
-  const underlying = useMarket((m) => m.underlying);
+export function Surface3DWidget({ underlying: pinned }: { underlying?: string } = {}) {
+  const selected = useMarket((m) => m.underlying);
+  const underlying = pinned ?? selected;
   return (
     <Card>
       <Suspense fallback={<Spinner size="md" />}>
@@ -56,8 +59,9 @@ export function Surface3DWidget() {
   );
 }
 
-export function IvRankWidget() {
-  const underlying = useMarket((m) => m.underlying);
+export function IvRankWidget({ underlying: pinned }: { underlying?: string } = {}) {
+  const selected = useMarket((m) => m.underlying);
+  const underlying = pinned ?? selected;
   return (
     <Card>
       <IvRankPanel underlying={underlying} />
@@ -65,8 +69,9 @@ export function IvRankWidget() {
   );
 }
 
-export function SkewHistoryWidget() {
-  const underlying = useMarket((m) => m.underlying);
+export function SkewHistoryWidget({ underlying: pinned }: { underlying?: string } = {}) {
+  const selected = useMarket((m) => m.underlying);
+  const underlying = pinned ?? selected;
   return (
     <Card>
       <SkewHistory underlying={underlying} />

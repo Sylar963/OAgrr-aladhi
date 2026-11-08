@@ -9,6 +9,10 @@ export const MAX_TAB_NAME_LENGTH = 40;
 const TABS_KEY = 'ogg.customTabs.v1';
 const LAYOUT_KEY_PREFIX = 'ogg.customTabLayout.v1.';
 
+function layoutKey(id: string): string {
+  return id.startsWith('builtin-') ? `ogg.builtinLayout.v1.${id.slice(8)}` : LAYOUT_KEY_PREFIX + id;
+}
+
 export interface CustomTab {
   id: string;
   name: string;
@@ -30,10 +34,15 @@ const PersistedTabSchema = z.object({
 
 const LayoutSchema = z.looseObject({
   grid: z.looseObject({}),
-  panels: z.record(z.string(), z.looseObject({ params: z.looseObject({ kind: z.string() }) })),
+  panels: z.record(
+    z.string(),
+    z.looseObject({
+      params: z.looseObject({ kind: z.string(), underlying: z.enum(['BTC', 'ETH']).optional() }),
+    }),
+  ),
 });
 
-function readJson(key: string): unknown {
+export function readJson(key: string): unknown {
   try {
     const raw = localStorage.getItem(key);
     return raw == null ? null : JSON.parse(raw);
@@ -42,7 +51,7 @@ function readJson(key: string): unknown {
   }
 }
 
-function writeRaw(key: string, value: string): void {
+export function writeRaw(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {
@@ -81,19 +90,19 @@ export function writeCustomTabs(tabs: PersistedCustomTab[]): void {
 }
 
 export function readLayout(id: string): unknown {
-  const parsed = LayoutSchema.safeParse(readJson(LAYOUT_KEY_PREFIX + id));
+  const parsed = LayoutSchema.safeParse(readJson(layoutKey(id)));
   if (!parsed.success) return null;
   const known = Object.values(parsed.data.panels).every((panel) => isWidgetKind(panel.params.kind));
   return known ? parsed.data : null;
 }
 
 export function writeLayout(id: string, layout: unknown): void {
-  writeRaw(LAYOUT_KEY_PREFIX + id, JSON.stringify(layout));
+  writeRaw(layoutKey(id), JSON.stringify(layout));
 }
 
 export function removeLayout(id: string): void {
   try {
-    localStorage.removeItem(LAYOUT_KEY_PREFIX + id);
+    localStorage.removeItem(layoutKey(id));
   } catch {
     // Same as writeRaw: nothing useful to do when storage is unavailable.
   }

@@ -9,20 +9,14 @@ import { type ComponentType, lazy, Suspense, useEffect } from 'react';
 const TAB_VIEWS: Record<TabId, ComponentType> = {
   chain: ChainView,
   alpha: lazy(() => import('@features/alpha').then((m) => ({ default: m.AlphaView }))),
-  architect: lazy(() =>
-    import('@features/architect').then((m) => ({ default: m.ArchitectView })),
-  ),
+  architect: lazy(() => import('@features/architect').then((m) => ({ default: m.ArchitectView }))),
   trading: lazy(() => import('@features/trading').then((m) => ({ default: m.TradingView }))),
-  portfolio: lazy(() =>
-    import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
-  ),
+  portfolio: lazy(() => import('@features/portfolio').then((m) => ({ default: m.PortfolioView }))),
   social: lazy(() => import('@features/social').then((m) => ({ default: m.SocialView }))),
   surface: lazy(() => import('@features/surface').then((m) => ({ default: m.SurfaceView }))),
   flow: lazy(() => import('@features/flow').then((m) => ({ default: m.FlowView }))),
   sectors: lazy(() => import('@features/sectors').then((m) => ({ default: m.SectorsView }))),
-  analytics: lazy(() =>
-    import('@features/analytics').then((m) => ({ default: m.AnalyticsView })),
-  ),
+  analytics: lazy(() => import('@features/analytics').then((m) => ({ default: m.AnalyticsView }))),
   gex: lazy(() => import('@features/gex').then((m) => ({ default: m.GexView }))),
   news: lazy(() => import('@features/news').then((m) => ({ default: m.NewsView }))),
 };
@@ -35,9 +29,10 @@ interface WidgetFrameProps {
   kind: WidgetKind;
   /** Card titles live in the custom tab chunk, so DockHost passes them in. */
   label?: string;
+  underlying?: 'BTC' | 'ETH';
 }
 
-export default function WidgetFrame({ kind, label: cardLabel }: WidgetFrameProps) {
+export default function WidgetFrame({ kind, label: cardLabel, underlying }: WidgetFrameProps) {
   const t = useT(messages);
   const tabLabel = useTabs().find((tab) => tab.id === kind)?.label;
   const label = cardLabel ?? tabLabel ?? kind;
@@ -50,7 +45,7 @@ export default function WidgetFrame({ kind, label: cardLabel }: WidgetFrameProps
     <ErrorBoundary label={label}>
       <Suspense fallback={<Spinner size="lg" label={t('loading', { label })} />}>
         {isCardKind(kind) ? (
-          <CardView kind={kind} />
+          <CardView kind={kind} underlying={underlying} />
         ) : (
           <TabView kind={kind} />
         )}

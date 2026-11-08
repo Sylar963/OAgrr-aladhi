@@ -1,9 +1,11 @@
-import type { EnrichedSide } from '@shared/enriched';
 import { useStrategyStore } from '@features/architect/strategy-store';
+import type { EnrichedSide } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import QuickTrade from './QuickTrade';
+
+vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
 
 const SELL_PUT_SIDE = {
   venues: {

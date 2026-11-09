@@ -2,8 +2,31 @@
 
 Every crypto desktop tab opens an editable Dockview layout. Drag panel headers to split or group
 them, drag dividers to resize, close a panel to remove it, and use **+ Widget** to add one.
-**Reset layout** restores the active built-in preset. Custom tabs use **Clear layout** instead;
-their names, order, markets, and storage format are preserved.
+**Reset layout** restores the active built-in preset. Template-based tabs offer **Reset template**;
+blank tabs offer **Clear layout**. Custom-tab names, order, markets, and storage format are preserved.
+
+## Starting from a template
+
+1. Click **+** in the top bar or **Templates** in the workspace toolbar.
+2. Choose a setup, review its panel preview, and click **Create workspace**.
+3. Customize the panels as usual. **Reset template** restores that setup's starting arrangement.
+
+| Template | Included panels |
+|---|---|
+| Market overview | Chain table, chain stats, OI summary, vol smile |
+| Trade planning | Chain table, Builder, vol smile |
+| Volatility research | Vol smile, IV rank, ATM term structure, realized vs implied, skew history, 3D surface |
+| Flow & positioning | Flow, GEX, OI by strike, top positions |
+| Portfolio review | Portfolio, chain table, GEX; the Portfolio panel retains its sign-in boundary |
+| Blank workspace | An empty canvas |
+
+The picker creates a new tab with the current market context. On an empty custom tab, **Choose a
+template** or **Templates** offers **Use in this tab**, preserving its name, ticker, and tab slot.
+A populated tab is never replaced by that action. Canceling creates nothing. The picker states
+the destination and explains the ten-tab limit when no additional tab can be created.
+
+All templates fit the existing eight-widget custom-tab limit and start with at most four visible
+groups. The gallery previews are diagrams; they mount no market widgets or subscriptions.
 
 ## Built-in presets
 
@@ -36,6 +59,13 @@ separate widgets.
   a widget later activates it without rearranging existing groups.
 - `WorkspaceView` is the lazy desktop entry; mobile still renders the original single views.
   TradFi continues to use its separate application shell. Public tab/ticker hashes are unchanged.
+- `src/lib/workspace-templates.ts` contains stable template IDs and starting groups. Custom-tab
+  metadata has an optional `templateId`; older tabs remain valid and unknown template IDs are
+  ignored without losing saved panels. Saved arrangements still take priority over starter groups.
+  `selectLayoutPreset` supplies both built-in and template arrangements to the same dock host.
+- `WorkspaceTemplatesProvider` owns the picker's transient UI state. Its native modal gallery is
+  lazy-loaded when opened, supports keyboard selection and Escape, and returns focus on close.
+  No template or Dockview chunk is requested by mobile navigation.
 
 | Key | Contents |
 |---|---|
@@ -78,6 +108,8 @@ Run `pnpm precommit` and `pnpm --filter @oggregator/web build`. On machines with
 work, `VITEST_MAX_WORKERS=2 pnpm precommit` runs the same tests and assertions with fewer workers.
 Regression tests cover default coverage, duplicate prevention, metadata parsing, semantic focus,
 mobile navigation, intentional empty layouts, reset races, and teardown persistence.
+Template tests also cover canceling without changes, filling only empty tabs, capacity, unknown
+template IDs, and retaining a template through persistence and reset.
 
 The migration was also exercised in Chromium: all twelve desktop defaults, close/reload/reset,
 adding and focusing Builder, custom-tab persistence and clear, BTC/ETH comparison, a 1000px
@@ -96,3 +128,9 @@ The first concurrent full-suite runs exposed unrelated timing-sensitive core/ser
 The sequential gate passed with the same assertions and timeouts. Browser verification used a
 temporary Vite configuration matching the production ES2022 target to avoid the installed
 dependency optimizer's older-target transformation error; repository Vite settings were unchanged.
+
+Template-gallery validation: the same sequential gate passed all 4,514 tests across 551 files,
+including 1,401 web tests. The production build passed. Chromium verified selection previews,
+keyboard navigation, Escape and focus return, canceling without changes, reset/reload, filling an
+empty tab in place, preserving populated workspaces, Spanish labels, and mobile chunk isolation.
+The gallery adds about 0.6 KB gzip to the entry bundle; its UI loads on demand.

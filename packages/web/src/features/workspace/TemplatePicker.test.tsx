@@ -60,7 +60,7 @@ describe('workspace template picker', () => {
     const close = vi.fn();
     const before = useAppStore.getState().builtinLayouts;
     render(<TemplatePicker onClose={close} />);
-    fireEvent.cancel(screen.getByRole('dialog'));
+    fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
     expect(close).toHaveBeenCalledOnce();
     expect(useAppStore.getState().customTabs).toEqual([]);
     expect(useAppStore.getState().builtinLayouts).toBe(before);

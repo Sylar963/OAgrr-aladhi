@@ -308,4 +308,26 @@ describe('DockHost', () => {
       }),
     );
   });
+
+  it('places template-backed custom panels in their starting groups', () => {
+    useAppStore.getState().createCustomTab('Trade planning', 'planning');
+    render(<DockHost layoutId={tabId()} />);
+    expect(dock.api.panels.map((panel) => panel.id)).toEqual([
+      'chain-table',
+      'architect',
+      'vol-smile',
+    ]);
+    expect(dock.api.addPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'architect',
+        position: { referencePanel: 'chain-table', direction: 'right' },
+      }),
+    );
+    expect(dock.api.addPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'vol-smile',
+        position: { referencePanel: 'chain-table', direction: 'below' },
+      }),
+    );
+  });
 });

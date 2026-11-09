@@ -9,9 +9,12 @@ describe('curated workspace templates', () => {
   it.each(WORKSPACE_TEMPLATE_IDS)('keeps %s within the widget and visible-group budgets', (id) => {
     const template = WORKSPACE_TEMPLATES[id];
     expect(template.panels.length).toBeLessThanOrEqual(MAX_WIDGETS_PER_TAB);
+    expect(new Set(template.panels.map((panel) => panel.kind)).size).toBe(template.panels.length);
     expect(new Set(template.panels.map((panel) => panel.group)).size).toBeLessThanOrEqual(4);
     const accepted: WidgetInstance[] = [];
     for (const panel of template.panels) {
+      expect(panel.id).toBe(panel.kind);
+      expect(panel.underlying).toBeUndefined();
       expect(canAddPanel(accepted, panel)).toBe(true);
       accepted.push(panel);
     }

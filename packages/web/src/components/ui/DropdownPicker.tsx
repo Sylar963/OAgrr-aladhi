@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import styles from './DropdownPicker.module.css';
@@ -42,6 +43,7 @@ export default function DropdownPicker({
   icon,
   size = 'md',
 }: DropdownPickerProps) {
+  const ownerDocument = usePanelDocument();
   const idRef = useRef(`dp-${_nextId++}`);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const openId = useSyncExternalStore(subscribe, getSnapshot);
@@ -57,13 +59,13 @@ export default function DropdownPicker({
       if (event.key === 'Escape') setOpenId(null);
     }
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleEscape);
+    ownerDocument.addEventListener('pointerdown', handlePointerDown);
+    ownerDocument.addEventListener('keydown', handleEscape);
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleEscape);
+      ownerDocument.removeEventListener('pointerdown', handlePointerDown);
+      ownerDocument.removeEventListener('keydown', handleEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, ownerDocument]);
 
   const toggle = useCallback(() => {
     setOpenId(isOpen ? null : idRef.current);

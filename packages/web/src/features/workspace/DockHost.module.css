@@ -1,7 +1,33 @@
 .host {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   height: 100%;
+}
+
+.host > :last-child {
+  min-height: 0;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  color: var(--accent-primary);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--text-xs);
+}
+
+.notice button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
 }
 
 .panel {

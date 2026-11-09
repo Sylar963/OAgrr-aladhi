@@ -5,8 +5,9 @@ import { WorkspaceBar, WorkspaceTemplatesProvider } from '@features/workspace';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
 import { useAppStore, useMarket } from '@stores/app-store';
+import { PanelDocumentContext } from '@lib/panel-document';
 import type { ReactNode } from 'react';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import styles from './AppShell.module.css';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
@@ -41,6 +42,11 @@ interface AppShellProps {
 
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteDocument, setPaletteDocument] = useState<Document>(document);
+  const openPalette = useCallback((target: Document = document) => {
+    setPaletteDocument(target);
+    setPaletteOpen(true);
+  }, []);
   const [helpOpen, setHelpOpen] = useState(false);
   const underlying = useMarket((m) => m.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
@@ -63,6 +69,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        setPaletteDocument(document);
         setPaletteOpen((v) => !v);
         return;
       }
@@ -89,7 +96,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
 
       if (e.key === '/') {
         e.preventDefault();
-        setPaletteOpen(true);
+        openPalette();
         return;
       }
 
@@ -104,16 +111,16 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
       clearPending();
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [setActiveTab]);
+  }, [setActiveTab, openPalette]);
 
   return (
     <WorkspaceTemplatesProvider>
-      <PaletteContext.Provider value={() => setPaletteOpen(true)}>
+      <PaletteContext.Provider value={openPalette}>
         <div className={styles.shell}>
           <NewsTicker />
           <TopBar
             tabs={tabs}
-            onOpenPalette={() => setPaletteOpen(true)}
+            onOpenPalette={() => openPalette()}
             onOpenShortcuts={() => setHelpOpen(true)}
           />
           {!isMobile && (
@@ -128,12 +135,14 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
           <MobileNav />
 
           {paletteOpen && (
-            <CommandPalette
-              underlyings={underlyings}
-              selected={underlying}
-              onSelect={setUnderlying}
-              onClose={() => setPaletteOpen(false)}
-            />
+            <PanelDocumentContext.Provider value={paletteDocument}>
+              <CommandPalette
+                underlyings={underlyings}
+                selected={underlying}
+                onSelect={setUnderlying}
+                onClose={() => setPaletteOpen(false)}
+              />
+            </PanelDocumentContext.Provider>
           )}
 
           {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}

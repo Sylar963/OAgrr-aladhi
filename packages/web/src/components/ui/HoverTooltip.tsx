@@ -1,3 +1,4 @@
+import { usePanelDocument, usePanelWindow } from '@lib/panel-document';
 import {
   useCallback,
   useEffect,
@@ -54,6 +55,8 @@ export default function HoverTooltip({
   dataInteractive,
   dataSelected,
 }: HoverTooltipProps) {
+  const ownerDocument = usePanelDocument();
+  const ownerWindow = usePanelWindow();
   const [open, setOpen] = useState<OpenState>(false);
   const [pos, setPos] = useState<Pos | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -64,33 +67,36 @@ export default function HoverTooltip({
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const tipWidth = tooltipRef.current?.offsetWidth ?? 0;
-    const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - VIEWPORT_MARGIN - tipWidth);
+    const maxLeft = Math.max(VIEWPORT_MARGIN, ownerWindow.innerWidth - VIEWPORT_MARGIN - tipWidth);
 
     if (placement === 'bottom-end') {
-      const desiredRight = window.innerWidth - rect.right;
-      const right = Math.max(VIEWPORT_MARGIN, Math.min(desiredRight, window.innerWidth - VIEWPORT_MARGIN - tipWidth));
+      const desiredRight = ownerWindow.innerWidth - rect.right;
+      const right = Math.max(
+        VIEWPORT_MARGIN,
+        Math.min(desiredRight, ownerWindow.innerWidth - VIEWPORT_MARGIN - tipWidth),
+      );
       setPos({ top: rect.bottom + GAP, right });
     } else {
       const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.left, maxLeft));
       setPos({ top: rect.bottom + GAP, left });
     }
-  }, [placement]);
+  }, [placement, ownerWindow]);
 
   useLayoutEffect(() => {
     if (!open) return;
     computePos();
-  }, [open, computePos]);
+  }, [open, computePos, ownerWindow]);
 
   useEffect(() => {
     if (!open) return;
     const onScrollOrResize = () => computePos();
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
+    ownerWindow.addEventListener('scroll', onScrollOrResize, true);
+    ownerWindow.addEventListener('resize', onScrollOrResize);
     return () => {
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      ownerWindow.removeEventListener('scroll', onScrollOrResize, true);
+      ownerWindow.removeEventListener('resize', onScrollOrResize);
     };
-  }, [open, computePos]);
+  }, [open, computePos, ownerWindow]);
 
   useEffect(() => {
     if (open !== 'pinned') return;
@@ -104,13 +110,13 @@ export default function HoverTooltip({
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
     }
-    document.addEventListener('pointerdown', onDocPointerDown, true);
-    document.addEventListener('keydown', onKey);
+    ownerDocument.addEventListener('pointerdown', onDocPointerDown, true);
+    ownerDocument.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('pointerdown', onDocPointerDown, true);
-      document.removeEventListener('keydown', onKey);
+      ownerDocument.removeEventListener('pointerdown', onDocPointerDown, true);
+      ownerDocument.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, ownerDocument]);
 
   const setTooltipNode = useCallback(
     (node: HTMLDivElement | null) => {
@@ -172,7 +178,7 @@ export default function HoverTooltip({
           >
             {content}
           </div>,
-          document.body,
+          ownerDocument.body,
         )}
     </>
   );

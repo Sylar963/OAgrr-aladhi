@@ -1,5 +1,5 @@
 import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
-import type { ThalexMarginPreview } from '@oggregator/core';
+import type { ThalexAccountEquity, ThalexMarginPreview } from '@oggregator/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
@@ -10,6 +10,7 @@ const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
     settlements: (() => void) | null = null;
     realizedPnl: number | null = null;
     previewMargin = vi.fn<() => Promise<ThalexMarginPreview>>();
+    fetchAccountEquity = vi.fn<() => Promise<ThalexAccountEquity>>();
     constructor(readonly creds: { env?: string }) {
       clients.push(this);
     }
@@ -97,6 +98,23 @@ describe('ThalexPositionStore environments', () => {
     expect(ledgerMock.loadPositions).not.toHaveBeenCalled();
     expect(ledgerMock.replacePositions).not.toHaveBeenCalled();
     expect(ledgerMock.upsertTrades).not.toHaveBeenCalled();
+  });
+
+  it('discards equity if the connected account network changed during the read', async () => {
+    await store.connect({ accountId: 'a1', kid: 'k', privateKeyPem: 'p', env: 'prod' });
+    let finish!: (equity: ThalexAccountEquity) => void;
+    clients[0]!.fetchAccountEquity.mockImplementation(() => new Promise((resolve) => {
+      finish = resolve;
+    }));
+    const pending = store.fetchAccountEquity('a1');
+    await store.connect({ accountId: 'a1', kid: 'test-k', privateKeyPem: 'p', env: 'test' });
+    finish({
+      cash: [], cashUsd: 2400, equityUsd: 2400, unrealisedPnlUsd: 0,
+      sessionRealisedPnlUsd: 0, marginUsd: 2400, requiredMarginUsd: 0,
+      remainingMarginUsd: 2400, updatedAt: Date.now(),
+    });
+    expect(await pending).toBeNull();
+    expect(await store.fetchAccountEquity('not-connected')).toBeNull();
   });
 
   it('discards a preview if the connected client changed while the venue read was in flight', async () => {

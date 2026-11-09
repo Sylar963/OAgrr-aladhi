@@ -84,7 +84,8 @@ export default function VenueAccountSummary({
     const timer = window.setInterval(() => setNow(Date.now()), 5_000);
     return () => window.clearInterval(timer);
   }, []);
-  const fresh = data != null && session.status === 'ready' && !isError && now - data.fetchedAt < 30_000;
+  const fresh =
+    data != null && session.status === 'ready' && !isError && now - data.fetchedAt < 30_000;
   return (
     <section className={styles.account} aria-label={t('title', { venue })}>
       <header>

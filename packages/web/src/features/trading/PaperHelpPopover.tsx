@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { defineMessages, useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
@@ -40,6 +41,7 @@ const messages = defineMessages(
 );
 
 export default function PaperHelpPopover() {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const accountId = useAppStore((s) => s.accountId);
 
@@ -56,13 +58,13 @@ export default function PaperHelpPopover() {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false);
     }
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
+    ownerDocument.addEventListener('pointerdown', onPointerDown);
+    ownerDocument.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
+      ownerDocument.removeEventListener('pointerdown', onPointerDown);
+      ownerDocument.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+  }, [open, ownerDocument]);
 
   return (
     <div ref={wrapRef} className={styles.wrap}>
@@ -87,9 +89,7 @@ export default function PaperHelpPopover() {
           className={styles.popover}
         >
           <div className={styles.title}>{t('title')}</div>
-          {accountId == null && (
-            <p className={styles.paragraph}>{t('signIn')}</p>
-          )}
+          {accountId == null && <p className={styles.paragraph}>{t('signIn')}</p>}
           <ol className={styles.steps}>
             <li>
               {t('step1Before')}

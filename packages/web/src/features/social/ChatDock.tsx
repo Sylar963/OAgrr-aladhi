@@ -1,3 +1,4 @@
+import { usePanelWindow } from '@lib/panel-document';
 import { defineMessages, useT } from "@lib/i18n";
 import type { ChatMessageDto } from "@oggregator/protocol";
 import { useEffect, useState } from "react";
@@ -37,6 +38,7 @@ interface ChatDockProps {
 }
 
 export default function ChatDock({ state, send, reconnect }: ChatDockProps) {
+  const ownerWindow = usePanelWindow();
   const t = useT(messages);
   const ts = useT(socialMessages);
   const [open, setOpen] = useState(false);
@@ -55,9 +57,9 @@ export default function ChatDock({ state, send, reconnect }: ChatDockProps) {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+    ownerWindow.addEventListener("keydown", onKey);
+    return () => ownerWindow.removeEventListener("keydown", onKey);
+  }, [open, ownerWindow]);
 
   return (
     <div className={styles.dock} data-open={open}>

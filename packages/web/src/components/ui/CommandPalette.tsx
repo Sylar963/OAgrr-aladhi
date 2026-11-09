@@ -6,6 +6,8 @@ import { VENUE_LIST } from '@lib/venue-meta';
 import { useUnderlyings } from '@features/chain/queries';
 
 import styles from './CommandPalette.module.css';
+import OverlayPortal from './OverlayPortal';
+import { usePanelWindow } from '@lib/panel-document';
 
 const messages = defineMessages(
   {
@@ -37,6 +39,7 @@ export default function CommandPalette({
   onSelect,
   onClose,
 }: CommandPaletteProps) {
+  const ownerWindow = usePanelWindow();
   const t = useT(messages);
   const locale = useLocale();
   const [search, setSearch] = useState('');
@@ -101,106 +104,118 @@ export default function CommandPalette({
           break;
       }
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [filtered, activeIndex, onSelect, onClose]);
+    ownerWindow.addEventListener('keydown', onKeyDown);
+    ownerWindow.addEventListener('beforeunload', onClose);
+    return () => {
+      ownerWindow.removeEventListener('keydown', onKeyDown);
+      ownerWindow.removeEventListener('beforeunload', onClose);
+    };
+  }, [filtered, activeIndex, onSelect, onClose, ownerWindow]);
 
   function toggleVenueFilter(venueId: string) {
     setVenueFilter((prev) => (prev === venueId ? null : venueId));
   }
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.palette} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.header}>
-          <span className={styles.headerTitle}>{t('title')}</span>
-          <button className={styles.closeBtn} onClick={onClose}>
-            ✕
-          </button>
-        </div>
-
-        <div className={styles.searchRow}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={styles.searchIcon}>
-            <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.3" />
-            <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.3" />
-          </svg>
-          <input
-            ref={inputRef}
-            className={styles.searchInput}
-            placeholder={t('search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className={styles.venueCircles}>
-          {VENUE_LIST.map((v) => (
-            <button
-              key={v.id}
-              className={styles.venueCircle}
-              data-active={venueFilter === v.id}
-              title={v.label}
-              onClick={() => toggleVenueFilter(v.id)}
-            >
-              <img src={v.logo} alt={v.shortLabel} className={styles.venueCircleImg} />
+    <OverlayPortal>
+      <div className={styles.overlay} onClick={onClose}>
+        <div className={styles.palette} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.header}>
+            <span className={styles.headerTitle}>{t('title')}</span>
+            <button className={styles.closeBtn} onClick={onClose}>
+              ✕
             </button>
-          ))}
-        </div>
+          </div>
 
-        <div className={styles.list}>
-          {filtered.map((u, i) => {
-            const logo = getTokenLogo(u);
-            const supportedVenues = venuesByUnderlying.get(u);
-            const display = getUnderlyingDisplayMeta(u, underlyings, locale);
-            return (
+          <div className={styles.searchRow}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              className={styles.searchIcon}
+            >
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.3" />
+              <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+            <input
+              ref={inputRef}
+              className={styles.searchInput}
+              placeholder={t('search')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.venueCircles}>
+            {VENUE_LIST.map((v) => (
               <button
-                key={u}
-                className={styles.assetRow}
-                data-active={i === activeIndex}
-                data-selected={u === selected}
-                onClick={() => {
-                  onSelect(u);
-                  onClose();
-                }}
-                onMouseEnter={() => setActiveIndex(i)}
+                key={v.id}
+                className={styles.venueCircle}
+                data-active={venueFilter === v.id}
+                title={v.label}
+                onClick={() => toggleVenueFilter(v.id)}
               >
-                <div className={styles.assetLeft}>
-                  {logo && <img src={logo} alt={u} className={styles.assetLogo} />}
-                  <div className={styles.assetInfo}>
-                    <span className={styles.assetSymbol}>{display.label}</span>
-                    <span className={styles.assetSub}>{display.sublabel}</span>
-                  </div>
-                </div>
-                <div className={styles.assetVenues}>
-                  {VENUE_LIST.map((v) => (
-                    <img
-                      key={v.id}
-                      src={v.logo}
-                      alt={v.shortLabel}
-                      className={styles.assetVenueLogo}
-                      style={{
-                        opacity: supportedVenues?.has(v.id) ? 0.7 : 0.15,
-                      }}
-                    />
-                  ))}
-                </div>
+                <img src={v.logo} alt={v.shortLabel} className={styles.venueCircleImg} />
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
 
-        <div className={styles.footer}>
-          <span className={styles.shortcut}>
-            <kbd className={styles.kbd}>↑↓</kbd> {t('navigate')}
-          </span>
-          <span className={styles.shortcut}>
-            <kbd className={styles.kbd}>Enter</kbd> {t('select')}
-          </span>
-          <span className={styles.shortcut}>
-            <kbd className={styles.kbd}>Esc</kbd> {t('close')}
-          </span>
+          <div className={styles.list}>
+            {filtered.map((u, i) => {
+              const logo = getTokenLogo(u);
+              const supportedVenues = venuesByUnderlying.get(u);
+              const display = getUnderlyingDisplayMeta(u, underlyings, locale);
+              return (
+                <button
+                  key={u}
+                  className={styles.assetRow}
+                  data-active={i === activeIndex}
+                  data-selected={u === selected}
+                  onClick={() => {
+                    onSelect(u);
+                    onClose();
+                  }}
+                  onMouseEnter={() => setActiveIndex(i)}
+                >
+                  <div className={styles.assetLeft}>
+                    {logo && <img src={logo} alt={u} className={styles.assetLogo} />}
+                    <div className={styles.assetInfo}>
+                      <span className={styles.assetSymbol}>{display.label}</span>
+                      <span className={styles.assetSub}>{display.sublabel}</span>
+                    </div>
+                  </div>
+                  <div className={styles.assetVenues}>
+                    {VENUE_LIST.map((v) => (
+                      <img
+                        key={v.id}
+                        src={v.logo}
+                        alt={v.shortLabel}
+                        className={styles.assetVenueLogo}
+                        style={{
+                          opacity: supportedVenues?.has(v.id) ? 0.7 : 0.15,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className={styles.footer}>
+            <span className={styles.shortcut}>
+              <kbd className={styles.kbd}>↑↓</kbd> {t('navigate')}
+            </span>
+            <span className={styles.shortcut}>
+              <kbd className={styles.kbd}>Enter</kbd> {t('select')}
+            </span>
+            <span className={styles.shortcut}>
+              <kbd className={styles.kbd}>Esc</kbd> {t('close')}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </OverlayPortal>
   );
 }

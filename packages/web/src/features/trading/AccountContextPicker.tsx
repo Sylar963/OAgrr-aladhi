@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useFundedRuns } from '@features/funded';
 import { venueStatus } from '@features/portfolio';
 import { defineMessages, type Translate, useT } from '@lib/i18n';
@@ -40,6 +41,7 @@ function shortLabel(ctx: ActiveContext, t: Translate<typeof messages.en>): strin
 }
 
 export default function AccountContextPicker() {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const runs = useFundedRuns();
   const run = runs.data?.runs?.[0] ?? null;
@@ -74,13 +76,13 @@ export default function AccountContextPicker() {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false);
     }
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleEscape);
+    ownerDocument.addEventListener('pointerdown', handlePointerDown);
+    ownerDocument.addEventListener('keydown', handleEscape);
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleEscape);
+      ownerDocument.removeEventListener('pointerdown', handlePointerDown);
+      ownerDocument.removeEventListener('keydown', handleEscape);
     };
-  }, []);
+  }, [ownerDocument]);
 
   function choose(ctx: ActiveContext) {
     setActiveContext(ctx);

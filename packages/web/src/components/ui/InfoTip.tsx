@@ -1,9 +1,13 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { defineMessages, useT } from '@lib/i18n';
 
 import styles from './InfoTip.module.css';
 
-const messages = defineMessages({ moreInfo: 'More info: {label}' }, { moreInfo: 'Más info: {label}' });
+const messages = defineMessages(
+  { moreInfo: 'More info: {label}' },
+  { moreInfo: 'Más info: {label}' },
+);
 
 interface Props {
   label: string;
@@ -13,6 +17,7 @@ interface Props {
 }
 
 export default function InfoTip({ label, title, children, align = 'center' }: Props) {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement | null>(null);
@@ -28,13 +33,13 @@ export default function InfoTip({ label, title, children, align = 'center' }: Pr
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false);
     }
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
+    ownerDocument.addEventListener('pointerdown', onPointerDown);
+    ownerDocument.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
+      ownerDocument.removeEventListener('pointerdown', onPointerDown);
+      ownerDocument.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+  }, [open, ownerDocument]);
 
   return (
     <span ref={wrapRef} className={styles.wrap}>

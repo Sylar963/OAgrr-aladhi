@@ -1,3 +1,4 @@
+import { isAppVisible } from '@lib/app-visibility';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 
@@ -590,7 +591,7 @@ class ChainFeedConnection {
 
   private readonly checkSilence = () => {
     const ws = this.ws;
-    if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!isAppVisible() || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
     if (now - this.lastMessageAt < SILENT_SOCKET_MS) return;
     if (this.probeSentAt <= this.lastMessageAt) {

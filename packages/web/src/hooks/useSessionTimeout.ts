@@ -1,12 +1,13 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { useAppStore } from '@stores/app-store';
+import { isAppVisible, subscribeAppVisibility } from '@lib/app-visibility';
 import { useEffect, useRef } from 'react';
 
 const IDLE_LOGOUT_MS = 30 * 60 * 1000;
 const IDLE_WARNING_MS = 29 * 60 * 1000;
 
 /**
- * Tracks how long the tab has been hidden, then escalates:
+ * Tracks how long every application window has been hidden, then escalates:
  *   29 minutes → idle-warning notice (with 60s countdown)
  *   30 minutes → clears the paper account id + idle-logout notice
  *
@@ -79,16 +80,16 @@ export function useSessionTimeout() {
     };
 
     const onVisibilityChange = () => {
-      if (document.hidden) onHidden();
+      if (!isAppVisible()) onHidden();
       else onVisible();
     };
 
-    document.addEventListener('visibilitychange', onVisibilityChange);
+    const unsubscribe = subscribeAppVisibility(onVisibilityChange);
 
-    if (document.hidden) onHidden();
+    if (!isAppVisible()) onHidden();
 
     return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
+      unsubscribe();
       clearTimers();
     };
   }, []);

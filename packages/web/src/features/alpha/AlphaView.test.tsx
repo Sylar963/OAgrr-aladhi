@@ -34,10 +34,21 @@ vi.mock('@components/auth/AccountSessionProvider', () => ({
   useAccountSession: () => ({ status: 'ready' }),
 }));
 vi.mock('@features/portfolio', () => ({
-  ParadexAccountSummary: ({ onUseEquity }: { onUseEquity?: (equity: number) => void }) => (
-    <button type="button" onClick={() => onUseEquity?.(1234)}>
-      Use connected Paradex equity
-    </button>
+  ParadexAccountSummary: ({ onUseEquity, accountSelector }: { onUseEquity?: (equity: number) => void; accountSelector?: React.ReactNode }) => (
+    <div>
+      {accountSelector}
+      <button type="button" onClick={() => onUseEquity?.(1234)}>
+        Use connected Paradex equity
+      </button>
+    </div>
+  ),
+  ThalexAccountSummary: ({ onUseEquity, accountSelector }: { onUseEquity?: (equity: number) => void; accountSelector?: React.ReactNode }) => (
+    <div>
+      {accountSelector}
+      <button type="button" onClick={() => onUseEquity?.(2400)}>
+        Use connected Thalex equity
+      </button>
+    </div>
   ),
   useParadexRfqs: () => ({ data: undefined, isPending: true }),
   AlphaPortfolioContext: ({ venue }: { venue: string }) => <div>Portfolio exposure: {venue}</div>,
@@ -397,7 +408,21 @@ it('shows Paradex RFQ controls before manual sizing and adopts equity only on re
   expect(screen.getByRole('button', { name: 'RFQ' })).toBeTruthy();
   const input = screen.getByLabelText('Account equity · USD') as HTMLInputElement;
   expect(input.value).toBe('');
+  fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'paradex' } });
   fireEvent.click(screen.getByRole('button', { name: 'Use connected Paradex equity' }));
   expect(input.value).toBe('1234');
   expect(mocks.scan).toHaveBeenCalledWith(expect.objectContaining({ equity: 1234 }));
+});
+
+
+it('offers Thalex equity even when Paradex is not an active quote venue', () => {
+  setTestMarket({ activeVenues: ['thalex'] });
+  render(<AlphaView />);
+  const input = screen.getByLabelText('Account equity · USD') as HTMLInputElement;
+  expect(input.value).toBe('');
+  fireEvent.click(screen.getByRole('button', { name: 'Use connected Thalex equity' }));
+  expect(input.value).toBe('2400');
+  expect(mocks.scan).toHaveBeenCalledWith(expect.objectContaining({ equity: 2400 }));
+  fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'paradex' } });
+  expect(input.value).toBe('2400');
 });

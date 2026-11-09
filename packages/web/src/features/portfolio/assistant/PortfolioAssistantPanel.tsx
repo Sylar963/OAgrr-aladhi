@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import type { PortfolioMetrics, PositionLeg, PortfolioSource } from '@oggregator/protocol';
 import { useQueryClient } from '@tanstack/react-query';
@@ -117,6 +118,7 @@ export function PortfolioAssistantPanel({
   positions = [],
   onNavigate,
 }: PortfolioAssistantPanelProps) {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const locale = useLocale();
   const session = useAccountSession();
@@ -143,8 +145,8 @@ export function PortfolioAssistantPanel({
 
   useEffect(() => {
     if (!expanded) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const previousOverflow = ownerDocument.body.style.overflow;
+    ownerDocument.body.style.overflow = 'hidden';
     panelRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -159,7 +161,7 @@ export function PortfolioAssistantPanel({
       ];
       const first = focusable[0];
       const last = focusable.at(-1);
-      const active = document.activeElement;
+      const active = ownerDocument.activeElement;
       if (event.shiftKey && (active === first || active === panelRef.current)) {
         event.preventDefault();
         last?.focus();
@@ -168,14 +170,14 @@ export function PortfolioAssistantPanel({
         first?.focus();
       }
     };
-    document.addEventListener('keydown', onKey);
+    ownerDocument.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKey);
+      ownerDocument.body.style.overflow = previousOverflow;
+      ownerDocument.removeEventListener('keydown', onKey);
       if (restoreFocusRef.current) requestAnimationFrame(() => expandRef.current?.focus());
       restoreFocusRef.current = true;
     };
-  }, [expanded]);
+  }, [expanded, ownerDocument]);
 
   const onAction: AssistantActionHandler = (action, evidence) => {
     if (evidence.snapshot.source !== source || evidence.snapshot.underlying !== underlying) return;
@@ -405,7 +407,7 @@ export function PortfolioAssistantPanel({
           <div className={styles.backdrop} onClick={() => setExpanded(false)} aria-hidden="true" />
           {panel}
         </>,
-        document.body,
+        ownerDocument.body,
       )
     : panel;
 }

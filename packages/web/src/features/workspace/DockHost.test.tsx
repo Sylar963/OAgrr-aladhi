@@ -38,6 +38,8 @@ function fakePanelApi(isVisible: boolean) {
   const listeners = new Set<(event: { isVisible: boolean }) => void>();
   return {
     isVisible,
+    location: { type: 'grid' },
+    onDidLocationChange: () => ({ dispose: () => {} }),
     onDidVisibilityChange: (listener: (event: { isVisible: boolean }) => void) => {
       listeners.add(listener);
       return { dispose: () => listeners.delete(listener) };
@@ -132,6 +134,9 @@ describe('DockHost', () => {
       onDidAddPanel: on(listeners.add),
       onDidRemovePanel: on(listeners.remove),
       onDidAddGroup: () => ({ dispose: () => {} }),
+      onDidAddPopoutGroup: () => ({ dispose: () => {} }),
+      onWillClosePopoutWindow: () => ({ dispose: () => {} }),
+      onDidOpenPopoutWindowFail: () => ({ dispose: () => {} }),
       fromJSON: vi.fn(),
       clear: vi.fn(),
       toJSON: () => ({ grid: {}, panels: {} }),
@@ -307,6 +312,19 @@ describe('DockHost', () => {
         panels: { chain: { id: 'chain', params: { id: 'chain', kind: 'chain' } } },
       }),
     );
+  });
+
+  it('restores pop-outs only through the script-free workspace host', () => {
+    const id = builtinLayoutId('chain');
+    writeLayout(id, {
+      grid: {},
+      panels: { 'chain-table': { id: 'chain-table', params: { kind: 'chain-table' } } },
+      popoutGroups: [{ data: { views: ['chain-table'] }, url: '/?popout=1' }],
+    });
+    render(<DockHost layoutId={id} />);
+    expect(dock.api.fromJSON).toHaveBeenCalledWith(expect.objectContaining({
+      popoutGroups: [expect.objectContaining({ url: '/workspace-popout.html' })],
+    }));
   });
 
   it('places template-backed custom panels in their starting groups', () => {

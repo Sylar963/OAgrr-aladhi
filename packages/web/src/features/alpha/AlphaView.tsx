@@ -513,7 +513,9 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
 
       {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
         <AlphaAccountSummary
-          defaultVenue={tradeVenue === 'paradex' || !scanVenues.includes('thalex') ? 'paradex' : 'thalex'}
+          defaultVenue={
+            tradeVenue === 'paradex' || !scanVenues.includes('thalex') ? 'paradex' : 'thalex'
+          }
           {...(isSpread && { onUseEquity: (equity: number) => update('equity', String(equity)) })}
         />
       )}

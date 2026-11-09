@@ -1,4 +1,8 @@
-import { ParadexAccountResponseSchema, ParadexRfqsResponseSchema, ThalexAccountResponseSchema } from '@oggregator/protocol';
+import {
+  ParadexAccountResponseSchema,
+  ParadexRfqsResponseSchema,
+  ThalexAccountResponseSchema,
+} from '@oggregator/protocol';
 import { getClerkToken } from '@lib/clerk-token';
 import {
   type DeriveSessionKeyConfirm,

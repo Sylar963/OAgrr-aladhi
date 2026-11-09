@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useState, useRef, useEffect } from 'react';
 
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -46,6 +47,7 @@ export default function LegInput({
   allowPerp = true,
   onExpiryChange,
 }: LegInputProps) {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const addLeg = useStrategyStore((s) => s.addLeg);
   const addHedge = useStrategyStore((s) => s.addHedge);
@@ -71,9 +73,9 @@ export default function LegInput({
         setShowSuggestions(false);
       }
     }
-    document.addEventListener('pointerdown', handleClick);
-    return () => document.removeEventListener('pointerdown', handleClick);
-  }, []);
+    ownerDocument.addEventListener('pointerdown', handleClick);
+    return () => ownerDocument.removeEventListener('pointerdown', handleClick);
+  }, [ownerDocument]);
 
   function handleSelectStrike(strike: number) {
     setStrikeInput(strike.toString());

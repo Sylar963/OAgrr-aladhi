@@ -13,12 +13,14 @@ export default function ThalexAccountSummary({
   return (
     <VenueAccountSummary
       venue="Thalex"
-      data={query.data && {
-        ...query.data,
-        freeCollateralUsd: query.data.freeMarginUsd,
-        maintenanceMarginUsd: null,
-        fetchedAt: query.data.updatedAt,
-      }}
+      data={
+        query.data && {
+          ...query.data,
+          freeCollateralUsd: query.data.freeMarginUsd,
+          maintenanceMarginUsd: null,
+          fetchedAt: query.data.updatedAt,
+        }
+      }
       isError={query.isError}
       isPending={query.isPending}
       onUseEquity={onUseEquity}

@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { MobileDrawer } from '@components/ui';
@@ -68,6 +69,7 @@ interface DraftInputs {
 }
 
 export default function DateRangePicker({ range, bounds, onApply }: DateRangePickerProps) {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const locale = useLocale();
   const isMobile = useIsMobile();
@@ -115,13 +117,13 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
       if (event.key === 'Escape') setOpen(false);
     }
 
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onEscape);
+    ownerDocument.addEventListener('pointerdown', onPointerDown);
+    ownerDocument.addEventListener('keydown', onEscape);
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onEscape);
+      ownerDocument.removeEventListener('pointerdown', onPointerDown);
+      ownerDocument.removeEventListener('keydown', onEscape);
     };
-  }, [isMobile, open]);
+  }, [isMobile, open, ownerDocument]);
 
   function handleOpen() {
     syncDraft(parseDraftRange(effectiveRange));

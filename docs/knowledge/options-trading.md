@@ -56,6 +56,11 @@ and [RFQ markets](https://docs.paradex.trade/api/prod/rfqs/rfq-markets).
 - Alpha displays current Paradex equity separately from the manual planning input. Copying
   equity into the spread plan is an explicit action and does not approve margin or keep the
   manual input synchronized across accounts or venues.
+- Alpha's account selector also exposes Thalex (2026-11-09 implementation review). It uses
+  the existing current account-summary mapping: indexed cash plus unrealised and session-
+  realised P&L, with free/initial margin separate. Display the response's Mainnet/Testnet
+  environment. Unknown nonzero cash prices prevent copying incomplete equity. Switching
+  the selected account must not silently replace the spread plan's equity.
 - RFQ mode reads already-open requests. A read-only JWT cannot create or execute RFQs.
   Creating an RFQ is asynchronous and may reserve collateral; the queued `request_id` is not
   the accepted venue `rfq_id`. A trading-vault implementation must check venue availability,

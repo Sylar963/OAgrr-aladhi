@@ -3,13 +3,16 @@ import {
   DockviewReact,
   type DockviewReadyEvent,
   type IDockviewPanelProps,
+  type IWatermarkPanelProps,
   type SerializedDockview,
   themeDark,
 } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import './dockview-theme.css';
 import { readLayout, removeLayout, writeLayout } from '@lib/custom-tabs';
+import { registerAppDocument } from '@lib/app-visibility';
 import { defineMessages, useT } from '@lib/i18n';
+import { PanelDocumentContext } from '@lib/panel-document';
 import { builtinTabFromLayoutId, type WidgetInstance } from '@lib/workspace-layouts';
 import {
   selectActiveCustomTab,
@@ -20,6 +23,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './DockHost.module.css';
+import PanelWindowControls, { dockPopoutWindow } from './PanelWindowControls';
+import { syncPopoutDocument, WORKSPACE_POPOUT_URL } from './popout-document';
 import { useWorkspaceTemplates } from './template-picker-context';
 import WidgetFrame from './WidgetFrame';
 import { useWidgetCatalog } from './widget-catalog';
@@ -32,11 +37,21 @@ const messages = defineMessages(
     empty: 'Make this workspace yours.',
     hint: 'Start with a ready-made setup, or add individual panels with + Widget.',
     choose: 'Choose a template',
+    onScreens: 'Your panels are open in other windows.',
+    bringBack: 'Bring panels back',
+    blocked:
+      'The panel window could not open. Allow pop-ups for this site and try again. Your panels stay in the workspace.',
+    dismiss: 'Dismiss',
   },
   {
     empty: 'Haz tuyo este espacio.',
     hint: 'Empieza con una configuración lista, o agrega paneles con + Widget.',
     choose: 'Elegir una plantilla',
+    onScreens: 'Tus paneles están abiertos en otras ventanas.',
+    bringBack: 'Traer los paneles de vuelta',
+    blocked:
+      'No se pudo abrir la ventana. Permite ventanas emergentes para este sitio e inténtalo de nuevo. Tus paneles siguen en el espacio.',
+    dismiss: 'Cerrar aviso',
   },
 );
 
@@ -45,38 +60,69 @@ const messages = defineMessages(
 export function WidgetPanel({ api, params }: IDockviewPanelProps<WidgetInstance>) {
   const catalog = useWidgetCatalog();
   const [visible, setVisible] = useState(api.isVisible);
+  const [ownerDocument, setOwnerDocument] = useState(() =>
+    api.location?.type === 'popout' ? api.location.getWindow().document : document,
+  );
 
   useEffect(() => {
     setVisible(api.isVisible);
     const subscription = api.onDidVisibilityChange((event) => setVisible(event.isVisible));
-    return () => subscription.dispose();
+    const location = api.onDidLocationChange(() => {
+      setOwnerDocument(
+        api.location.type === 'popout' ? api.location.getWindow().document : document,
+      );
+    });
+    return () => {
+      subscription.dispose();
+      location.dispose();
+    };
   }, [api]);
 
   if (!visible) return null;
   return (
-    <div className={styles.panel}>
-      <WidgetFrame
-        kind={params.kind}
-        label={catalog.find((widget) => widget.kind === params.kind)?.label}
-        underlying={params.underlying}
-      />
-    </div>
+    <PanelDocumentContext.Provider value={ownerDocument}>
+      <div className={styles.panel}>
+        <WidgetFrame
+          kind={params.kind}
+          label={catalog.find((widget) => widget.kind === params.kind)?.label}
+          underlying={params.underlying}
+        />
+      </div>
+    </PanelDocumentContext.Provider>
   );
 }
 
-function EmptyTabHint() {
+function EmptyTabHint({ containerApi }: IWatermarkPanelProps) {
   const t = useT(messages);
   const openTemplates = useWorkspaceTemplates();
   const tabId = useAppStore((s) => selectActiveCustomTab(s)?.id);
+  const [hasPopouts, setHasPopouts] = useState(() => containerApi.getPopouts().length > 0);
+  useEffect(() => {
+    const update = () => setHasPopouts(containerApi.getPopouts().length > 0);
+    const added = containerApi.onDidAddPopoutGroup(update);
+    const removed = containerApi.onDidRemovePopoutGroup(update);
+    return () => {
+      added.dispose();
+      removed.dispose();
+    };
+  }, [containerApi]);
   return (
     <div className={styles.empty}>
       <span className={styles.emptyIcon} aria-hidden="true">
         ▦
       </span>
-      <strong>{t('empty')}</strong>
-      <span>{t('hint')}</span>
-      <button type="button" onClick={() => openTemplates(tabId)}>
-        {t('choose')}
+      <strong>{t(hasPopouts ? 'onScreens' : 'empty')}</strong>
+      {!hasPopouts && <span>{t('hint')}</span>}
+      <button
+        type="button"
+        onClick={() => {
+          if (hasPopouts) {
+            for (const popout of containerApi.getPopouts())
+              dockPopoutWindow(containerApi, popout.window);
+          } else openTemplates(tabId);
+        }}
+      >
+        {t(hasPopouts ? 'bringBack' : 'choose')}
       </button>
     </div>
   );
@@ -85,6 +131,7 @@ function EmptyTabHint() {
 const COMPONENTS = { widget: WidgetPanel };
 
 export default function DockHost({ layoutId }: { layoutId: string }) {
+  const t = useT(messages);
   const panels = useAppStore((s) => selectLayoutPanels(s, layoutId));
   const preset = useAppStore((s) => selectLayoutPreset(s, layoutId));
   const revision = useAppStore((s) => s.layoutRevision);
@@ -94,6 +141,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
   const catalog = useWidgetCatalog();
   const [api, setApi] = useState<DockviewApi | null>(null);
   const [restored, setRestored] = useState(false);
+  const [popoutFailed, setPopoutFailed] = useState(false);
   const initialized = useRef(false);
 
   const onReady = useCallback(
@@ -115,6 +163,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
           for (const [id, panel] of Object.entries(layout.panels)) {
             panel.params = expected.find((entry) => entry.id === id);
           }
+          for (const popout of layout.popoutGroups ?? []) popout.url = WORKSPACE_POPOUT_URL;
           event.api.fromJSON(layout);
           setRestored(true);
         } catch {
@@ -126,6 +175,31 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
     },
     [layoutId],
   );
+
+  useEffect(() => {
+    if (api == null) return;
+    const cleanups = new Map<Window, () => void>();
+    const opened = api.onDidAddPopoutGroup(({ window: target }) => {
+      const stopStyles = syncPopoutDocument(document, target.document);
+      const stopVisibility = registerAppDocument(target.document);
+      cleanups.set(target, () => {
+        stopStyles();
+        stopVisibility();
+      });
+      target.focus();
+    });
+    const closing = api.onWillClosePopoutWindow(({ window: target }) => {
+      cleanups.get(target)?.();
+      cleanups.delete(target);
+    });
+    const failed = api.onDidOpenPopoutWindowFail(() => setPopoutFailed(true));
+    return () => {
+      opened.dispose();
+      closing.dispose();
+      failed.dispose();
+      for (const cleanup of cleanups.values()) cleanup();
+    };
+  }, [api]);
 
   useEffect(() => {
     if (api == null) return;
@@ -240,10 +314,20 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
 
   return (
     <div className={styles.host}>
+      {popoutFailed && (
+        <div className={styles.notice} role="alert">
+          <span>{t('blocked')}</span>
+          <button type="button" onClick={() => setPopoutFailed(false)}>
+            {t('dismiss')}
+          </button>
+        </div>
+      )}
       <DockviewReact
         components={COMPONENTS}
         theme={themeDark}
         watermarkComponent={EmptyTabHint}
+        rightHeaderActionsComponent={PanelWindowControls}
+        popoutUrl={WORKSPACE_POPOUT_URL}
         disableFloatingGroups
         onReady={onReady}
       />

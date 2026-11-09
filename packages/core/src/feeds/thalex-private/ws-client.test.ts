@@ -21,6 +21,7 @@ const thalexWsMockState = vi.hoisted(() => ({
     with_sell: { required_margin: 1_100 },
   } as unknown,
   suppressMarginPreview: false,
+  accountSummaryResult: undefined as unknown,
 }));
 
 const ACCOUNT_SUMMARY = vi.hoisted(() => ({
@@ -94,7 +95,7 @@ vi.mock('../shared/topic-ws-client.js', () => ({
               : method === 'private/trade_history'
                 ? thalexWsMockState.tradeHistoryResult
                 : method === 'private/account_summary'
-                  ? ACCOUNT_SUMMARY
+                  ? thalexWsMockState.accountSummaryResult ?? ACCOUNT_SUMMARY
                   : method === 'private/required_margin_for_order'
                     ? thalexWsMockState.marginPreviewResult
                   : method === 'private/daily_mark_history'
@@ -128,9 +129,34 @@ afterEach(() => {
     current: { required_margin: 1_000 }, with_buy: { required_margin: 800 }, with_sell: { required_margin: 1_100 },
   };
   thalexWsMockState.suppressMarginPreview = false;
+  thalexWsMockState.accountSummaryResult = undefined;
 });
 
 describe('ThalexPrivateClient', () => {
+  it('refreshes current equity using only the account summary RPC', async () => {
+    const client = new ThalexPrivateClient({ kid: 'kid-1', privateKeyPem: 'pem' });
+    await client.start();
+    thalexWsMockState.sentPayloads.length = 0;
+    thalexWsMockState.accountSummaryResult = {
+      ...ACCOUNT_SUMMARY,
+      cash: [{ currency: 'USDT', balance: 2000 }],
+      unrealised_pnl: 350,
+      session_realised_pnl: 50,
+      margin: 2350,
+    };
+    try {
+      expect(await client.fetchAccountEquity()).toMatchObject({ equityUsd: 2400, marginUsd: 2350 });
+      expect(client.getLatestAccountEquity()).toMatchObject({ equityUsd: 2400 });
+      expect(thalexWsMockState.sentPayloads.map((payload) => payload.method)).toEqual([
+        'private/account_summary',
+      ]);
+      thalexWsMockState.accountSummaryResult = {};
+      await expect(client.fetchAccountEquity()).rejects.toThrow();
+    } finally {
+      await client.dispose();
+    }
+  });
+
   it('bounds preview requests below the MCP deadline and clears timed-out pending calls', async () => {
     vi.useFakeTimers();
     const client = new ThalexPrivateClient({ kid: 'kid-1', privateKeyPem: 'pem' });

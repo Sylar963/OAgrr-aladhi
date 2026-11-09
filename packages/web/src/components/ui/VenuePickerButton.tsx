@@ -1,3 +1,4 @@
+import { usePanelDocument } from '@lib/panel-document';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { defineMessages, useT } from '@lib/i18n';
@@ -40,6 +41,7 @@ export default function VenuePickerButton({
   label,
   readOnly = false,
 }: VenuePickerButtonProps = {}) {
+  const ownerDocument = usePanelDocument();
   const t = useT(messages);
   const storeActiveVenues = useMarket((m) => m.activeVenues);
   const storeToggleVenue = useAppStore((s) => s.toggleVenue);
@@ -65,13 +67,13 @@ export default function VenuePickerButton({
       if (event.key === 'Escape') setOpen(false);
     }
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleEscape);
+    ownerDocument.addEventListener('pointerdown', handlePointerDown);
+    ownerDocument.addEventListener('keydown', handleEscape);
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleEscape);
+      ownerDocument.removeEventListener('pointerdown', handlePointerDown);
+      ownerDocument.removeEventListener('keydown', handleEscape);
     };
-  }, []);
+  }, [ownerDocument]);
 
   const handleToggle = useCallback(() => setOpen((v) => !v), []);
 

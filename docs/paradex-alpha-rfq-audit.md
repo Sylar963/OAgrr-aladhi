@@ -80,7 +80,7 @@ surfaced rather than displayed as zero liquidity.
 ## Operator walkthrough
 
 1. Connect Paradex with the existing read-only connection and activate Paradex for Alpha.
-2. Confirm the Paradex account summary loads; compare equity/free collateral with the same
+2. Select Paradex in the account dropdown; compare equity/free collateral with the same
    account in Paradex. If needed, click “Use equity for this plan” in a spread tab.
 3. Create the desired RFQ in Paradex, then choose RFQ on its Alpha card. Check each request's
    legs, ratios, strategy size, bid/ask quantities and fetched time.
@@ -101,3 +101,23 @@ Create can reserve collateral. No credentials or write requests were added to th
 To rank these quotes alongside screen opportunities later, price the exact accepted structure
 with its signed net price, permitted direction, ratios, available quantity, costs and held book.
 Do not overwrite public-chain leg prices with independent RFQ leg indications.
+
+## Alpha account selector (2026-11-09, client date)
+
+The account panel now offers Thalex and Paradex whenever either is an active Alpha venue.
+Both accounts remain selectable independently of the quote venue. Choosing an account only
+changes the displayed balance; “Use equity for this plan” explicitly copies its equity into
+the spread sizing input. Changing accounts does not overwrite the current plan.
+
+Thalex reads `/api/portfolio/thalex/account`, backed by the existing authenticated
+`private/account_summary` RPC with a 10-second timeout and account-scoped connection lease.
+The selected account refreshes every 15 seconds. Equity is cash at its available USD index
+prices plus unrealised and session-realised P&L; `remaining_margin` supplies free margin and
+`required_margin` supplies initial margin. Maintenance margin remains unavailable. The
+response identifies Mainnet/Testnet, and an in-flight result is discarded if its private
+client was replaced. Unpriced nonzero cash holdings are identified and prevent adopting
+incomplete equity. No historical balance or collateral figure substitutes for current equity.
+
+Regression coverage includes explicit account selection and copying, stale and failed reads,
+zero balances, missing margin fields, network changes, and authenticated-account scoping.
+Actual connected-account balances still require a signed-in comparison with each venue.

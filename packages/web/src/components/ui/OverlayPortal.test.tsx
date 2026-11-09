@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import OverlayPortal from './OverlayPortal';
+import { PanelDocumentContext } from '@lib/panel-document';
 
 describe('OverlayPortal', () => {
   afterEach(cleanup);
@@ -36,5 +37,24 @@ describe('OverlayPortal', () => {
       </OverlayPortal>,
     );
     expect(screen.getByText('overlay').parentElement).toBe(document.body);
+  });
+
+  it('renders overlays in the panel window and follows it back to the main document', () => {
+    const popup = document.implementation.createHTMLDocument();
+    const content = (
+      <OverlayPortal>
+        <div>detached overlay</div>
+      </OverlayPortal>
+    );
+    const view = render(
+      <PanelDocumentContext.Provider value={popup}>{content}</PanelDocumentContext.Provider>,
+    );
+    expect(popup.body.textContent).toBe('detached overlay');
+    expect(screen.queryByText('detached overlay')).toBeNull();
+    view.rerender(
+      <PanelDocumentContext.Provider value={document}>{content}</PanelDocumentContext.Provider>,
+    );
+    expect(popup.body.textContent).toBe('');
+    expect(screen.getByText('detached overlay').parentElement).toBe(document.body);
   });
 });

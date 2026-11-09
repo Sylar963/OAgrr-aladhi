@@ -1,4 +1,7 @@
-import { QueryClient, QueryCache } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryCache } from '@tanstack/react-query';
+import { isAppVisible, subscribeAppVisibility } from './app-visibility';
+
+focusManager.setEventListener((onFocus) => subscribeAppVisibility(() => onFocus(isAppVisible())));
 
 export const queryClient = new QueryClient({
   defaultOptions: {

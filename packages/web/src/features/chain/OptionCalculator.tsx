@@ -1,3 +1,4 @@
+import { usePanelWindow } from '@lib/panel-document';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -64,6 +65,7 @@ export default function OptionCalculator({
   defaultSpot,
   onClose,
 }: OptionCalculatorProps) {
+  const ownerWindow = usePanelWindow();
   const t = useT(messages);
   const [right, setRight] = useState<OptionRight>('call');
   const [expiryDate, setExpiryDate] = useState(defaultExpiry || '');
@@ -72,7 +74,7 @@ export default function OptionCalculator({
   const [spot, setSpot] = useState(defaultSpot != null ? String(defaultSpot.toFixed(2)) : '');
   const [volPct, setVolPct] = useState('');
   const [price, setPrice] = useState('');
-  const [pos, setPos] = useState(() => initialPos());
+  const [pos, setPos] = useState(() => initialPos(ownerWindow));
   const dragRef = useRef<DragState | null>(null);
 
   function onExpiryChange(value: string) {
@@ -160,8 +162,8 @@ export default function OptionCalculator({
     function onMove(e: PointerEvent) {
       const d = dragRef.current;
       if (!d) return;
-      const maxX = window.innerWidth - PANEL_WIDTH;
-      const maxY = window.innerHeight - 100;
+      const maxX = ownerWindow.innerWidth - PANEL_WIDTH;
+      const maxY = ownerWindow.innerHeight - 100;
       const nx = clamp(d.originX + (e.clientX - d.startX), 0, Math.max(0, maxX));
       const ny = clamp(d.originY + (e.clientY - d.startY), 0, Math.max(0, maxY));
       setPos({ x: nx, y: ny });
@@ -169,15 +171,15 @@ export default function OptionCalculator({
     function onUp() {
       dragRef.current = null;
     }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    ownerWindow.addEventListener('pointermove', onMove);
+    ownerWindow.addEventListener('pointerup', onUp);
+    ownerWindow.addEventListener('pointercancel', onUp);
     return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      ownerWindow.removeEventListener('pointermove', onMove);
+      ownerWindow.removeEventListener('pointerup', onUp);
+      ownerWindow.removeEventListener('pointercancel', onUp);
     };
-  }, []);
+  }, [ownerWindow]);
 
   return (
     <div className={styles.panel} style={{ left: pos.x, top: pos.y }}>
@@ -356,9 +358,9 @@ function isoToDte(iso: string): string {
   return String(days);
 }
 
-function initialPos(): { x: number; y: number } {
+function initialPos(ownerWindow: Window): { x: number; y: number } {
   if (typeof window === 'undefined') return { x: 0, y: 0 };
-  const x = Math.max(16, window.innerWidth - PANEL_WIDTH - 96);
+  const x = Math.max(16, ownerWindow.innerWidth - PANEL_WIDTH - 96);
   const y = 96;
   return { x, y };
 }

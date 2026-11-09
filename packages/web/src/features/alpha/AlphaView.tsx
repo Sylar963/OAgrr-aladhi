@@ -510,7 +510,11 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         />
       )}
 
-      {!tradfi && !isSpread && scanVenues.includes('paradex') && <ParadexAccountSummary />}
+      {!tradfi && scanVenues.includes('paradex') && (
+        <ParadexAccountSummary
+          {...(isSpread && { onUseEquity: (equity: number) => update('equity', String(equity)) })}
+        />
+      )}
       {!tradfi &&
         isScannerStrategy(strategy) &&
         strategy !== 'short-straddle' &&

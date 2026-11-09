@@ -32,6 +32,38 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | Channel-study data and costs (2026-10-26) | [Deribit chart API](https://docs.deribit.com/api-reference/market-data/public-get_tradingview_chart_data); [Deribit fees](https://support.deribit.com/hc/en-us/articles/25944746248989-Fees), standard perpetual/futures tier | Public five-minute BTC candles and current 3.5 bps/side standard taker fee. Current fees are a scenario, not reconstructed historical charges; 1 bp/side spread/slippage is assumed. Funding is excluded. |
 | Discretionary channel execution venues (2026-10-26, client date) | [Thalex fees](https://support.thalex.com/hc/en-us/articles/7079268315665-What-trading-fees-does-Thalex-charge), Delta 1 tiers; [Bybit fee structure](https://www.bybit.com/en/help-center/article/Trading-Fee-Structure), standard perpetual/futures tier | Roberto uses Thalex or Bybit at market. Published entry-tier taker rates are 5 and 5.5 bps/side respectively; account-specific discounts are unverified. Model 12/13 bps round trip including assumed 1 bp/side spread/slippage. No funding or option-premium P&L. |
 | Gamma flip audit (2026-10-27 UTC) | [SpotGamma Gamma Flip](https://support.spotgamma.com/hc/en-us/articles/15413261162387-Gamma-Flip); [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma) | Definitions and conditional hedging mechanics checked against the implementation and public live BTC profiles; no evidence of predictive performance. See the audit below. |
+| Paradex RFQ and equity APIs (2026-11-08, client date) | Official account, RFQ list/BBO/create/markets and read-only authentication documentation | API mechanics reviewed for Alpha integration; no authenticated live-account validation or RFQ strategy-performance evidence. See integration notes below. |
+
+## Paradex RFQ and current-equity integration (2026-11-08, client date)
+
+Official API review, not strategy research: [RFQ list](https://docs.paradex.trade/api/prod/rfqs/rfq-list),
+[RFQ BBO](https://docs.paradex.trade/api/prod/rfqs/rfq-bbo),
+[account](https://docs.paradex.trade/api/prod/account/get),
+[authentication](https://docs.paradex.trade/api/general-information/api-authentication),
+[RFQ create](https://docs.paradex.trade/api/prod/rfqs/rfq-create),
+and [RFQ markets](https://docs.paradex.trade/api/prod/rfqs/rfq-markets).
+
+- `GET /rfqs` is account-scoped request metadata, not a public chain or maker quote stream.
+  Continue its cursor even on an empty account page. `GET /rfqs/{id}/bbo` supplies the
+  strategy bid/ask and quantities; absent/closed/inaccessible quotes remain unavailable.
+- Signed net strategy prices can be negative or zero. Do not apply outright option-price
+  positivity checks or screen formatters that turn zero into a missing quote. Keep RFQ
+  structure prices out of outright leg rankings and do not reconstruct an executable combo
+  by adding independent leg indications. Display quantity and leg ratios from the request.
+- Current equity is `account_value` (including unrealized P&L), not `total_collateral`,
+  open-leg P&L, or the last daily history close. Free collateral is a separate venue field.
+  USDC is displayed at 1:1 USD, without a live depeg adjustment.
+- Alpha displays current Paradex equity separately from the manual planning input. Copying
+  equity into the spread plan is an explicit action and does not approve margin or keep the
+  manual input synchronized across accounts or venues.
+- RFQ mode reads already-open requests. A read-only JWT cannot create or execute RFQs.
+  Creating an RFQ is asynchronous and may reserve collateral; the queued `request_id` is not
+  the accepted venue `rfq_id`. A trading-vault implementation must check venue availability,
+  eligible markets, block minimums and both quantity grids, then correlate private `rfq`
+  WebSocket RESULT events before reading BBO or submitting an execution.
+- These changes add quote visibility, not a calibrated RFQ strategy score or proven edge.
+  Regression checks cover empty cursor pages, signed/zero prices, unavailable and expired
+  quotes, rejected auth, current equity versus collateral, and per-account route arguments.
 
 ## Gamma flip audit (2026-10-27 UTC)
 

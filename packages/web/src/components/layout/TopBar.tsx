@@ -1,6 +1,7 @@
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
-import { defineMessages, useT } from '@lib/i18n';
+import { useWorkspaceTemplates } from '@features/workspace';
 import { MAX_CUSTOM_TABS } from '@lib/custom-tabs';
+import { defineMessages, useT } from '@lib/i18n';
 import { TAB_GROUPS, type TabDef, type TabGroup } from '@lib/tabs';
 import { MAIN_MARKET_ID, useAppStore, useMarket } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,8 +10,8 @@ import AccountChip from './AccountChip';
 import AssetModeToggle from './AssetModeToggle';
 import LanguageToggle from './LanguageToggle';
 import { useSeenTabs } from './seen-tabs';
-import { useTabFold } from './tab-fit';
 import styles from './TopBar.module.css';
+import { useTabFold } from './tab-fit';
 import VenueHealth from './VenueHealth';
 
 const messages = defineMessages(
@@ -20,8 +21,7 @@ const messages = defineMessages(
     switchUnderlying: 'Switch underlying (⌘K)',
     live: 'Live',
     new: 'New',
-    newTab: 'New custom tab',
-    defaultTabName: 'Tab {n}',
+    newTab: 'New workspace',
   },
   {
     more: 'Más',
@@ -29,8 +29,7 @@ const messages = defineMessages(
     switchUnderlying: 'Cambiar subyacente (⌘K)',
     live: 'En vivo',
     new: 'Nuevo',
-    newTab: 'Nueva pestaña personalizada',
-    defaultTabName: 'Pestaña {n}',
+    newTab: 'Nuevo espacio de trabajo',
   },
 );
 
@@ -51,7 +50,7 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
   const underlying = useMarket((m) => m.underlying);
   const onFixedTab = useAppStore((s) => s.activeMarketId === MAIN_MARKET_ID);
   const customTabCount = useAppStore((s) => s.customTabs.length);
-  const createCustomTab = useAppStore((s) => s.createCustomTab);
+  const openTemplates = useWorkspaceTemplates();
   const seenTabs = useSeenTabs(activeTab);
   const t = useT(messages);
   const selectedTab = onFixedTab ? activeTab : null;
@@ -154,7 +153,7 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
           disabled={customTabCount >= MAX_CUSTOM_TABS}
           title={t('newTab')}
           aria-label={t('newTab')}
-          onClick={() => createCustomTab(t('defaultTabName', { n: customTabCount + 1 }))}
+          onClick={() => openTemplates()}
         >
           +
         </button>

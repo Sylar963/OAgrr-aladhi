@@ -1,5 +1,6 @@
 import { isWidgetKind, type WidgetKind } from '@lib/tabs';
 import { VENUE_IDS } from '@lib/venue-meta';
+import { WORKSPACE_TEMPLATE_IDS, type WorkspaceTemplateId } from '@lib/workspace-templates';
 import { z } from 'zod';
 
 export const MAX_CUSTOM_TABS = 10;
@@ -17,6 +18,7 @@ export interface CustomTab {
   id: string;
   name: string;
   kinds: WidgetKind[];
+  templateId?: WorkspaceTemplateId;
 }
 
 export interface PersistedCustomTab extends CustomTab {
@@ -28,6 +30,7 @@ const PersistedTabSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+$/),
   name: z.string().min(1).max(MAX_TAB_NAME_LENGTH),
   kinds: z.array(z.string()),
+  templateId: z.enum(WORKSPACE_TEMPLATE_IDS).optional().catch(undefined),
   underlying: z.string().min(1),
   activeVenues: z.array(z.string()),
 });

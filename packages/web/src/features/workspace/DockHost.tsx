@@ -10,11 +10,17 @@ import 'dockview-react/dist/styles/dockview.css';
 import './dockview-theme.css';
 import { readLayout, removeLayout, writeLayout } from '@lib/custom-tabs';
 import { defineMessages, useT } from '@lib/i18n';
-import { builtinTabFromLayoutId, PRESETS, type WidgetInstance } from '@lib/workspace-layouts';
-import { selectLayoutPanels, useAppStore } from '@stores/app-store';
+import { builtinTabFromLayoutId, type WidgetInstance } from '@lib/workspace-layouts';
+import {
+  selectActiveCustomTab,
+  selectLayoutPanels,
+  selectLayoutPreset,
+  useAppStore,
+} from '@stores/app-store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './DockHost.module.css';
+import { useWorkspaceTemplates } from './template-picker-context';
 import WidgetFrame from './WidgetFrame';
 import { useWidgetCatalog } from './widget-catalog';
 
@@ -22,8 +28,16 @@ const LAYOUT_SAVE_DELAY_MS = 300;
 const GROUP_CONSTRAINTS = { minimumWidth: 320, minimumHeight: 200 };
 
 const messages = defineMessages(
-  { empty: 'Add a widget to start this tab.' },
-  { empty: 'Agrega un widget para empezar esta pestaña.' },
+  {
+    empty: 'Make this workspace yours.',
+    hint: 'Start with a ready-made setup, or add individual panels with + Widget.',
+    choose: 'Choose a template',
+  },
+  {
+    empty: 'Haz tuyo este espacio.',
+    hint: 'Empieza con una configuración lista, o agrega paneles con + Widget.',
+    choose: 'Elegir una plantilla',
+  },
 );
 
 // Dockview's default renderer only detaches a hidden panel's DOM and leaves its React tree mounted,
@@ -52,13 +66,27 @@ export function WidgetPanel({ api, params }: IDockviewPanelProps<WidgetInstance>
 
 function EmptyTabHint() {
   const t = useT(messages);
-  return <div className={styles.empty}>{t('empty')}</div>;
+  const openTemplates = useWorkspaceTemplates();
+  const tabId = useAppStore((s) => selectActiveCustomTab(s)?.id);
+  return (
+    <div className={styles.empty}>
+      <span className={styles.emptyIcon} aria-hidden="true">
+        ▦
+      </span>
+      <strong>{t('empty')}</strong>
+      <span>{t('hint')}</span>
+      <button type="button" onClick={() => openTemplates(tabId)}>
+        {t('choose')}
+      </button>
+    </div>
+  );
 }
 
 const COMPONENTS = { widget: WidgetPanel };
 
 export default function DockHost({ layoutId }: { layoutId: string }) {
   const panels = useAppStore((s) => selectLayoutPanels(s, layoutId));
+  const preset = useAppStore((s) => selectLayoutPreset(s, layoutId));
   const revision = useAppStore((s) => s.layoutRevision);
   const focusRequest = useAppStore((s) => s.widgetFocusRequest);
   const clearWidgetFocus = useAppStore((s) => s.clearWidgetFocus);
@@ -161,7 +189,6 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
       if (!panels.some((entry) => entry.id === panel.id)) panel.api.close();
     }
     const builtin = builtinTabFromLayoutId(layoutId);
-    const preset = builtin ? PRESETS[builtin] : [];
     const groupAnchors = new Map<number, string>();
     for (const panel of panels) {
       const label = catalog.find((widget) => widget.kind === panel.kind)?.label ?? panel.kind;
@@ -174,7 +201,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
         if (existing.title !== title) existing.api.setTitle(title);
         continue;
       }
-      const usePreset = !initialized.current && !restored && builtin != null;
+      const usePreset = !initialized.current && !restored && preset.length > 0;
       const reference = anchor ?? groupAnchors.get(group === 3 ? 1 : 0);
       api.addPanel({
         id: panel.id,
@@ -203,7 +230,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
       });
     }
     initialized.current = true;
-  }, [api, panels, catalog, layoutId, restored]);
+  }, [api, panels, catalog, layoutId, preset, restored]);
 
   useEffect(() => {
     if (api == null || focusRequest == null) return;

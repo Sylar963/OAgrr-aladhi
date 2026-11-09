@@ -9,6 +9,7 @@ import {
   PRESETS,
   type WidgetInstance,
 } from '@lib/workspace-layouts';
+import { WORKSPACE_TEMPLATES } from '@lib/workspace-templates';
 import {
   selectActiveCustomTab,
   selectActiveLayoutId,
@@ -16,6 +17,7 @@ import {
   useAppStore,
 } from '@stores/app-store';
 import { type PointerEvent as ReactPointerEvent, useState } from 'react';
+import { useWorkspaceTemplates } from './template-picker-context';
 import styles from './WorkspaceBar.module.css';
 import { useWidgetCatalog } from './widget-catalog';
 
@@ -30,6 +32,9 @@ const messages = defineMessages(
     resetConfirm: 'Restore the default panel arrangement? Your layout changes will be removed.',
     clearConfirm: 'Remove all panels from this custom tab?',
     panels: '{n} panels',
+    templates: 'Templates',
+    resetTemplate: 'Reset template',
+    resetTemplateConfirm: 'Restore this template’s starting panels and arrangement?',
   },
   {
     addWidget: '+ Widget',
@@ -41,6 +46,9 @@ const messages = defineMessages(
     resetConfirm: '¿Restaurar la disposición predeterminada? Se quitarán tus cambios al diseño.',
     clearConfirm: '¿Quitar todos los paneles de esta pestaña personalizada?',
     panels: '{n} paneles',
+    templates: 'Plantillas',
+    resetTemplate: 'Restablecer plantilla',
+    resetTemplateConfirm: '¿Restaurar los paneles y la disposición inicial de esta plantilla?',
   },
 );
 
@@ -70,6 +78,9 @@ export default function WorkspaceBar() {
   const resetActiveLayout = useAppStore((s) => s.resetActiveLayout);
   const tabs = useTabs();
   const catalog = useWidgetCatalog();
+  const openTemplates = useWorkspaceTemplates();
+  const hasTemplate =
+    activeTab?.templateId && WORKSPACE_TEMPLATES[activeTab.templateId].panels.length > 0;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
@@ -194,6 +205,13 @@ export default function WorkspaceBar() {
         ))}
       </div>
       <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.templates}
+          onClick={() => openTemplates(activeTab?.kinds.length === 0 ? activeTab.id : undefined)}
+        >
+          <span aria-hidden="true">▦</span> {t('templates')}
+        </button>
         {available.length > 0 && (
           <DropdownPicker
             size="sm"
@@ -209,10 +227,15 @@ export default function WorkspaceBar() {
           type="button"
           className={styles.reset}
           onClick={() => {
-            if (window.confirm(t(builtin ? 'resetConfirm' : 'clearConfirm'))) resetActiveLayout();
+            if (
+              window.confirm(
+                t(builtin ? 'resetConfirm' : hasTemplate ? 'resetTemplateConfirm' : 'clearConfirm'),
+              )
+            )
+              resetActiveLayout();
           }}
         >
-          {t(builtin ? 'reset' : 'clear')}
+          {t(builtin ? 'reset' : hasTemplate ? 'resetTemplate' : 'clear')}
         </button>
       </div>
     </div>

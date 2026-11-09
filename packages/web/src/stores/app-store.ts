@@ -14,10 +14,13 @@ import {
   canAddPanel,
   defaultPanels,
   matchesDestination,
+  PRESETS,
+  type PresetPanel,
   readBuiltinLayouts,
   type WidgetInstance,
   writeBuiltinLayouts,
 } from '@lib/workspace-layouts';
+import { WORKSPACE_TEMPLATES, type WorkspaceTemplateId } from '@lib/workspace-templates';
 import type {
   SystemAnnouncement,
   VenueFailure,
@@ -151,7 +154,8 @@ interface AppState {
   navigateToWidget: (kind: TabId, target?: MarketTarget) => void;
   claimMainFeed: () => () => void;
   clearWidgetFocus: () => void;
-  createCustomTab: (name: string) => void;
+  createCustomTab: (name: string, templateId?: WorkspaceTemplateId) => boolean;
+  applyTemplateToEmptyTab: (id: string, templateId: WorkspaceTemplateId) => boolean;
   openCustomTab: (id: string) => void;
   renameCustomTab: (id: string, name: string) => void;
   closeCustomTab: (id: string) => void;
@@ -223,6 +227,7 @@ export function selectIsWidgetOpen(
 
 type LayoutState = Pick<AppState, 'customTabs' | 'builtinLayouts' | 'activeMarketId' | 'activeTab'>;
 const EMPTY_PANELS: WidgetInstance[] = [];
+const EMPTY_PRESET: readonly PresetPanel[] = [];
 const DEFAULT_PANELS = Object.fromEntries(TABS.map(({ id }) => [id, defaultPanels(id)])) as Record<
   TabId,
   WidgetInstance[]
@@ -231,6 +236,16 @@ const customPanelCache = new WeakMap<WidgetKind[], WidgetInstance[]>();
 
 export function selectActiveLayoutId(s: Pick<AppState, 'activeMarketId' | 'activeTab'>): string {
   return s.activeMarketId === MAIN_MARKET_ID ? builtinLayoutId(s.activeTab) : s.activeMarketId;
+}
+
+export function selectLayoutPreset(
+  s: Pick<AppState, 'customTabs'>,
+  id: string,
+): readonly PresetPanel[] {
+  const builtin = builtinTabFromLayoutId(id);
+  if (builtin) return PRESETS[builtin];
+  const templateId = s.customTabs.find((tab) => tab.id === id)?.templateId;
+  return templateId ? WORKSPACE_TEMPLATES[templateId].panels : EMPTY_PRESET;
 }
 
 export function selectLayoutPanels(
@@ -277,7 +292,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   activeMarketId: MAIN_MARKET_ID,
   activeTab: 'chain',
-  customTabs: restoredTabs.map(({ id, name, kinds }) => ({ id, name, kinds })),
+  customTabs: restoredTabs.map(({ id, name, kinds, templateId }) => ({
+    id,
+    name,
+    kinds,
+    ...(templateId ? { templateId } : {}),
+  })),
   builtinLayouts: readBuiltinLayouts(),
   layoutRevision: 0,
   mainFeedClaims: 0,
@@ -355,16 +375,45 @@ export const useAppStore = create<AppState>((set, get) => ({
     return () => set((s) => ({ mainFeedClaims: s.mainFeedClaims - 1 }));
   },
   clearWidgetFocus: () => set({ widgetFocusRequest: null }),
-  createCustomTab: (name) =>
+  createCustomTab: (name, templateId) => {
+    if (get().customTabs.length >= MAX_CUSTOM_TABS) return false;
+    const template = templateId ? WORKSPACE_TEMPLATES[templateId] : undefined;
     set((s) => {
-      if (s.customTabs.length >= MAX_CUSTOM_TABS) return {};
       const id = Math.random().toString(36).slice(2, 10);
       return {
-        customTabs: [...s.customTabs, { id, name, kinds: [] }],
+        customTabs: [
+          ...s.customTabs,
+          {
+            id,
+            name,
+            kinds: template?.panels.map((panel) => panel.kind) ?? [],
+            ...(templateId ? { templateId } : {}),
+          },
+        ],
         markets: { ...s.markets, [id]: { ...selectActiveMarket(s), myIv: '' } },
         activeMarketId: id,
+        widgetFocusRequest: null,
       };
-    }),
+    });
+    return true;
+  },
+  applyTemplateToEmptyTab: (id, templateId) => {
+    const tab = get().customTabs.find((entry) => entry.id === id);
+    const template = WORKSPACE_TEMPLATES[templateId];
+    if (!tab || tab.kinds.length > 0 || !template) return false;
+    removeLayout(id);
+    set((s) => ({
+      customTabs: s.customTabs.map((entry) =>
+        entry.id === id
+          ? { ...entry, templateId, kinds: template.panels.map((panel) => panel.kind) }
+          : entry,
+      ),
+      activeMarketId: id,
+      layoutRevision: s.layoutRevision + 1,
+      widgetFocusRequest: null,
+    }));
+    return true;
+  },
   openCustomTab: (id) => {
     if (get().customTabs.some((tab) => tab.id === id)) set({ activeMarketId: id });
   },
@@ -421,7 +470,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ builtinLayouts, layoutRevision: s.layoutRevision + 1, widgetFocusRequest: null });
     } else {
       set({
-        ...updateLayoutPanels(s, id, []),
+        ...updateLayoutPanels(
+          s,
+          id,
+          selectLayoutPreset(s, id).map(({ group: _group, ...panel }) => panel),
+        ),
         layoutRevision: s.layoutRevision + 1,
         widgetFocusRequest: null,
       });

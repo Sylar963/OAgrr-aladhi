@@ -1,7 +1,7 @@
 import { SystemNotifications } from '@components/notifications';
 import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
-import { WorkspaceBar } from '@features/workspace';
+import { WorkspaceBar, WorkspaceTemplatesProvider } from '@features/workspace';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
 import { useAppStore, useMarket } from '@stores/app-store';
@@ -107,36 +107,38 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   }, [setActiveTab]);
 
   return (
-    <PaletteContext.Provider value={() => setPaletteOpen(true)}>
-      <div className={styles.shell}>
-        <NewsTicker />
-        <TopBar
-          tabs={tabs}
-          onOpenPalette={() => setPaletteOpen(true)}
-          onOpenShortcuts={() => setHelpOpen(true)}
-        />
-        {!isMobile && (
-          <Suspense fallback={null}>
-            <WorkspaceBar />
-          </Suspense>
-        )}
-        <SystemNotifications />
-        <Onboarding />
-        {showToolbar && <MobileToolbar />}
-        <main className={styles.main}>{children}</main>
-        <MobileNav />
-
-        {paletteOpen && (
-          <CommandPalette
-            underlyings={underlyings}
-            selected={underlying}
-            onSelect={setUnderlying}
-            onClose={() => setPaletteOpen(false)}
+    <WorkspaceTemplatesProvider>
+      <PaletteContext.Provider value={() => setPaletteOpen(true)}>
+        <div className={styles.shell}>
+          <NewsTicker />
+          <TopBar
+            tabs={tabs}
+            onOpenPalette={() => setPaletteOpen(true)}
+            onOpenShortcuts={() => setHelpOpen(true)}
           />
-        )}
+          {!isMobile && (
+            <Suspense fallback={null}>
+              <WorkspaceBar />
+            </Suspense>
+          )}
+          <SystemNotifications />
+          <Onboarding />
+          {showToolbar && <MobileToolbar />}
+          <main className={styles.main}>{children}</main>
+          <MobileNav />
 
-        {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
-      </div>
-    </PaletteContext.Provider>
+          {paletteOpen && (
+            <CommandPalette
+              underlyings={underlyings}
+              selected={underlying}
+              onSelect={setUnderlying}
+              onClose={() => setPaletteOpen(false)}
+            />
+          )}
+
+          {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+        </div>
+      </PaletteContext.Provider>
+    </WorkspaceTemplatesProvider>
   );
 }

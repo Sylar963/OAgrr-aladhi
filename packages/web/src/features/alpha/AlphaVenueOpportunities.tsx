@@ -1,3 +1,4 @@
+import ParadexVenueCard from './ParadexVenueCard';
 import { defineMessages, useT } from '@lib/i18n';
 import type { VenueId } from '@shared/enriched';
 import { alphaMessages, VERTICAL_LABEL_KEYS } from './i18n';
@@ -29,6 +30,7 @@ const messages = defineMessages(
 
 export default function AlphaVenueOpportunities({
   scans,
+  paradexEnabled = false,
   kind,
   underlying,
   quantities,
@@ -38,6 +40,7 @@ export default function AlphaVenueOpportunities({
   onSelect,
 }: {
   scans: VenueScan[];
+  paradexEnabled?: boolean;
   kind: VerticalKind;
   underlying: string;
   /** Per-venue auto size; absent when one size applies to every venue. */
@@ -61,7 +64,7 @@ export default function AlphaVenueOpportunities({
       count={visibleCount}
       emptyHint={t('emptyHint')}
       note={t('note')}
-      isEmpty={scans.length === 0}
+      isEmpty={scans.length === 0 && !paradexEnabled}
     >
       {scans.map((scan) => {
         const candidates = scan.candidates.filter((candidate) => candidate.kind === kind);
@@ -70,7 +73,7 @@ export default function AlphaVenueOpportunities({
         );
         const alternatives = candidates.filter((c) => c.id !== selected?.id).slice(0, 2);
         const quantity = quantities?.[scan.venue];
-        return (
+        const screen = (
           <OpportunityCard
             key={scan.venue}
             venue={scan.venue}
@@ -106,7 +109,11 @@ export default function AlphaVenueOpportunities({
             ))}
           </OpportunityCard>
         );
+        return scan.venue === 'paradex'
+          ? <ParadexVenueCard key={scan.venue} underlying={underlying} screen={screen} />
+          : screen;
       })}
+      {paradexEnabled && !scans.some((scan) => scan.venue === 'paradex') && <ParadexVenueCard underlying={underlying} />}
     </OpportunitySection>
   );
 }

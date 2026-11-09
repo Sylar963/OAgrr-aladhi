@@ -1,9 +1,11 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import type { EquityHistoryRange, EquityHistoryVenue, PositionLegInput } from '@oggregator/protocol';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   addPosition,
+  fetchParadexAccount,
+  fetchParadexRfqs,
   fetchEquityHistory,
   fetchLiveTradingAvailability,
   fetchMetrics,
@@ -140,6 +142,33 @@ export function useLiveTradingAvailability(enabled = true) {
     queryFn: fetchLiveTradingAvailability,
     enabled: session.status === 'ready' && enabled,
     staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useParadexAccount(enabled = true) {
+  const session = useAccountSession();
+  return useQuery({
+    queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'paradex-account'],
+    queryFn: fetchParadexAccount,
+    enabled: session.status === 'ready' && enabled,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+    retry: false,
+  });
+}
+
+export function useParadexRfqs(underlying: string, enabled: boolean) {
+  const session = useAccountSession();
+  return useInfiniteQuery({
+    queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'paradex-rfqs', underlying],
+    queryFn: ({ pageParam }) => fetchParadexRfqs(underlying, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page, _pages, _lastParam, params) =>
+      page.next != null && !params.includes(page.next) ? page.next : undefined,
+    enabled: session.status === 'ready' && enabled,
+    refetchInterval: 5_000,
+    staleTime: 3_000,
     retry: false,
   });
 }

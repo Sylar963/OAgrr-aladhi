@@ -37,3 +37,44 @@ export const ParadexAccountHistorySchema = z.object({
   timestamps: z.array(z.number()),
 });
 export type ParadexAccountHistory = z.infer<typeof ParadexAccountHistorySchema>;
+
+const decimal = z.string().regex(/^-?\d+(?:\.\d+)?$/).transform(Number).pipe(z.number().finite());
+const optionalDecimal = decimal.nullish().transform((value) => value ?? null);
+const timestamp = z.number().int().nonnegative().nullish().transform((value) => value ?? null);
+
+export const ParadexAccountSchema = z.object({
+  account_value: decimal,
+  free_collateral: optionalDecimal,
+  initial_margin_requirement: optionalDecimal,
+  maintenance_margin_requirement: optionalDecimal,
+  settlement_asset: z.string().nullish(),
+  updated_at: timestamp,
+});
+
+export const ParadexRfqListSchema = z.object({
+  next: z.string().nullish(),
+  results: z.array(z.object({
+    id: z.string().min(1),
+    state: z.string(),
+    quantity: decimal.pipe(z.number().positive()),
+    filled_quantity: optionalDecimal.pipe(z.number().nonnegative().nullable()),
+    created_at: timestamp,
+    expires_at: timestamp,
+    legs: z.array(z.object({
+      market: z.string(),
+      side: z.enum(['BUY', 'SELL']),
+      ratio: decimal.pipe(z.number().positive()),
+      price: optionalDecimal,
+    })),
+  })),
+});
+
+export const ParadexRfqBboSchema = z.object({
+  rfq_id: z.string().optional(),
+  best_bid_price: optionalDecimal,
+  best_ask_price: optionalDecimal,
+  best_bid_quantity: optionalDecimal.pipe(z.number().nonnegative().nullable()),
+  best_ask_quantity: optionalDecimal.pipe(z.number().nonnegative().nullable()),
+  mark_price: optionalDecimal,
+  created_at: timestamp,
+});

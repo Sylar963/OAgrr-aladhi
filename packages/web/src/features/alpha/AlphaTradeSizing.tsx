@@ -1,3 +1,4 @@
+import { ParadexAccountSummary } from '@features/portfolio';
 import { defineMessages, type Translate, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@shared/enriched';
@@ -243,6 +244,7 @@ export default function AlphaTradeSizing({
           )}
         </label>
       ))}
+      {market === 'crypto' && venue === 'paradex' && <ParadexAccountSummary onUseEquity={(equity) => update('equity', String(equity))} />}
       <p className={styles.hint}>
         {t('equityNote')}
       </p>

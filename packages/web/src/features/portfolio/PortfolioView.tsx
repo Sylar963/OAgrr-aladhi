@@ -1,3 +1,4 @@
+import ParadexAccountSummary from './ParadexAccountSummary';
 import { useMemo, useRef, useState } from 'react';
 
 import {
@@ -242,6 +243,7 @@ export default function PortfolioView() {
 
   return (
     <div className={styles.wrap}>
+      {source === 'paradex' && <ParadexAccountSummary />}
       <div className={styles.header}>
         <div className={styles.titleBlock}>
           <h2 className={styles.title}>{t('title')}</h2>

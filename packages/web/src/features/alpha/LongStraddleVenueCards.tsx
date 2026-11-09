@@ -1,3 +1,4 @@
+import ParadexVenueCard from './ParadexVenueCard';
 import { VenueDot } from '@components/ui';
 import type {
   AlphaLongStraddleCandidate,
@@ -73,7 +74,7 @@ export default function LongStraddleVenueCards({
         const state = best
           ? { label: ta(CARD_STATUS[best.verdict].label), tone: CARD_STATUS[best.verdict].tone }
           : { label: ta('noStraddle'), tone: 'empty' };
-        return (
+        const screen = (
           <section className={cards.venueCard} data-tone={state.tone} key={status.venue}>
             <header className={cards.venueCardHeader}>
               <span className={cards.venueName}>
@@ -117,6 +118,9 @@ export default function LongStraddleVenueCards({
             )}
           </section>
         );
+        return status.venue === 'paradex'
+          ? <ParadexVenueCard key={status.venue} underlying={data.underlying} screen={screen} />
+          : screen;
       })}
     </OpportunitySection>
   );

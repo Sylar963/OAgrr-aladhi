@@ -1,7 +1,8 @@
+import ParadexVenueCard from './ParadexVenueCard';
 import { EmptyState, Spinner } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { ExpiryBar } from '@features/chain';
-import { AlphaPortfolioContext } from '@features/portfolio';
+import { AlphaPortfolioContext, ParadexAccountSummary } from '@features/portfolio';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { defineMessages, useT } from '@lib/i18n';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
@@ -402,6 +403,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       />
       <AlphaVenueOpportunities
         scans={scans}
+        paradexEnabled={!tradfi && scanVenues.includes('paradex')}
         kind={kind}
         underlying={underlying}
         quantities={venueQuantities}
@@ -505,6 +507,9 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
           loading={marketContext.isLoading}
         />
       )}
+
+      {!tradfi && !isSpread && scanVenues.includes('paradex') && <ParadexAccountSummary />}
+      {!tradfi && isScannerStrategy(strategy) && strategy !== 'short-straddle' && strategy !== 'long-straddle' && scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
 
       {strategy === 'long-call' && (
         <div className={styles.scannerWorkspace}>

@@ -128,6 +128,16 @@ export class ParadexPositionStore implements PositionStore {
     this.scheduleDisconnect(accountId);
   }
 
+  async fetchAccountSummary(accountId: string) {
+    const client = this.clients.get(accountId);
+    return client == null ? null : client.fetchAccountSummary();
+  }
+
+  async fetchOpenRfqs(accountId: string, underlying: string, cursor?: string) {
+    const client = this.clients.get(accountId);
+    return client == null ? null : client.fetchOpenRfqs(underlying, cursor);
+  }
+
   async fetchEquityHistory(accountId: string, fromMs: number): Promise<EquityHistoryPoint[] | null> {
     const client = this.clients.get(accountId);
     return client == null ? null : client.fetchEquityHistory(fromMs);

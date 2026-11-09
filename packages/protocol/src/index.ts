@@ -689,3 +689,5 @@ export {
   PublicThesisFeedSchema,
 } from './thesis.js';
 export * from './portfolio-assistant-evidence.js';
+
+export * from './paradex.js';

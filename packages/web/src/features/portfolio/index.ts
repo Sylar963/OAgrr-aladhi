@@ -22,6 +22,8 @@ export {
 export {
   PORTFOLIO_QKEY,
   useLiveTradingAvailability,
+  useParadexAccount,
+  useParadexRfqs,
   usePortfolioMetrics,
   usePortfolioPositions,
   useThalexKeySlots,
@@ -31,3 +33,5 @@ export { usePortfolioWs } from './hooks/usePortfolioWs';
 export { default as PortfolioView } from './PortfolioView';
 export { default as AlphaPortfolioContext } from './AlphaPortfolioContext';
 export { PortfolioAssistantPanel } from './assistant';
+
+export { default as ParadexAccountSummary } from './ParadexAccountSummary';

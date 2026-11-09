@@ -1,3 +1,4 @@
+import { ParadexAccountResponseSchema, ParadexRfqsResponseSchema } from '@oggregator/protocol';
 import { getClerkToken } from '@lib/clerk-token';
 import {
   type DeriveSessionKeyConfirm,
@@ -648,4 +649,14 @@ export function runScenarios(
   source: PortfolioSource = 'manual',
 ): Promise<ScenariosResponse> {
   return postJson(`/portfolio/scenarios?source=${source}`, { scenarios }, ScenariosResponseSchema);
+}
+
+export function fetchParadexAccount() {
+  return getJson('/portfolio/paradex/account', ParadexAccountResponseSchema);
+}
+
+export function fetchParadexRfqs(underlying: string, cursor?: string) {
+  const params = new URLSearchParams({ underlying });
+  if (cursor != null) params.set('cursor', cursor);
+  return getJson(`/portfolio/paradex/rfqs?${params}`, ParadexRfqsResponseSchema);
 }

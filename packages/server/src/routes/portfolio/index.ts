@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../../user-service.js';
 import { portfolioAssistantRoutes } from './assistant.js';
 import { portfolioEquityHistoryRoute } from './equity-history.js';
+import { portfolioParadexRoutes } from './paradex.js';
 import { portfolioMetricsRoute } from './metrics.js';
 import { portfolioPositionsRoute } from './positions.js';
 import { portfolioScenariosRoute } from './scenarios.js';
@@ -19,6 +20,7 @@ export async function portfolioRoutes(app: FastifyInstance) {
   await portfolioTradesRoute(app);
   await portfolioEquityHistoryRoute(app);
   await portfolioVenueMarginRoute(app);
+  await portfolioParadexRoutes(app);
   await portfolioVenueCredentialsRoute(app);
   await portfolioAssistantRoutes(app);
 }

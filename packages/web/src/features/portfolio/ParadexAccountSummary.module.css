@@ -1,0 +1,56 @@
+.account {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--accent-primary);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.account header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.account dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: var(--space-3) 0;
+}
+
+.account dt, .account small, .account p {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.account dd {
+  margin: 3px 0 0;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.account small[data-stale="true"] {
+  color: var(--color-warning);
+}
+
+.account button {
+  display: block;
+  margin-top: var(--space-2);
+  padding: 5px 8px;
+  font: inherit;
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.account button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -179,3 +179,5 @@ reload membership, Spanish labels/language, parent-window cleanup, and mobile ch
 These Chromium checks passed against both development and production builds without page errors.
 The final production entry is 362,102 bytes gzip, 2,786 bytes above the original migration baseline;
 Dockview and its window controls remain lazy-loaded. The focused regression suite passes 41 tests.
+The final `VITEST_MAX_WORKERS=1 npm_config_workspace_concurrency=1 pnpm precommit` gate passed all
+typechecks and 4,576 tests across 560 files. `pnpm --filter @oggregator/web build` also passed.

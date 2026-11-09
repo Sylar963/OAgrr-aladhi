@@ -7,7 +7,7 @@ import PanelWindowControls, { dockPopoutWindow } from './PanelWindowControls';
 
 function controls() {
   const first = { id: 'chain-table', title: 'Chain table' };
-  const second = { id: 'chain-stats', title: 'Chain stats' };
+  const second = { id: 'chain-venues', title: 'Venues' };
   const group = { panels: [first, second] };
   const addPopoutGroup = vi.fn().mockResolvedValue(true);
   const props = {

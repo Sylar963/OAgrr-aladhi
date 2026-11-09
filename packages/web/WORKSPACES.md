@@ -13,7 +13,7 @@ blank tabs offer **Clear layout**. Custom-tab names, order, markets, and storage
 
 | Template | Included panels |
 |---|---|
-| Market overview | Chain table, chain stats, OI summary, vol smile |
+| Market overview | Chain table (including tenor statistics), OI summary, vol smile |
 | Trade planning | Chain table, Builder, vol smile |
 | Volatility research | Vol smile, IV rank, ATM term structure, realized vs implied, skew history, 3D surface |
 | Flow & positioning | Flow, GEX, OI by strike, top positions |
@@ -68,7 +68,7 @@ when the main tab is hidden. Socket and widget limits remain unchanged.
 
 | Tab | Default panels |
 |---|---|
-| Chain | Table, statistics, and venues, in three resizable groups |
+| Chain | Table with tenor statistics, and venues, in two resizable groups |
 | Analytics | All ten existing cards, grouped into four visible areas |
 | Volatility | Six panel types for both BTC and ETH: twelve independent instances in four groups |
 | Other nine tabs | Their complete existing view, inside one movable panel |
@@ -114,6 +114,10 @@ An absent override uses the preset; an empty array deliberately opens an empty l
 deletes only the active override and arrangement, then remounts the host. The revision guard
 prevents a pending save from bringing back the old arrangement. Teardown flushes panel removals
 before saving, so closing a panel and immediately switching tabs does not resurrect it.
+
+Chain statistics stay directly below the tenor selector inside the chain table. Legacy stats panels
+merge into the table on restore, preserving the other docked and detached panel positions. A saved
+workspace containing only the old stats panel receives the complete chain table in its place.
 
 Saved panel parameters must match membership before restore. Legacy custom arrangements without
 instance IDs in their parameters are hydrated from membership. Bad overrides cannot block startup.

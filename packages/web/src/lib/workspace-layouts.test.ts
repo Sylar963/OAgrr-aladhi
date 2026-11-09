@@ -18,7 +18,6 @@ describe('built-in presets', () => {
   it('replaces desktop compositions while preserving the complete analytics and comparison coverage', () => {
     expect(defaultPanels('chain').map((panel) => panel.kind)).toEqual([
       'chain-table',
-      'chain-stats',
       'chain-venues',
     ]);
     expect(defaultPanels('analytics')).toHaveLength(10);
@@ -95,6 +94,24 @@ describe('built-in persistence', () => {
     };
     writeBuiltinLayouts(saved);
     expect(readBuiltinLayouts()).toEqual(saved);
+  });
+
+  it('merges legacy stats membership into the table while retaining other panels', () => {
+    localStorage.setItem(
+      'ogg.builtinLayouts.v1',
+      JSON.stringify({
+        chain: [
+          { id: 'chain-table', kind: 'chain-table' },
+          { id: 'chain-stats', kind: 'chain-stats' },
+          { id: 'chain-venues', kind: 'chain-venues' },
+        ],
+        flow: [{ id: 'chain-stats', kind: 'chain-stats' }],
+      }),
+    );
+    expect(readBuiltinLayouts()).toEqual({
+      chain: defaultPanels('chain'),
+      flow: [{ id: 'chain-table', kind: 'chain-table' }],
+    });
   });
 
   it('isolates malformed overrides and removes unsupported instances', () => {

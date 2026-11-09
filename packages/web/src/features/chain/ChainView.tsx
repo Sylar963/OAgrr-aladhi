@@ -140,10 +140,7 @@ function MobileChain() {
       <div className={styles.main}>
         {/* Collapsible stats summary */}
         {chain && (
-          <button
-            className={styles.mobileStatsToggle}
-            onClick={() => setStatsExpanded((v) => !v)}
-          >
+          <button className={styles.mobileStatsToggle} onClick={() => setStatsExpanded((v) => !v)}>
             <span className={styles.mstLabel}>
               ATM {fmtIv(chain.stats.atmIv)} · P/C {chain.stats.putCallOiRatio?.toFixed(2) ?? '—'} ·
               OI {fmtUsdCompact(chain.stats.totalOiUsd)}
@@ -165,7 +162,11 @@ function MobileChain() {
           />
         )}
 
-        <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
+        <div
+          className={styles.tableArea}
+          data-stale={isPlaceholderData}
+          aria-busy={isPlaceholderData}
+        >
           {isLoadingChain(data) && <Spinner size="lg" label={t('loading')} />}
           {error && !chain && (
             <EmptyState
@@ -198,7 +199,13 @@ function MobileChain() {
   );
 }
 
-function ChainStatArea({ chain, connectionState, marketStats, richness, isPlaceholderData }: ChainData) {
+function ChainStatArea({
+  chain,
+  connectionState,
+  marketStats,
+  richness,
+  isPlaceholderData,
+}: ChainData) {
   if (!chain) return null;
   return (
     <div className={styles.statArea} data-stale={isPlaceholderData}>
@@ -215,7 +222,7 @@ function ChainStatArea({ chain, connectionState, marketStats, richness, isPlaceh
 }
 
 interface ChainMainProps {
-  /** The stat strip and venue list are separate widgets in this layout, so the table omits them. */
+  /** The venue list is a separate widget in this layout. */
   standalone?: boolean;
 }
 
@@ -262,7 +269,7 @@ function ChainMain({ standalone = false }: ChainMainProps) {
           positions={expiryPositions}
         />
 
-        {!standalone && <ChainStatArea {...data} />}
+        <ChainStatArea {...data} />
 
         <div className={styles.tableControls}>
           <span className={standalone ? undefined : styles.narrowVenues}>
@@ -282,7 +289,11 @@ function ChainMain({ standalone = false }: ChainMainProps) {
           </button>
         </div>
 
-        <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
+        <div
+          className={styles.tableArea}
+          data-stale={isPlaceholderData}
+          aria-busy={isPlaceholderData}
+        >
           {isLoadingChain(data) && <Spinner size="lg" label={t('loading')} />}
           {error && !chain && (
             <EmptyState
@@ -358,16 +369,6 @@ export function ChainTableWidget() {
   return (
     <div className={styles.view}>
       <ChainMain standalone />
-    </div>
-  );
-}
-
-export function ChainStatsWidget() {
-  const data = useChainData();
-  return (
-    <div className={styles.statsCard}>
-      {isLoadingChain(data) && <Spinner size="md" />}
-      <ChainStatArea {...data} />
     </div>
   );
 }

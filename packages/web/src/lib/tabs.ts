@@ -34,7 +34,6 @@ export interface WidgetTraits {
 
 export const CARD_KINDS = [
   'chain-table',
-  'chain-stats',
   'chain-venues',
   'oi-summary',
   'venue-share',
@@ -72,7 +71,6 @@ export const WIDGET_TRAITS: Record<WidgetKind, WidgetTraits> = {
   chain: { chainFeed: true, requiresAccount: false, mobileToolbar: true },
   alpha: { chainFeed: true, requiresAccount: false, mobileToolbar: true },
   'chain-table': { chainFeed: true, requiresAccount: false, mobileToolbar: false },
-  'chain-stats': { chainFeed: true, requiresAccount: false, mobileToolbar: false },
   architect: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
   surface: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
   flow: { chainFeed: false, requiresAccount: false, mobileToolbar: true },

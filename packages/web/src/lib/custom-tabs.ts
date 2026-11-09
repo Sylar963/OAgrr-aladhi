@@ -76,7 +76,13 @@ export function readCustomTabs(): PersistedCustomTab[] {
     );
     tabs.set(parsed.data.id, {
       ...parsed.data,
-      kinds: [...new Set(parsed.data.kinds.filter(isWidgetKind))].slice(0, MAX_WIDGETS_PER_TAB),
+      kinds: [
+        ...new Set(
+          parsed.data.kinds
+            .map((kind) => (kind === 'chain-stats' ? 'chain-table' : kind))
+            .filter(isWidgetKind),
+        ),
+      ].slice(0, MAX_WIDGETS_PER_TAB),
       activeVenues: venues.length > 0 ? venues : [...VENUE_IDS],
     });
   }
@@ -95,7 +101,9 @@ export function writeCustomTabs(tabs: PersistedCustomTab[]): void {
 export function readLayout(id: string): unknown {
   const parsed = LayoutSchema.safeParse(readJson(layoutKey(id)));
   if (!parsed.success) return null;
-  const known = Object.values(parsed.data.panels).every((panel) => isWidgetKind(panel.params.kind));
+  const known = Object.values(parsed.data.panels).every(
+    (panel) => isWidgetKind(panel.params.kind) || panel.params.kind === 'chain-stats',
+  );
   return known ? parsed.data : null;
 }
 

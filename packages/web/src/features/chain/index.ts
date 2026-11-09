@@ -1,7 +1,6 @@
 export { AttributionSummary } from './AttributionSummary';
 export { default as ChainTable } from './ChainTable';
 export {
-  ChainStatsWidget,
   ChainTableWidget,
   ChainVenuesWidget,
   default as ChainView,

@@ -13,7 +13,6 @@ vi.mock('@components/auth/AccountSessionProvider', () => ({
 vi.mock('@features/chain', () => ({
   ChainView: () => <div>view:chain</div>,
   ChainTableWidget: () => <div>card:chain-table</div>,
-  ChainStatsWidget: () => <div>card:chain-stats</div>,
   ChainVenuesWidget: () => <div>card:chain-venues</div>,
 }));
 vi.mock('@features/alpha', () => ({ AlphaView: () => <div>view:alpha</div> }));
@@ -113,8 +112,8 @@ describe('card widgets', () => {
     (kind) => !TABS.some((tab) => tab.id === kind),
   );
 
-  it('lists nineteen cards', () => {
-    expect(cardKinds).toHaveLength(19);
+  it('lists eighteen cards', () => {
+    expect(cardKinds).toHaveLength(18);
   });
 
   it.each(cardKinds)('renders the %s card without needing an account', async (kind) => {
@@ -127,7 +126,6 @@ describe('card widgets', () => {
 
   it('holds the chain socket only for cards showing chain data', () => {
     expect(cardKinds.filter((kind) => WIDGET_TRAITS[kind].chainFeed).sort()).toEqual([
-      'chain-stats',
       'chain-table',
     ]);
   });

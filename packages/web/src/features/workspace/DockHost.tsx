@@ -172,20 +172,41 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
       try {
         const layout = saved as SerializedDockview;
         const expected = selectLayoutPanels(useAppStore.getState(), layoutId);
-        const valid = Object.entries(layout.panels).every(([id, panel]) =>
-          expected.some(
-            (entry) =>
-              entry.id === id &&
-              entry.kind === panel.params?.kind &&
-              entry.underlying === panel.params?.underlying,
-          ),
+        const legacyStats = Object.entries(layout.panels).find(
+          ([, panel]) => panel.params?.kind === 'chain-stats',
+        );
+        const chainTable = expected.find((panel) => panel.kind === 'chain-table');
+        const valid = Object.entries(layout.panels).every(
+          ([id, panel]) =>
+            (id === legacyStats?.[0] && chainTable != null) ||
+            expected.some(
+              (entry) =>
+                entry.id === id &&
+                entry.kind === panel.params?.kind &&
+                entry.underlying === panel.params?.underlying,
+            ),
         );
         if (!valid) throw new Error('Invalid layout panels');
         for (const [id, panel] of Object.entries(layout.panels)) {
-          panel.params = expected.find((entry) => entry.id === id);
+          panel.params =
+            id === legacyStats?.[0]
+              ? { id, kind: 'chain-table' }
+              : expected.find((entry) => entry.id === id);
         }
         for (const popout of layout.popoutGroups ?? []) popout.url = WORKSPACE_POPOUT_URL;
         api.fromJSON(layout);
+        if (legacyStats && chainTable) {
+          if (!api.getPanel(chainTable.id)) {
+            api.addPanel({
+              id: chainTable.id,
+              component: 'widget',
+              title: layout.panels[legacyStats[0]]?.title ?? chainTable.kind,
+              params: chainTable,
+              position: { referencePanel: legacyStats[0], direction: 'within' },
+            });
+          }
+          api.getPanel(legacyStats[0])?.api.close();
+        }
         restored.current = true;
       } catch {
         api.clear();
@@ -289,14 +310,11 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
                 direction: anchor
                   ? 'within'
                   : builtin === 'chain'
-                    ? group === 1
-                      ? 'above'
-                      : 'left'
+                    ? 'left'
                     : group === 1
                       ? 'right'
                       : 'below',
               },
-              ...(builtin === 'chain' && group === 1 ? { initialHeight: 200 } : {}),
               ...(builtin === 'chain' && group === 2 ? { initialWidth: 320 } : {}),
             }
           : {}),

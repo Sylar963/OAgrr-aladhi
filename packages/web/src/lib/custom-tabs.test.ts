@@ -50,6 +50,14 @@ describe('readCustomTabs', () => {
     expect(readCustomTabs()[0]!.kinds).toEqual(['chain']);
   });
 
+  it.each([
+    ['chain-table', 'chain-stats', 'vol-smile'],
+    ['chain-stats', 'vol-smile'],
+  ])('merges legacy stats into a single table: %j', (...kinds) => {
+    storeTabs([{ ...validTab, kinds }]);
+    expect(readCustomTabs()[0]).toEqual({ ...validTab, kinds: ['chain-table', 'vol-smile'] });
+  });
+
   it('falls back to every venue when none of the saved ones exist', () => {
     storeTabs([{ ...validTab, activeVenues: ['gone'] }]);
     expect(readCustomTabs()[0]!.activeVenues).toEqual([...VENUE_IDS]);

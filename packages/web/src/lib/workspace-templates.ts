@@ -17,7 +17,7 @@ function panels(kinds: readonly WidgetKind[]): PresetPanel[] {
 
 export const WORKSPACE_TEMPLATES: Record<WorkspaceTemplateId, { panels: readonly PresetPanel[] }> =
   {
-    overview: { panels: panels(['chain-table', 'chain-stats', 'oi-summary', 'vol-smile']) },
+    overview: { panels: panels(['chain-table', 'oi-summary', 'vol-smile']) },
     planning: { panels: panels(['chain-table', 'architect', 'vol-smile']) },
     volatility: {
       panels: panels([

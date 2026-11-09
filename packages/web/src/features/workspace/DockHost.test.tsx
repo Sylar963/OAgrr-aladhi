@@ -2,7 +2,7 @@ import { readLayout, writeLayout } from '@lib/custom-tabs';
 import { builtinLayoutId, readBuiltinLayouts } from '@lib/workspace-layouts';
 import { MAIN_MARKET_ID, useAppStore } from '@stores/app-store';
 import { act, cleanup, render, screen } from '@testing-library/react';
-import type { IDockviewPanelProps } from 'dockview-react';
+import type { IDockviewPanelProps, SerializedDockview } from 'dockview-react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -138,7 +138,11 @@ describe('DockHost', () => {
       onDidAddPopoutGroup: () => ({ dispose: () => {} }),
       onWillClosePopoutWindow: () => ({ dispose: () => {} }),
       onDidOpenPopoutWindowFail: on(listeners.failure),
-      fromJSON: vi.fn(),
+      fromJSON: vi.fn((layout: SerializedDockview) => {
+        for (const [id, panel] of Object.entries(layout.panels)) {
+          api.addPanel({ id, title: panel.title ?? id });
+        }
+      }),
       clear: vi.fn(),
       toJSON: () => ({ grid: {}, panels: {} }),
       getPanel: (id: string) => panels.find((panel) => panel.id === id),
@@ -249,18 +253,14 @@ describe('DockHost', () => {
     expect(dock.api.setActive).toHaveBeenCalledTimes(1);
   });
 
-  it('starts Chain as three positioned panels and preserves membership on resize', () => {
+  it('starts Chain as two positioned panels and preserves membership on resize', () => {
     const id = builtinLayoutId('chain');
     render(<DockHost layoutId={id} />);
-    expect(dock.api.panels.map((panel) => panel.id)).toEqual([
-      'chain-table',
-      'chain-stats',
-      'chain-venues',
-    ]);
+    expect(dock.api.panels.map((panel) => panel.id)).toEqual(['chain-table', 'chain-venues']);
     expect(dock.api.addPanel).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'chain-stats',
-        position: { referencePanel: 'chain-table', direction: 'above' },
+        id: 'chain-venues',
+        position: { referencePanel: 'chain-table', direction: 'left' },
       }),
     );
     const membership = useAppStore.getState().builtinLayouts;
@@ -276,10 +276,45 @@ describe('DockHost', () => {
     const { unmount } = render(<DockHost layoutId={id} />);
     act(() => dock.api.getPanel('chain-venues')?.api.close());
     unmount();
-    expect(readBuiltinLayouts().chain?.map((panel) => panel.id)).toEqual([
+    expect(readBuiltinLayouts().chain?.map((panel) => panel.id)).toEqual(['chain-table']);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('merges saved stats panels while retaining the arrangement (table present: %s)', (hasTable) => {
+    const id = builtinLayoutId('chain');
+    const grid = {
+      root: { type: 'branch', data: [] },
+      width: 1200,
+      height: 800,
+      orientation: 'HORIZONTAL',
+    };
+    writeLayout(id, {
+      grid,
+      panels: {
+        ...(hasTable
+          ? { 'chain-table': { id: 'chain-table', params: { kind: 'chain-table' } } }
+          : {}),
+        'chain-stats': { id: 'chain-stats', params: { kind: 'chain-stats' } },
+        'chain-venues': { id: 'chain-venues', params: { kind: 'chain-venues' } },
+      },
+    });
+    render(<DockHost layoutId={id} />);
+    expect(dock.api.clear).not.toHaveBeenCalled();
+    expect(dock.api.fromJSON).toHaveBeenCalledWith(expect.objectContaining({ grid }));
+    expect(dock.api.panels.map((panel) => panel.id).sort()).toEqual([
       'chain-table',
-      'chain-stats',
+      'chain-venues',
     ]);
+    if (!hasTable) {
+      expect(dock.api.addPanel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'chain-table',
+          position: { referencePanel: 'chain-stats', direction: 'within' },
+        }),
+      );
+    }
   });
 
   it('does not resurrect a saved arrangement when reset interrupts a pending save', () => {
@@ -343,7 +378,7 @@ describe('DockHost', () => {
     dock.api.fromJSON.mockImplementation(() => dock.fireFailure());
     render(<DockHost layoutId={id} />);
     expect(screen.getByRole('alert').textContent).toContain('Allow pop-ups');
-    expect(dock.api.panels).toHaveLength(3);
+    expect(dock.api.panels).toHaveLength(2);
   });
 
   it('places template-backed custom panels in their starting groups', () => {

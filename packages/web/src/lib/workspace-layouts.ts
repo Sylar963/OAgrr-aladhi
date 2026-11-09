@@ -41,7 +41,6 @@ export const PRESETS: Record<TabId, readonly PresetPanel[]> = {
   >),
   chain: [
     { id: 'chain-table', kind: 'chain-table', group: 0 },
-    { id: 'chain-stats', kind: 'chain-stats', group: 1 },
     { id: 'chain-venues', kind: 'chain-venues', group: 2 },
   ],
   analytics: ANALYTICS_KINDS.map((kind, index) => ({ id: kind, kind, group: index % 4 })),
@@ -145,7 +144,11 @@ export function readBuiltinLayouts(): Partial<Record<TabId, WidgetInstance[]>> {
     if (!entries.success) continue;
     const panels: WidgetInstance[] = [];
     for (const entry of entries.data) {
-      const parsed = InstanceSchema.safeParse(entry);
+      const parsed = InstanceSchema.safeParse(
+        entry != null && typeof entry === 'object' && Reflect.get(entry, 'kind') === 'chain-stats'
+          ? { id: 'chain-table', kind: 'chain-table' }
+          : entry,
+      );
       if (parsed.success && canAddPanel(panels, parsed.data, id)) panels.push(parsed.data);
     }
     if (entries.data.length === 0 || panels.length > 0) result[id] = panels;

@@ -43,7 +43,11 @@ export async function portfolioParadexRoutes(app: FastifyInstance) {
     const accountId = getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
     paradexPositionStore.retain(accountId);
     try {
-      const page = await paradexPositionStore.fetchOpenRfqs(accountId, query.data.underlying, query.data.cursor);
+      const page = await paradexPositionStore.fetchOpenRfqs(
+        accountId,
+        query.data.underlying,
+        query.data.cursor,
+      );
       if (page == null) return unavailable(reply);
       return ParadexRfqsResponseSchema.parse({ accountId, venue: 'paradex', ...page });
     } catch (error) {

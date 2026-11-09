@@ -1,5 +1,9 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
-import type { EquityHistoryRange, EquityHistoryVenue, PositionLegInput } from '@oggregator/protocol';
+import type {
+  EquityHistoryRange,
+  EquityHistoryVenue,
+  PositionLegInput,
+} from '@oggregator/protocol';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -161,7 +165,13 @@ export function useParadexAccount(enabled = true) {
 export function useParadexRfqs(underlying: string, enabled: boolean) {
   const session = useAccountSession();
   return useInfiniteQuery({
-    queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'paradex-rfqs', underlying],
+    queryKey: [
+      'account',
+      session.accountId ?? 'unresolved',
+      'portfolio',
+      'paradex-rfqs',
+      underlying,
+    ],
     queryFn: ({ pageParam }) => fetchParadexRfqs(underlying, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page, _pages, _lastParam, params) =>

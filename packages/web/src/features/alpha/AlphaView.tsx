@@ -78,7 +78,8 @@ const messages = defineMessages(
     sellStraddle: 'Sell Straddle',
     buyStraddle: 'Buy Straddle',
     ironFly: 'Iron Fly',
-    emptyEquity: 'Enter your current account equity in the builder to see dollar risk at your size.',
+    emptyEquity:
+      'Enter your current account equity in the builder to see dollar risk at your size.',
     emptyChain: 'Chain unavailable. Cached quotes are not used for a trade estimate.',
     emptyMarkOnly:
       '{venue} has no bids or asks on {underlying} options, only marks. Pick a venue with a live book, or get a block quote on the venue.',
@@ -103,7 +104,8 @@ const messages = defineMessages(
     sellStraddle: 'Vender straddle',
     buyStraddle: 'Comprar straddle',
     ironFly: 'Iron fly',
-    emptyEquity: 'Ingresa el capital actual de tu cuenta en el builder para ver el riesgo en dólares a tu tamaño.',
+    emptyEquity:
+      'Ingresa el capital actual de tu cuenta en el builder para ver el riesgo en dólares a tu tamaño.',
     emptyChain: 'Cadena no disponible. No se usan cotizaciones en caché para estimar un trade.',
     emptyMarkOnly:
       '{venue} no tiene bids ni asks en opciones de {underlying}, solo marks. Elige un exchange con libro en vivo o pide una cotización block en el exchange.',
@@ -509,7 +511,11 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       )}
 
       {!tradfi && !isSpread && scanVenues.includes('paradex') && <ParadexAccountSummary />}
-      {!tradfi && isScannerStrategy(strategy) && strategy !== 'short-straddle' && strategy !== 'long-straddle' && scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
+      {!tradfi &&
+        isScannerStrategy(strategy) &&
+        strategy !== 'short-straddle' &&
+        strategy !== 'long-straddle' &&
+        scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
 
       {strategy === 'long-call' && (
         <div className={styles.scannerWorkspace}>
@@ -634,7 +640,10 @@ function useVenueQuantities(
     for (const venue of venues) {
       const key = `${chain.underlying}|${chain.expiry}|${venue}|${costReserve}`;
       let suggestion = cache.current.get(key);
-      if (suggestion == null || (suggestion.pairs === 0 && nowMs - suggestion.atMs > SUGGESTION_RETRY_MS)) {
+      if (
+        suggestion == null ||
+        (suggestion.pairs === 0 && nowMs - suggestion.atMs > SUGGESTION_RETRY_MS)
+      ) {
         const fresh = suggestVenueQuantity(chain, venue, costReserve, nowMs);
         if (fresh == null) continue;
         suggestion = { ...fresh, atMs: nowMs };

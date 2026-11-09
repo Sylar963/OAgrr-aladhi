@@ -87,7 +87,9 @@ export default function StraddleVenueCards({
             </header>
             <div className={cards.coverageRow}>
               <span>{ta('expiriesInWindow')}</span>
-              <strong>{ta('pricedOf', { n: candidates.length, total: status.eligibleExpiries })}</strong>
+              <strong>
+                {ta('pricedOf', { n: candidates.length, total: status.eligibleExpiries })}
+              </strong>
             </div>
             <div className={cards.coverageTrack}>
               <span
@@ -118,9 +120,11 @@ export default function StraddleVenueCards({
             )}
           </section>
         );
-        return status.venue === 'paradex'
-          ? <ParadexVenueCard key={status.venue} underlying={data.underlying} screen={screen} />
-          : screen;
+        return status.venue === 'paradex' ? (
+          <ParadexVenueCard key={status.venue} underlying={data.underlying} screen={screen} />
+        ) : (
+          screen
+        );
       })}
     </OpportunitySection>
   );
@@ -183,4 +187,3 @@ function StraddleRow({
     </button>
   );
 }
-

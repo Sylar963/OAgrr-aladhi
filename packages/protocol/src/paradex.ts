@@ -23,21 +23,25 @@ export const ParadexRfqSchema = z.object({
   filledQuantity: z.number().finite().nonnegative().nullable(),
   createdAt: z.number().int().nonnegative().nullable(),
   expiresAt: z.number().int().nonnegative().nullable(),
-  legs: z.array(z.object({
-    market: z.string(),
-    side: z.enum(['BUY', 'SELL']),
-    ratio: z.number().finite().positive(),
-    price: z.number().finite().nullable(),
-  })),
-  quote: z.object({
-    bidPrice: z.number().finite().nullable(),
-    askPrice: z.number().finite().nullable(),
-    bidQuantity: z.number().finite().nonnegative().nullable(),
-    askQuantity: z.number().finite().nonnegative().nullable(),
-    markPrice: z.number().finite().nullable(),
-    createdAt: z.number().int().nonnegative().nullable(),
-    fetchedAt: z.number().int().nonnegative(),
-  }).nullable(),
+  legs: z.array(
+    z.object({
+      market: z.string(),
+      side: z.enum(['BUY', 'SELL']),
+      ratio: z.number().finite().positive(),
+      price: z.number().finite().nullable(),
+    }),
+  ),
+  quote: z
+    .object({
+      bidPrice: z.number().finite().nullable(),
+      askPrice: z.number().finite().nullable(),
+      bidQuantity: z.number().finite().nonnegative().nullable(),
+      askQuantity: z.number().finite().nonnegative().nullable(),
+      markPrice: z.number().finite().nullable(),
+      createdAt: z.number().int().nonnegative().nullable(),
+      fetchedAt: z.number().int().nonnegative(),
+    })
+    .nullable(),
 });
 export type ParadexRfq = z.infer<typeof ParadexRfqSchema>;
 

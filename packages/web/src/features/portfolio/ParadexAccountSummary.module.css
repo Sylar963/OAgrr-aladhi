@@ -22,7 +22,9 @@
   margin: var(--space-3) 0;
 }
 
-.account dt, .account small, .account p {
+.account dt,
+.account small,
+.account p {
   color: var(--text-dim);
   font-size: 10px;
 }

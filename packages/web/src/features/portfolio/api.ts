@@ -35,7 +35,17 @@ async function getHeaders(providedToken?: string): Promise<HeadersInit> {
   return headers;
 }
 
-async function parseResponse<T>(res: Response, schema: z.ZodType<T>, path: string): Promise<T> {
+interface ResponseSchema<T> {
+  safeParse(
+    input: unknown,
+  ): { success: true; data: T } | { success: false; error: { message: string } };
+}
+
+async function parseResponse<T>(
+  res: Response,
+  schema: ResponseSchema<T>,
+  path: string,
+): Promise<T> {
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const payload = (body ?? {}) as { message?: string; error?: string };
@@ -48,7 +58,7 @@ async function parseResponse<T>(res: Response, schema: z.ZodType<T>, path: strin
   return parsed.data;
 }
 
-async function getJson<T>(path: string, schema: z.ZodType<T>, token?: string): Promise<T> {
+async function getJson<T>(path: string, schema: ResponseSchema<T>, token?: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { headers: await getHeaders(token) });
   return parseResponse(res, schema, path);
 }
@@ -242,7 +252,10 @@ export async function fetchLiveTradingAvailability(): Promise<LiveTradingAvailab
   if (res.status === 404) return { kind: 'off' };
   if (res.status === 401 || res.status === 403) return { kind: 'not_entitled' };
   if (res.status === 503) return { kind: 'daemon_unavailable' };
-  return { kind: 'ready', status: await parseResponse(res, LiveStatusResponseSchema, '/live/status') };
+  return {
+    kind: 'ready',
+    status: await parseResponse(res, LiveStatusResponseSchema, '/live/status'),
+  };
 }
 
 export async function venueStatus(venue: string): Promise<VenueConnectionState> {
@@ -538,7 +551,10 @@ export function fetchPositions(
   return getJson(`/portfolio/positions?${params.toString()}`, PositionsResponseSchema);
 }
 
-const ExchangePortfolioVenueValues = ['derive', 'thalex'] as const satisfies readonly ExchangePortfolioVenue[];
+const ExchangePortfolioVenueValues = [
+  'derive',
+  'thalex',
+] as const satisfies readonly ExchangePortfolioVenue[];
 
 const ExchangeTradesResponseSchema: z.ZodType<ExchangeTradesResponse> = z.object({
   accountId: z.string(),
@@ -585,7 +601,11 @@ export function fetchExchangeTrades(query: ExchangeTradesQuery): Promise<Exchang
   return getJson(`/portfolio/exchange-trades?${params.toString()}`, ExchangeTradesResponseSchema);
 }
 
-const EquityHistoryVenueValues = ['derive', 'thalex', 'paradex'] as const satisfies readonly EquityHistoryVenue[];
+const EquityHistoryVenueValues = [
+  'derive',
+  'thalex',
+  'paradex',
+] as const satisfies readonly EquityHistoryVenue[];
 const EquityHistoryRangeValues = ['1M', '3M'] as const satisfies readonly EquityHistoryRange[];
 
 const EquityHistoryResponseSchema: z.ZodType<EquityHistoryResponse> = z.object({
@@ -618,7 +638,9 @@ const VenueMarginResponseSchema: z.ZodType<VenueMarginResponse> = z.object({
   updatedAt: z.number(),
 });
 
-export function fetchVenueMargin(venue: VenueMarginResponse['venue']): Promise<VenueMarginResponse> {
+export function fetchVenueMargin(
+  venue: VenueMarginResponse['venue'],
+): Promise<VenueMarginResponse> {
   const params = new URLSearchParams({ venue });
   return getJson(`/portfolio/venue-margin?${params.toString()}`, VenueMarginResponseSchema);
 }

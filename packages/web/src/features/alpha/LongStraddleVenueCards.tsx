@@ -87,7 +87,9 @@ export default function LongStraddleVenueCards({
             </header>
             <div className={cards.coverageRow}>
               <span>{ta('expiriesInWindow')}</span>
-              <strong>{ta('pricedOf', { n: candidates.length, total: status.eligibleExpiries })}</strong>
+              <strong>
+                {ta('pricedOf', { n: candidates.length, total: status.eligibleExpiries })}
+              </strong>
             </div>
             <div className={cards.coverageTrack}>
               <span
@@ -118,9 +120,11 @@ export default function LongStraddleVenueCards({
             )}
           </section>
         );
-        return status.venue === 'paradex'
-          ? <ParadexVenueCard key={status.venue} underlying={data.underlying} screen={screen} />
-          : screen;
+        return status.venue === 'paradex' ? (
+          <ParadexVenueCard key={status.venue} underlying={data.underlying} screen={screen} />
+        ) : (
+          screen
+        );
       })}
     </OpportunitySection>
   );
@@ -168,7 +172,8 @@ function LongStraddleRow({
       </span>
       <span className={styles.rowVol}>
         IV {(candidate.buyIv * 100).toFixed(1)} {t('vsFcst')}{' '}
-        {candidate.forecastVol == null ? '—' : (candidate.forecastVol * 100).toFixed(1)} · {ta('cone')}{' '}
+        {candidate.forecastVol == null ? '—' : (candidate.forecastVol * 100).toFixed(1)} ·{' '}
+        {ta('cone')}{' '}
         {candidate.conePercentile == null ? '—' : `p${candidate.conePercentile.toFixed(0)}`}
       </span>
       <span className={cards.candidateBalance}>
@@ -184,4 +189,3 @@ function LongStraddleRow({
     </button>
   );
 }
-

@@ -244,10 +244,10 @@ export default function AlphaTradeSizing({
           )}
         </label>
       ))}
-      {market === 'crypto' && venue === 'paradex' && <ParadexAccountSummary onUseEquity={(equity) => update('equity', String(equity))} />}
-      <p className={styles.hint}>
-        {t('equityNote')}
-      </p>
+      {market === 'crypto' && venue === 'paradex' && (
+        <ParadexAccountSummary onUseEquity={(equity) => update('equity', String(equity))} />
+      )}
+      <p className={styles.hint}>{t('equityNote')}</p>
     </div>
   );
 }

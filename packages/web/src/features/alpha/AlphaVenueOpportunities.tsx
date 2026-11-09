@@ -89,7 +89,9 @@ export default function AlphaVenueOpportunities({
               <CandidateRow
                 key={candidate.id}
                 candidate={candidate}
-                title={ta(candidate === selected ? 'selected' : VERTICAL_LABEL_KEYS[candidate.kind])}
+                title={ta(
+                  candidate === selected ? 'selected' : VERTICAL_LABEL_KEYS[candidate.kind],
+                )}
                 selected={candidate === selected}
                 detail={
                   candidate.basePremium != null && (
@@ -109,11 +111,15 @@ export default function AlphaVenueOpportunities({
             ))}
           </OpportunityCard>
         );
-        return scan.venue === 'paradex'
-          ? <ParadexVenueCard key={scan.venue} underlying={underlying} screen={screen} />
-          : screen;
+        return scan.venue === 'paradex' ? (
+          <ParadexVenueCard key={scan.venue} underlying={underlying} screen={screen} />
+        ) : (
+          screen
+        );
       })}
-      {paradexEnabled && !scans.some((scan) => scan.venue === 'paradex') && <ParadexVenueCard underlying={underlying} />}
+      {paradexEnabled && !scans.some((scan) => scan.venue === 'paradex') && (
+        <ParadexVenueCard underlying={underlying} />
+      )}
     </OpportunitySection>
   );
 }

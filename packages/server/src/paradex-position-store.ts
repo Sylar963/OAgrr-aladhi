@@ -138,7 +138,10 @@ export class ParadexPositionStore implements PositionStore {
     return client == null ? null : client.fetchOpenRfqs(underlying, cursor);
   }
 
-  async fetchEquityHistory(accountId: string, fromMs: number): Promise<EquityHistoryPoint[] | null> {
+  async fetchEquityHistory(
+    accountId: string,
+    fromMs: number,
+  ): Promise<EquityHistoryPoint[] | null> {
     const client = this.clients.get(accountId);
     return client == null ? null : client.fetchEquityHistory(fromMs);
   }

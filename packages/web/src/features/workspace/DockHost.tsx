@@ -84,6 +84,9 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
             ),
           );
           if (!valid) throw new Error('Invalid layout panels');
+          for (const [id, panel] of Object.entries(layout.panels)) {
+            panel.params = expected.find((entry) => entry.id === id);
+          }
           event.api.fromJSON(layout);
           setRestored(true);
         } catch {

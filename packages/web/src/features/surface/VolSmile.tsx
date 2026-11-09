@@ -123,15 +123,16 @@ function useVolSmileChart(
 }
 
 interface Props {
+  underlying?: string;
   defaultUnderlying?: string;
   market?: SurfaceMarket;
 }
 
-export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto', underlying }: Props) {
   const t = useT(messages);
   const tradfi = market === 'tradfi';
   const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
-    useSurfaceUnderlying(market, defaultUnderlying);
+    useSurfaceUnderlying(market, defaultUnderlying, underlying);
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [xAxisMode, setXAxisMode] = useState<XAxisMode>('strike');
   const [selectedVenue, setSelectedVenue] = useState('deribit');

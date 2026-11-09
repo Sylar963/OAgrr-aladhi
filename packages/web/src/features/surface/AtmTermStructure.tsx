@@ -57,6 +57,7 @@ type Mode = 'per-venue-atm' | 'multi-delta';
 type TenorMode = 'listed' | 'cmm';
 
 interface Props {
+  underlying?: string;
   defaultUnderlying?: string;
   market?: SurfaceMarket;
 }
@@ -290,10 +291,10 @@ function pickRows(
   };
 }
 
-export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = 'crypto', underlying }: Props) {
   const t = useT(messages);
   const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
-    useSurfaceUnderlying(market, defaultUnderlying);
+    useSurfaceUnderlying(market, defaultUnderlying, underlying);
   const containerRef = useRef<HTMLDivElement>(null);
   const multiContainerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);

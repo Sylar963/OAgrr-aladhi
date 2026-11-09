@@ -175,16 +175,17 @@ function buildCmmGrid(data: IvSurfaceResponse): SurfaceGrid | null {
 }
 
 interface Props {
+  underlying?: string;
   defaultUnderlying?: string;
   market?: SurfaceMarket;
 }
 
-export default function VolSurface3D({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+export default function VolSurface3D({ defaultUnderlying = 'BTC', market = 'crypto', underlying }: Props) {
   const t = useT(messages);
   const ts = useT(surfaceMessages);
   const tradfi = market === 'tradfi';
   const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
-    useSurfaceUnderlying(market, defaultUnderlying);
+    useSurfaceUnderlying(market, defaultUnderlying, underlying);
   const [selectedVenue, setSelectedVenue] = useState('average');
   const [tenorMode, setTenorMode] = useState<TenorMode>('listed');
 

@@ -16,3 +16,6 @@ src/shared-types/      Types mirroring core enrichment output
 Notable features: `chain/`, `surface/`, `portfolio/`, `trading/`, `flow/`, `analytics/`, `alpha/`, `dvol/`.
 
 TanStack Query for server state. Zustand for UI state. IV stored as fractions, displayed via `fmtIv(v) = v × 100 + "%"`. CSS Modules for all components. Prefer `@oggregator/protocol` types for portfolio and trading payloads.
+
+Desktop crypto tabs use editable presets and the same dock host as custom tabs. Read
+`WORKSPACES.md` before changing layout state, persistence, widget membership, or navigation.

@@ -139,17 +139,19 @@ function useRvIvChart(
 }
 
 interface Props {
+  underlying?: string;
   defaultUnderlying?: string;
   market?: SurfaceMarket;
 }
 
-export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 'crypto', underlying }: Props) {
   const t = useT(messages);
   const tradfi = market === 'tradfi';
   const initial = CURRENCIES.includes(defaultUnderlying as (typeof CURRENCIES)[number])
     ? defaultUnderlying
     : 'BTC';
-  const [currency, setCurrency] = useState(initial);
+  const [localCurrency, setCurrency] = useState(initial);
+  const currency = underlying ?? localCurrency;
   const { data: dvol } = useDvolHistory(tradfi ? '' : currency);
   const { underlying: tradfiUnderlying } = useTradfiSelection(tradfi);
   const { data: history } = useTradfiVolHistory(tradfi ? tradfiUnderlying : '');
@@ -166,6 +168,8 @@ export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 
         <span className={styles.title}>{t('title')}</span>
         {tradfi ? (
           <span className={styles.title}>{tradfiUnderlying}</span>
+        ) : underlying ? (
+          <span className={styles.title}>{underlying}</span>
         ) : (
           <DropdownPicker
             size="sm"

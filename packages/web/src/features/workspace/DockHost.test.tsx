@@ -1,4 +1,4 @@
-import { readLayout } from '@lib/custom-tabs';
+import { readLayout, writeLayout } from '@lib/custom-tabs';
 import { builtinLayoutId, readBuiltinLayouts } from '@lib/workspace-layouts';
 import { MAIN_MARKET_ID, useAppStore } from '@stores/app-store';
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -293,5 +293,19 @@ describe('DockHost', () => {
       vi.advanceTimersByTime(300);
     });
     expect(readBuiltinLayouts().chain).toEqual([]);
+  });
+
+  it('hydrates legacy custom-tab panel parameters from validated membership', () => {
+    useAppStore.getState().addWidget({ id: 'chain', kind: 'chain' });
+    writeLayout(tabId(), {
+      grid: {},
+      panels: { chain: { id: 'chain', params: { kind: 'chain' } } },
+    });
+    render(<DockHost layoutId={tabId()} />);
+    expect(dock.api.fromJSON).toHaveBeenCalledWith(
+      expect.objectContaining({
+        panels: { chain: { id: 'chain', params: { id: 'chain', kind: 'chain' } } },
+      }),
+    );
   });
 });

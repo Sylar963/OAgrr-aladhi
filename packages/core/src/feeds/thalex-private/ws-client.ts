@@ -215,6 +215,14 @@ export class ThalexPrivateClient {
     return this.latestEquity;
   }
 
+  async fetchAccountEquity(): Promise<ThalexAccountEquity> {
+    const summary = ThalexAccountSummarySchema.parse(
+      await this.call('private/account_summary', {}, 10_000),
+    );
+    this.applyAccountSummary(summary);
+    return thalexAccountEquity(summary, Date.now());
+  }
+
   async previewMargin(request: ThalexMarginPreviewRequest): Promise<ThalexMarginPreview> {
     const params = ThalexMarginPreviewRequestSchema.parse(request);
     const result = await this.call('private/required_margin_for_order', params, 10_000);

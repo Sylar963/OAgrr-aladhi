@@ -40,6 +40,24 @@
   color: var(--color-warning);
 }
 
+.account .warning {
+  display: block;
+  color: var(--color-warning);
+}
+
+.network {
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: var(--color-profit);
+  font-size: 10px;
+}
+
+.network[data-network='test'] {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
 .account button {
   display: block;
   margin-top: var(--space-2);

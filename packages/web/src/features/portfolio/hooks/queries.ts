@@ -9,6 +9,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   addPosition,
   fetchParadexAccount,
+  fetchThalexAccount,
   fetchParadexRfqs,
   fetchEquityHistory,
   fetchLiveTradingAvailability,
@@ -156,6 +157,18 @@ export function useParadexAccount(enabled = true) {
     queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'paradex-account'],
     queryFn: fetchParadexAccount,
     enabled: session.status === 'ready' && enabled,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+    retry: false,
+  });
+}
+
+export function useThalexAccount() {
+  const session = useAccountSession();
+  return useQuery({
+    queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'thalex-account'],
+    queryFn: fetchThalexAccount,
+    enabled: session.status === 'ready',
     refetchInterval: 15_000,
     staleTime: 10_000,
     retry: false,

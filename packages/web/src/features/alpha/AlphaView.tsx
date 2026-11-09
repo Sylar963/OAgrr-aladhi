@@ -2,7 +2,8 @@ import ParadexVenueCard from './ParadexVenueCard';
 import { EmptyState, Spinner } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { ExpiryBar } from '@features/chain';
-import { AlphaPortfolioContext, ParadexAccountSummary } from '@features/portfolio';
+import { AlphaPortfolioContext } from '@features/portfolio';
+import AlphaAccountSummary from './AlphaAccountSummary';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { defineMessages, useT } from '@lib/i18n';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
@@ -510,8 +511,9 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         />
       )}
 
-      {!tradfi && scanVenues.includes('paradex') && (
-        <ParadexAccountSummary
+      {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
+        <AlphaAccountSummary
+          defaultVenue={tradeVenue === 'paradex' || !scanVenues.includes('thalex') ? 'paradex' : 'thalex'}
           {...(isSpread && { onUseEquity: (equity: number) => update('equity', String(equity)) })}
         />
       )}

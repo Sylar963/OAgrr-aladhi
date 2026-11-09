@@ -4,6 +4,7 @@ import { requireUser } from '../../user-service.js';
 import { portfolioAssistantRoutes } from './assistant.js';
 import { portfolioEquityHistoryRoute } from './equity-history.js';
 import { portfolioParadexRoutes } from './paradex.js';
+import { portfolioThalexAccountRoute } from './thalex-account.js';
 import { portfolioMetricsRoute } from './metrics.js';
 import { portfolioPositionsRoute } from './positions.js';
 import { portfolioScenariosRoute } from './scenarios.js';
@@ -21,6 +22,7 @@ export async function portfolioRoutes(app: FastifyInstance) {
   await portfolioEquityHistoryRoute(app);
   await portfolioVenueMarginRoute(app);
   await portfolioParadexRoutes(app);
+  await portfolioThalexAccountRoute(app);
   await portfolioVenueCredentialsRoute(app);
   await portfolioAssistantRoutes(app);
 }

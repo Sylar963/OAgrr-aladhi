@@ -35,3 +35,4 @@ export { default as AlphaPortfolioContext } from './AlphaPortfolioContext';
 export { PortfolioAssistantPanel } from './assistant';
 
 export { default as ParadexAccountSummary } from './ParadexAccountSummary';
+export { default as ThalexAccountSummary } from './ThalexAccountSummary';

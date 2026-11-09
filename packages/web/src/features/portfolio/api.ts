@@ -1,4 +1,4 @@
-import { ParadexAccountResponseSchema, ParadexRfqsResponseSchema } from '@oggregator/protocol';
+import { ParadexAccountResponseSchema, ParadexRfqsResponseSchema, ThalexAccountResponseSchema } from '@oggregator/protocol';
 import { getClerkToken } from '@lib/clerk-token';
 import {
   type DeriveSessionKeyConfirm,
@@ -675,6 +675,10 @@ export function runScenarios(
 
 export function fetchParadexAccount() {
   return getJson('/portfolio/paradex/account', ParadexAccountResponseSchema);
+}
+
+export function fetchThalexAccount() {
+  return getJson('/portfolio/thalex/account', ThalexAccountResponseSchema);
 }
 
 export function fetchParadexRfqs(underlying: string, cursor?: string) {

@@ -83,6 +83,13 @@ export class ThalexPositionStore implements PositionStore {
     return this.clients.get(accountId)?.getLatestAccountEquity() ?? null;
   }
 
+  async fetchAccountEquity(accountId: string): Promise<ThalexAccountEquity | null> {
+    const client = this.clients.get(accountId);
+    if (client == null) return null;
+    const equity = await client.fetchAccountEquity();
+    return this.clients.get(accountId) === client ? equity : null;
+  }
+
   get(accountId: string, legId: string): PositionLeg | null {
     return this.cache.get(accountId)?.get(legId) ?? null;
   }

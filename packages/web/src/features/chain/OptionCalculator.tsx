@@ -159,6 +159,13 @@ export default function OptionCalculator({
   }
 
   useEffect(() => {
+    const keepInsideWindow = () =>
+      setPos((current) => {
+        const x = clamp(current.x, 0, Math.max(0, ownerWindow.innerWidth - PANEL_WIDTH));
+        const y = clamp(current.y, 0, Math.max(0, ownerWindow.innerHeight - 100));
+        return x === current.x && y === current.y ? current : { x, y };
+      });
+    keepInsideWindow();
     function onMove(e: PointerEvent) {
       const d = dragRef.current;
       if (!d) return;
@@ -172,10 +179,12 @@ export default function OptionCalculator({
       dragRef.current = null;
     }
     ownerWindow.addEventListener('pointermove', onMove);
+    ownerWindow.addEventListener('resize', keepInsideWindow);
     ownerWindow.addEventListener('pointerup', onUp);
     ownerWindow.addEventListener('pointercancel', onUp);
     return () => {
       ownerWindow.removeEventListener('pointermove', onMove);
+      ownerWindow.removeEventListener('resize', keepInsideWindow);
       ownerWindow.removeEventListener('pointerup', onUp);
       ownerWindow.removeEventListener('pointercancel', onUp);
     };

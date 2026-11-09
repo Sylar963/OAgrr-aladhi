@@ -28,6 +28,42 @@ the destination and explains the ten-tab limit when no additional tab can be cre
 All templates fit the existing eight-widget custom-tab limit and start with at most four visible
 groups. The gallery previews are diagrams; they mount no market widgets or subscriptions.
 
+## Multiple monitors
+
+1. Click **↗** at the right of a panel group's header to open its active panel in a real browser
+   window. Drag that window onto another monitor and resize it with the operating system.
+2. For a tabbed group, **▣↗** opens all of its tabs together. Only its selected tab runs.
+3. Use **BTC · Workspace** (or the current ticker) in a detached header to change the shared market
+   from that monitor. Workspace-bound panels share ticker, expiry, venue filters and account state.
+   Panels with their own ticker controls or configured BTC/ETH comparisons retain those selections.
+4. Click **Dock back**, or close the detached window, to return its panels. If every panel is out,
+   the main canvas offers **Bring panels back**.
+
+For example, start with **Trade planning** and put Chain, Builder and Vol smile on different
+monitors to keep them live together within one workspace.
+
+Allow pop-ups for this site if the browser blocks opening or restoring a window. A blocked window
+leaves its panels available in the main workspace, with a retry explanation. Desktop workspaces
+support this; the separate TradFi shell and mobile navigation retain their existing behavior.
+
+The main browser window owns the session and must stay open. Detached windows belong to the active
+workspace: switching workspaces closes that workspace's windows; returning restores its saved
+layout, subject to the browser's pop-up permission. Resetting a layout also closes its windows.
+Saved layouts include detached groups and their window geometry. Physical placement on another
+monitor is ultimately controlled by the browser and operating system.
+
+Implementation uses Dockview's native pop-out groups and React portals, keeping the same React
+providers, Zustand stores, query cache and feed hub. `public/workspace-popout.html` is a script-free
+host, so opening a panel doesn't bootstrap another application or duplicate its sockets. Saved
+pop-out URLs are replaced with this fixed local path before restoration. `PanelDocumentContext`
+keeps menus, tooltips, the asset palette, calculator and overlays in their owning window, while
+`syncPopoutDocument` follows lazy-loaded CSS and language changes. All document observers and
+listeners are disposed when a window closes.
+
+Visibility is aggregated across the main document and registered pop-outs. Query polling, chain
+recovery and session-idle timers treat a visible detached window as an active application, even
+when the main tab is hidden. Socket and widget limits remain unchanged.
+
 ## Built-in presets
 
 | Tab | Default panels |
@@ -134,3 +170,12 @@ including 1,401 web tests. The production build passed. Chromium verified select
 keyboard navigation, Escape and focus return, canceling without changes, reset/reload, filling an
 empty tab in place, preserving populated workspaces, Spanish labels, and mobile chunk isolation.
 The gallery adds about 0.6 KB gzip to the entry bundle; its UI loads on demand.
+
+Multi-monitor validation covered native panel and group windows, selecting a hidden tab in a
+detached group, shared market changes, same-window asset selection and menus, calculator movement
+and entered-value preservation, dock back, operating-system window close, bringing every panel
+back, blocked opens and blocked saved-window restoration, custom-template workspace switching,
+reload membership, Spanish labels/language, parent-window cleanup, and mobile chunk isolation.
+These Chromium checks passed against both development and production builds without page errors.
+The final production entry is 362,102 bytes gzip, 2,786 bytes above the original migration baseline;
+Dockview and its window controls remain lazy-loaded. The focused regression suite passes 41 tests.

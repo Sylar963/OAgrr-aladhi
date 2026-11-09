@@ -53,7 +53,9 @@ describe('multi-window session timeout', () => {
     act(() => vi.advanceTimersByTime(20 * 60_000));
     const popup = document.implementation.createHTMLDocument();
     vi.spyOn(popup, 'hidden', 'get').mockReturnValue(false);
-    act(() => { close = registerAppDocument(popup); });
+    act(() => {
+      close = registerAppDocument(popup);
+    });
     act(() => vi.advanceTimersByTime(31 * 60_000));
     expect(useAppStore.getState().sessionNotice).toBeNull();
     expect(endSession).not.toHaveBeenCalled();

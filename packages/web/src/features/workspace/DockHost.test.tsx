@@ -115,6 +115,7 @@ describe('DockHost', () => {
       layout: new Set<() => void>(),
       add: new Set<() => void>(),
       remove: new Set<() => void>(),
+      failure: new Set<() => void>(),
     };
     const on = (set: Set<() => void>) => (listener: () => void) => {
       set.add(listener);
@@ -136,7 +137,7 @@ describe('DockHost', () => {
       onDidAddGroup: () => ({ dispose: () => {} }),
       onDidAddPopoutGroup: () => ({ dispose: () => {} }),
       onWillClosePopoutWindow: () => ({ dispose: () => {} }),
-      onDidOpenPopoutWindowFail: () => ({ dispose: () => {} }),
+      onDidOpenPopoutWindowFail: on(listeners.failure),
       fromJSON: vi.fn(),
       clear: vi.fn(),
       toJSON: () => ({ grid: {}, panels: {} }),
@@ -162,6 +163,9 @@ describe('DockHost', () => {
     };
     return {
       api,
+      fireFailure: () => {
+        for (const listener of listeners.failure) listener();
+      },
       fireLayout: () => {
         for (const listener of listeners.layout) listener();
       },
@@ -322,9 +326,24 @@ describe('DockHost', () => {
       popoutGroups: [{ data: { views: ['chain-table'] }, url: '/?popout=1' }],
     });
     render(<DockHost layoutId={id} />);
-    expect(dock.api.fromJSON).toHaveBeenCalledWith(expect.objectContaining({
-      popoutGroups: [expect.objectContaining({ url: '/workspace-popout.html' })],
-    }));
+    expect(dock.api.fromJSON).toHaveBeenCalledWith(
+      expect.objectContaining({
+        popoutGroups: [expect.objectContaining({ url: '/workspace-popout.html' })],
+      }),
+    );
+  });
+
+  it('reports a pop-up blocked during restoration before the first layout render', () => {
+    const id = builtinLayoutId('chain');
+    writeLayout(id, {
+      grid: {},
+      panels: { 'chain-table': { id: 'chain-table', params: { kind: 'chain-table' } } },
+      popoutGroups: [{ data: { views: ['chain-table'] } }],
+    });
+    dock.api.fromJSON.mockImplementation(() => dock.fireFailure());
+    render(<DockHost layoutId={id} />);
+    expect(screen.getByRole('alert').textContent).toContain('Allow pop-ups');
+    expect(dock.api.panels).toHaveLength(3);
   });
 
   it('places template-backed custom panels in their starting groups', () => {

@@ -14,7 +14,7 @@ export function syncPopoutDocument(source: Document, target: Document): () => vo
     }
     for (const original of styles) {
       let copy = copies.get(original);
-      if (!copy || !copy.isEqualNode(original)) {
+      if (!copy?.isEqualNode(original)) {
         const next = original.cloneNode(true) as Element;
         copy?.replaceWith(next);
         copies.set(original, next);

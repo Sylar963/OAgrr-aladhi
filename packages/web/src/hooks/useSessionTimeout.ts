@@ -12,8 +12,8 @@ const IDLE_WARNING_MS = 29 * 60 * 1000;
  *   30 minutes → clears the paper account id + idle-logout notice
  *
  * Applies to every user (paper-trading and anonymous) to curb idle public
- * sessions. Timers start on `visibilitychange → hidden` and are cancelled when
- * the tab becomes visible again before the warning threshold — or by the user
+ * sessions. Timers start when all windows become hidden and are cancelled when
+ * any window becomes visible before the warning threshold — or by the user
  * clicking "Stay active" on the warning, which bumps `sessionExtendToken`.
  *
  * Window focus deliberately does not count: a trader watching this app on a second monitor while

@@ -128,6 +128,10 @@ function EmptyTabHint({ containerApi }: IWatermarkPanelProps) {
   );
 }
 
+function WorkspaceWatermark(props: IWatermarkPanelProps) {
+  return props.group ? null : <EmptyTabHint {...props} />;
+}
+
 const COMPONENTS = { widget: WidgetPanel };
 
 export default function DockHost({ layoutId }: { layoutId: string }) {
@@ -140,41 +144,11 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
   const setLayoutPanels = useAppStore((s) => s.setLayoutPanels);
   const catalog = useWidgetCatalog();
   const [api, setApi] = useState<DockviewApi | null>(null);
-  const [restored, setRestored] = useState(false);
+  const restored = useRef(false);
   const [popoutFailed, setPopoutFailed] = useState(false);
   const initialized = useRef(false);
 
-  const onReady = useCallback(
-    (event: DockviewReadyEvent) => {
-      const saved = readLayout(layoutId);
-      if (saved != null) {
-        try {
-          const layout = saved as SerializedDockview;
-          const expected = selectLayoutPanels(useAppStore.getState(), layoutId);
-          const valid = Object.entries(layout.panels).every(([id, panel]) =>
-            expected.some(
-              (entry) =>
-                entry.id === id &&
-                entry.kind === panel.params?.kind &&
-                entry.underlying === panel.params?.underlying,
-            ),
-          );
-          if (!valid) throw new Error('Invalid layout panels');
-          for (const [id, panel] of Object.entries(layout.panels)) {
-            panel.params = expected.find((entry) => entry.id === id);
-          }
-          for (const popout of layout.popoutGroups ?? []) popout.url = WORKSPACE_POPOUT_URL;
-          event.api.fromJSON(layout);
-          setRestored(true);
-        } catch {
-          event.api.clear();
-          removeLayout(layoutId);
-        }
-      }
-      setApi(event.api);
-    },
-    [layoutId],
-  );
+  const onReady = useCallback((event: DockviewReadyEvent) => setApi(event.api), []);
 
   useEffect(() => {
     if (api == null) return;
@@ -193,13 +167,38 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
       cleanups.delete(target);
     });
     const failed = api.onDidOpenPopoutWindowFail(() => setPopoutFailed(true));
+    const saved = readLayout(layoutId);
+    if (saved != null) {
+      try {
+        const layout = saved as SerializedDockview;
+        const expected = selectLayoutPanels(useAppStore.getState(), layoutId);
+        const valid = Object.entries(layout.panels).every(([id, panel]) =>
+          expected.some(
+            (entry) =>
+              entry.id === id &&
+              entry.kind === panel.params?.kind &&
+              entry.underlying === panel.params?.underlying,
+          ),
+        );
+        if (!valid) throw new Error('Invalid layout panels');
+        for (const [id, panel] of Object.entries(layout.panels)) {
+          panel.params = expected.find((entry) => entry.id === id);
+        }
+        for (const popout of layout.popoutGroups ?? []) popout.url = WORKSPACE_POPOUT_URL;
+        api.fromJSON(layout);
+        restored.current = true;
+      } catch {
+        api.clear();
+        removeLayout(layoutId);
+      }
+    }
     return () => {
       opened.dispose();
       closing.dispose();
       failed.dispose();
       for (const cleanup of cleanups.values()) cleanup();
     };
-  }, [api]);
+  }, [api, layoutId]);
 
   useEffect(() => {
     if (api == null) return;
@@ -275,7 +274,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
         if (existing.title !== title) existing.api.setTitle(title);
         continue;
       }
-      const usePreset = !initialized.current && !restored && preset.length > 0;
+      const usePreset = !initialized.current && !restored.current && preset.length > 0;
       const reference = anchor ?? groupAnchors.get(group === 3 ? 1 : 0);
       api.addPanel({
         id: panel.id,
@@ -304,7 +303,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
       });
     }
     initialized.current = true;
-  }, [api, panels, catalog, layoutId, preset, restored]);
+  }, [api, panels, catalog, layoutId, preset]);
 
   useEffect(() => {
     if (api == null || focusRequest == null) return;
@@ -325,7 +324,7 @@ export default function DockHost({ layoutId }: { layoutId: string }) {
       <DockviewReact
         components={COMPONENTS}
         theme={themeDark}
-        watermarkComponent={EmptyTabHint}
+        watermarkComponent={WorkspaceWatermark}
         rightHeaderActionsComponent={PanelWindowControls}
         popoutUrl={WORKSPACE_POPOUT_URL}
         disableFloatingGroups

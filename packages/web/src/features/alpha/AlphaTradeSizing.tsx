@@ -243,7 +243,9 @@ export default function AlphaTradeSizing({
           )}
         </label>
       ))}
-      <p className={styles.hint}>{t('equityNote')}</p>
+      <p className={styles.hint}>
+        {t('equityNote')}
+      </p>
     </div>
   );
 }

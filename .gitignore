@@ -62,6 +62,7 @@ apps/landing/.next
 !/docs/
 /docs/*
 !/docs/SECURITY_HARDENING.md
+!/docs/paradex-alpha-rfq-audit.md
 !/docs/knowledge/
 !/docs/knowledge/options-trading.md
 CLAUDE.md

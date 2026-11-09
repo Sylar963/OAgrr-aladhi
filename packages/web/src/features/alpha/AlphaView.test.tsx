@@ -30,7 +30,16 @@ vi.mock('@features/tradfi', () => ({
   }),
   useTradfiChain: mocks.tradfiChain,
 }));
+vi.mock('@components/auth/AccountSessionProvider', () => ({
+  useAccountSession: () => ({ status: 'ready' }),
+}));
 vi.mock('@features/portfolio', () => ({
+  ParadexAccountSummary: ({ onUseEquity }: { onUseEquity?: (equity: number) => void }) => (
+    <button type="button" onClick={() => onUseEquity?.(1234)}>
+      Use connected Paradex equity
+    </button>
+  ),
+  useParadexRfqs: () => ({ data: undefined, isPending: true }),
   AlphaPortfolioContext: ({ venue }: { venue: string }) => <div>Portfolio exposure: {venue}</div>,
 }));
 vi.mock('@components/layout/palette-context', () => ({ useOpenPalette: () => vi.fn() }));
@@ -268,7 +277,9 @@ describe('surgical Alpha enhancements', () => {
       mocks.scan.mock.calls.map(([arg]) => arg).filter((arg) => arg.equity === 5000);
     // Auto size: one scan per listing venue. No pair prices in this mock, so Bybit falls back
     // to $100 of notional at $40 spot on its 1-SOL step; Deribit has no size data on this chain.
-    expect(userScans().at(-2)).toEqual(expect.objectContaining({ venues: ['deribit'], quantity: 3 }));
+    expect(userScans().at(-2)).toEqual(
+      expect.objectContaining({ venues: ['deribit'], quantity: 3 }),
+    );
     expect(userScans().at(-1)).toEqual(expect.objectContaining({ venues: ['bybit'], quantity: 3 }));
     expect(screen.getByLabelText<HTMLInputElement>(/Quantity · SOL per leg/).value).toBe('3');
     expect(screen.getByText(/Auto: each venue uses the size its book fills best/)).toBeTruthy();
@@ -378,4 +389,15 @@ describe('surgical Alpha enhancements', () => {
       ['buy', 205, 1, 3.6],
     ]);
   });
+});
+
+it('shows Paradex RFQ controls before manual sizing and adopts equity only on request', () => {
+  setTestMarket({ activeVenues: ['thalex', 'paradex'] });
+  render(<AlphaView />);
+  expect(screen.getByRole('button', { name: 'RFQ' })).toBeTruthy();
+  const input = screen.getByLabelText('Account equity · USD') as HTMLInputElement;
+  expect(input.value).toBe('');
+  fireEvent.click(screen.getByRole('button', { name: 'Use connected Paradex equity' }));
+  expect(input.value).toBe('1234');
+  expect(mocks.scan).toHaveBeenCalledWith(expect.objectContaining({ equity: 1234 }));
 });

@@ -1,11 +1,18 @@
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as renderUi, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
 import type { CrossVenueCandidate } from './cross-venue-scanner';
 import type { SpreadCandidate } from './spread-scanner';
 import { setTestMarket } from '@/test/market-state';
+
+function render(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  return renderUi(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const mocks = vi.hoisted(() => ({
   chain: vi.fn(),

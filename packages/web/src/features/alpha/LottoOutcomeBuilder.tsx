@@ -6,6 +6,7 @@ import { VENUES } from '@lib/venue-meta';
 
 import { buildLottoOutcomes, type LottoOutcome, type OutcomeStyle } from './lotto-outcomes';
 import styles from './LottoOutcomeBuilder.module.css';
+import LongOptionEvaluation from './LongOptionEvaluation';
 
 interface Props {
   data: AlphaLottoScannerResponse;
@@ -311,6 +312,7 @@ function OutcomeCard({ outcome, targetPrice, onInspect }: {
         </div>
       </details>
 
+      <LongOptionEvaluation candidate={candidate} contracts={outcome.quantity} />
       <button type="button" className={styles.inspectButton} onClick={() => onInspect(candidate)}>
         {t('inspect')}
       </button>

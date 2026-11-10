@@ -12,6 +12,9 @@ import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
+import AlphaEvaluationPanel, { evaluationIdentity } from './AlphaEvaluationPanel';
+import AlphaEvaluationJournal from './AlphaEvaluationJournal';
+import { verticalEvaluationCandidate } from './evaluation-candidate';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
@@ -244,6 +247,10 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     sellStrike: shortStrike,
     buyStrike: longStrike,
   });
+  const evaluationCandidate = selection && chain
+    ? verticalEvaluationCandidate(selection.candidate, chain, selection.route,
+      Number(sizing.equity) * Number(sizing.riskPct) / 100)
+    : null;
   function loadStrikes(candidate: VerticalEconomics) {
     setStrategy(candidate.kind);
     setShortStrike(candidate.sellStrike);
@@ -404,6 +411,10 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         regime={regime ?? null}
         {...(builderLegs && { onOpenBuilder: openInBuilder })}
       />
+      <AlphaEvaluationPanel
+        key={evaluationCandidate == null ? 'empty' : evaluationIdentity(evaluationCandidate)}
+        candidate={evaluationCandidate}
+      />
       <AlphaVenueOpportunities
         scans={scans}
         paradexEnabled={!tradfi && scanVenues.includes('paradex')}
@@ -510,6 +521,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
           loading={marketContext.isLoading}
         />
       )}
+      {(isSpread || strategy === 'long-call' || strategy === 'long-put') && <AlphaEvaluationJournal />}
 
       {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
         <AlphaAccountSummary

@@ -11,8 +11,8 @@ import styles from './VenueOpportunities.module.css';
 
 const messages = defineMessages(
   {
-    statusCheck: 'CHECK',
-    statusWait: 'WAIT',
+    statusCheck: 'MODEL +',
+    statusWait: 'MODEL ≤ 0',
     statusTooLarge: 'TOO LARGE',
     statusPriceOnly: 'PRICE ONLY',
     statusNoPair: 'NO PAIR',
@@ -37,8 +37,8 @@ const messages = defineMessages(
     loadSpread: 'Load spread →',
   },
   {
-    statusCheck: 'REVISAR',
-    statusWait: 'ESPERAR',
+    statusCheck: 'MODELO +',
+    statusWait: 'MODELO ≤ 0',
     statusTooLarge: 'DEMASIADO GRANDE',
     statusPriceOnly: 'SOLO PRECIO',
     statusNoPair: 'SIN PAR',
@@ -67,8 +67,8 @@ const messages = defineMessages(
 type MessageKey = keyof typeof messages.en;
 
 const STATUS = {
-  review: { label: 'statusCheck', tone: 'review' },
-  'no-edge': { label: 'statusWait', tone: 'avoid' },
+  review: { label: 'statusCheck', tone: 'neutral' },
+  'no-edge': { label: 'statusWait', tone: 'neutral' },
   'over-budget': { label: 'statusTooLarge', tone: 'danger' },
   'no-model': { label: 'statusPriceOnly', tone: 'neutral' },
 } as const satisfies Record<string, { label: MessageKey; tone: string }>;
@@ -161,7 +161,7 @@ export function OpportunityCard({
     <section className={styles.venueCard} data-tone={status.tone}>
       <header className={styles.venueCardHeader}>
         <span className={styles.venueName}>
-          <VenueDot venueId={venue} isBest={status.tone === 'review'} />
+          <VenueDot venueId={venue} />
           {venueLabel}
         </span>
         <span className={styles.venueState} data-tone={status.tone}>

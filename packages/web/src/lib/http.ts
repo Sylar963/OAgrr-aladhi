@@ -85,3 +85,13 @@ export async function fetchJson<T>(
 
   throw new Error('Max retries exceeded');
 }
+
+export async function postJson(path: string, body: unknown): Promise<unknown> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { ...(await getHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`API error: ${response.status} ${response.statusText}`);
+  return response.json();
+}

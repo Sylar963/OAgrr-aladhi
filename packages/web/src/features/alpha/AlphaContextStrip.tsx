@@ -26,6 +26,9 @@ const messages = defineMessages(
     setupTitle:
       'Broad market heuristic, not a trade verdict. Past realized volatility is not a forecast. An unfavorable selling setup does not imply buying is profitable.',
     setupHeuristic: 'Setup heuristic',
+    marketOnly: 'Market context',
+    separateEvaluation: 'EVALUATE SELECTED TRADE',
+    contextOnlyTitle: 'Historical and model-relative observations only. Evaluate the selected candidate below for direction, horizon, costs and execution.',
     loading: 'LOADING',
     UNAVAILABLE: 'UNAVAILABLE',
     'CHECK DIRECTION + PRICE': 'CHECK DIRECTION + PRICE',
@@ -61,6 +64,9 @@ const messages = defineMessages(
     setupTitle:
       'Heurística amplia de mercado, no un veredicto de trade. La volatilidad realizada pasada no es un pronóstico. Un setup desfavorable para vender no implica que comprar sea rentable.',
     setupHeuristic: 'Heurística de setup',
+    marketOnly: 'Contexto de mercado',
+    separateEvaluation: 'EVALÚA EL TRADE ELEGIDO',
+    contextOnlyTitle: 'Solo observaciones históricas y relativas al modelo. Evalúa el candidato seleccionado abajo para revisar dirección, horizonte, costos y ejecución.',
     loading: 'CARGANDO',
     UNAVAILABLE: 'NO DISPONIBLE',
     'CHECK DIRECTION + PRICE': 'REVISA DIRECCIÓN + PRECIO',
@@ -107,23 +113,22 @@ function historyBuilding(context: AlphaMarketContextResponse | null): boolean {
   return days != null && days < MIN_PERCENTILE_HISTORY_DAYS;
 }
 
-function setupLabel(
+function legacyScannerLabel(
   context: AlphaMarketContextResponse | null,
   strategy: AlphaContextStripProps['strategy'],
 ): string {
   if (context == null) return 'UNAVAILABLE';
-  if (strategy.endsWith('debit')) return 'CHECK DIRECTION + PRICE';
-  if (strategy === 'long-call' || strategy === 'long-straddle') {
+  if (strategy === 'long-straddle') {
     return context.setup.longCall.toUpperCase();
   }
-  if (strategy === 'long-put') return context.setup.protectivePut.toUpperCase();
   return context.setup.creditSpread.toUpperCase();
 }
 
 export default function AlphaContextStrip({ context, strategy, loading }: AlphaContextStripProps) {
   const t = useT(messages);
   const label = (value: string) => (isMessageKey(value) ? t(value) : value);
-  const setup = setupLabel(context, strategy);
+  const legacy = strategy === 'short-straddle' || strategy === 'long-straddle' || strategy === 'iron-fly';
+  const setup = legacy ? legacyScannerLabel(context, strategy) : 'context';
   const move7d = context?.expectedMoves.find((move) => move.days === 7) ?? null;
   const vrp = context?.realized.vrp30d;
   const richness30d = context?.richness?.tenors['30d'] ?? null;
@@ -134,10 +139,10 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
       <div
         className={styles.setup}
         data-fit={setup.toLowerCase()}
-        title={t('setupTitle')}
+        title={t(legacy ? 'setupTitle' : 'contextOnlyTitle')}
       >
-        <span>{t('setupHeuristic')}</span>
-        <strong>{loading ? t('loading') : label(setup)}</strong>
+        <span>{t(legacy ? 'setupHeuristic' : 'marketOnly')}</span>
+        <strong>{loading ? t('loading') : legacy ? label(setup) : t('separateEvaluation')}</strong>
       </div>
       <div>
         <span>ATM IV 30D</span>

@@ -26,6 +26,7 @@ import {
 import { alphaMessages } from './i18n';
 import { putCandidateToBuilderLeg } from './radar-builder';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
+import LongOptionEvaluation from './LongOptionEvaluation';
 import { usePutScanner } from './usePutScanner';
 import styles from './LottoScannerPanel.module.css';
 import ob from './LottoOutcomeBuilder.module.css';
@@ -623,6 +624,7 @@ function ChoiceCard({ choice, onInspect }: {
         </div>
       </details>
 
+      <LongOptionEvaluation candidate={candidate} contracts={hedge.contracts} holdingQuantity={hedge.targetQty} />
       <button type="button" className={ob.inspectButton} onClick={() => onInspect(candidate)}>
         {t('inspectRadar')}
       </button>
@@ -1086,7 +1088,10 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
                   })}
                 </div>
               </div>
-              {selected && <PutInspector candidate={selected} onOpenBuilder={openInBuilderV2} />}
+              {selected && <div>
+                <PutInspector candidate={selected} onOpenBuilder={openInBuilderV2} />
+                <LongOptionEvaluation key={`${selected.venue}:${selected.instrument}`} candidate={selected} />
+              </div>}
             </div>
           )}
         </>

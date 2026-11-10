@@ -33,6 +33,7 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | Discretionary channel execution venues (2026-10-26, client date) | [Thalex fees](https://support.thalex.com/hc/en-us/articles/7079268315665-What-trading-fees-does-Thalex-charge), Delta 1 tiers; [Bybit fee structure](https://www.bybit.com/en/help-center/article/Trading-Fee-Structure), standard perpetual/futures tier | Roberto uses Thalex or Bybit at market. Published entry-tier taker rates are 5 and 5.5 bps/side respectively; account-specific discounts are unverified. Model 12/13 bps round trip including assumed 1 bp/side spread/slippage. No funding or option-premium P&L. |
 | Gamma flip audit (2026-10-27 UTC) | [SpotGamma Gamma Flip](https://support.spotgamma.com/hc/en-us/articles/15413261162387-Gamma-Flip); [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma) | Definitions and conditional hedging mechanics checked against the implementation and public live BTC profiles; no evidence of predictive performance. See the audit below. |
 | Paradex RFQ and equity APIs (2026-11-08, client date) | Official account, RFQ list/BBO/create/markets and read-only authentication documentation | API mechanics reviewed for Alpha integration; no authenticated live-account validation or RFQ strategy-performance evidence. See integration notes below. |
+| Alpha strategy heuristic audit (2026-11-09, client date) | Current context/label/scanner source at `a2953014`; [CME bull spreads](https://www.cmegroup.com/education/courses/option-strategies/bull-spread), [OIC bear call spread](https://www.optionseducation.org/strategies/all-strategies/bear-call-spread-credit-call-spread), [OIC protective put](https://www.optionseducation.org/strategies/all-strategies/protective-put-married-put) | Engineering audit, no trading-rule changes or performance validation. Credit tabs share one direction-blind setup rule; debit headlines are fixed; Protect and Bet share the insurance heuristic. Regime is context, not an input to these setup branches or the main sized-spread status. Missing spot can still permit favorable long calls; unavailable volatility state can still permit favorable credits. Local visual audit: `docs/analysis/alpha-strategy-heuristics.html` and companion Markdown. |
 
 ## Paradex RFQ and current-equity integration (2026-11-08, client date)
 
@@ -686,12 +687,47 @@ h the units held, c the units covered by bought puts, and T the days to expiry.
   Black-76 put for the forward at constant IV and time, so they are not odds or expiry payoffs.
   A put is worth at most K per unit, so a multiple above K/p is reported as unreachable.
 
-Setup heuristic `protectivePut`: favorable when 30D IV is compressed or spot is extended up;
-expensive when IV is bid or spot has broken down. This is our choice (buy insurance before the
-panic bid), untested on BTC data. The worst case uses today's index as the holding's value; it
-ignores the holding's cost basis, margin paths, and early exit at mark.
+The old `protectivePut` setup heuristic is no longer displayed for the Long Put tab (2026-11-09
+client date). Protect and Bet now have separate candidate evaluation objectives. Legacy context
+fields remain for compatibility with consumers outside the six revised strategy tabs. The
+worst case uses today's index as the holding's value; it ignores the holding's cost basis,
+margin paths, and early exit at mark.
 
 ## What Alpha knows, and what it does not
+
+### Candidate evaluation (2026-11-09, client date)
+
+Engineering implementation, not a new profitable strategy. See [the evaluation contract](../alpha-evaluation.md).
+The six revised strategy tabs no longer display the shared favorable/watch/expensive setup
+judgment. Their new evaluator freezes the actual selected quotes, units and expiry on request,
+separates direction/objective, horizon-specific pricing context, observed stress, execution
+checks and evidence, and accepts an optional explicit user return distribution.
+
+- The pure evaluator lives in core; protocol owns Zod contracts. The server only loads existing
+  market sources and adapts HTTP. There is no automatic action score or model-driven order.
+- Historical measurements use completed, continuous daily perpetual-proxy candles. The
+  reference forecast is weekend-adjusted for the actual remaining life, supports up to 90 days,
+  and retains the unfitted 14-day mean-reversion assumption. The historical premium is labeled
+  with its actual 7D/30D baseline and blended source; missing data never becomes a zero premium.
+- Skew sentiment and volatility-cluster confidence remain observations, not direction or trade
+  probability. RV acceleration, past returns and term slope are shown without untested gates.
+- User expiry scenarios assume a lognormal terminal distribution with the entered arithmetic
+  mean return and annual volatility. Expected payoff, profit probability and lower-tail mean
+  P&L are conditional on those assumptions. Mean-return sensitivity is not a confidence interval.
+  The analytic payoff integration handles flat-payoff atoms and partial/over-covered holdings.
+- Unknown fees or reserve withhold net figures. Inverse settlement remains unsupported in the
+  new evaluator; older spread references keep their disclosed hedged-premium assumption.
+- The prospective journal is explicitly saved in browser IndexedDB, bounded at 500 evaluations,
+  and exportable as JSON. Actual save time is distinct from evaluation time; outcomes cannot
+  precede either. Evaluation snapshots cannot be edited in the UI. Outcomes are separate,
+  one-time user reports (expiry, early exit or not traded), not verified fills or calibrated evidence.
+- Existing workspace controls, quote routing, candidate rankings and the excluded straddle/iron-fly
+  scanners remain. Spread statuses now describe market-model differences instead of WAIT/CHECK.
+
+Validation checks arithmetic, financial invariants, I/O boundaries and workflow behavior. No
+out-of-sample trading edge is established by this implementation. A physical directional model,
+event-aware forecast, regime-conditioned ranking and statistically supported profitability
+remain research questions requiring prospective records and chronological evaluation.
 
 The sized card and per-venue alternatives use `features/alpha/spread-scanner.ts`.
 The original leg tables and smile remain available. The old `verticalSpread.ts` analysis

@@ -593,3 +593,4 @@ export { ParadexWsAdapter } from './feeds/paradex/index.js';
 export { FeedWorkerHost, WorkerVenueAdapter } from './feeds/worker/feed-worker-client.js';
 export { reconcileFlowPosition, flowPositionEffect, type FlowIntervalTape } from './core/flow-position.js';
 export { FlowOiRecorder } from './core/flow-oi-recorder.js';
+export { evaluateAlphaTrade, type AlphaEvaluationMarket } from './services/alpha-evaluation.js';

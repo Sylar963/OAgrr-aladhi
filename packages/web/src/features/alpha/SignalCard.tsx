@@ -30,20 +30,20 @@ interface Props {
 
 const messages = defineMessages(
   {
-    reviewLabel: 'CHECK SETUP',
-    reviewMessage: 'Model-positive · verify assumptions',
-    noEdgeLabel: 'WAIT',
-    noEdgeMessage: 'Price does not cover modeled risk',
+    reviewLabel: 'MODEL DIFFERENCE +',
+    reviewMessage: 'Positive reference-model difference · no return forecast',
+    noEdgeLabel: 'MODEL DIFFERENCE ≤ 0',
+    noEdgeMessage: 'Non-positive reference-model difference · no return forecast',
     overBudgetLabel: 'TOO LARGE',
     overBudgetMessage: 'Loss exceeds your risk limit',
     noModelLabel: 'PRICE ONLY',
     noModelMessage: 'Payoff known · model unavailable',
-    eyebrow: 'Spread decision',
+    eyebrow: 'Spread pricing reference',
     title: 'Price · payoff · account risk',
     tipGreen:
-      'Green means the quote passes the current model and your loss limit. It still needs a thesis and an execution check.',
+      'The market-IV comparison and loss budget are separate from a trade forecast. Use the candidate evaluation to state and test your assumptions.',
     tipProbability:
-      'Probability is risk-neutral and model EV uses a simplified flat-volatility distribution. Neither is a forecast or a historical win rate.',
+      'Probability is a market-IV reference and each leg uses its own mark IV for the pricing comparison. Neither is a physical forecast or a historical win rate.',
     crossRoute: '{sell} sell → {buy} buy',
     nonAtomic: 'non-atomic',
     bullish: 'bullish',
@@ -60,7 +60,7 @@ const messages = defineMessages(
     lossZone: 'loss zone',
     cashPaid: 'Cash paid',
     breakeven: 'Breakeven',
-    modelEv: 'Model EV',
+    modelEv: 'Market-model difference',
     accountAtRisk: 'Account at risk',
     roundTrip: 'Round trip est.',
     beforeTrading: 'Before trading · 3 checks',
@@ -87,20 +87,20 @@ const messages = defineMessages(
     expiryOnly: 'Expiry payoff only. Before expiry, time and IV also move the price.',
   },
   {
-    reviewLabel: 'REVISAR SETUP',
-    reviewMessage: 'Modelo positivo · verifica los supuestos',
-    noEdgeLabel: 'ESPERAR',
-    noEdgeMessage: 'El precio no cubre el riesgo modelado',
+    reviewLabel: 'DIFERENCIA DEL MODELO +',
+    reviewMessage: 'Diferencia positiva de referencia · sin pronóstico de retorno',
+    noEdgeLabel: 'DIFERENCIA DEL MODELO ≤ 0',
+    noEdgeMessage: 'Diferencia no positiva de referencia · sin pronóstico de retorno',
     overBudgetLabel: 'DEMASIADO GRANDE',
     overBudgetMessage: 'La pérdida supera tu límite de riesgo',
     noModelLabel: 'SOLO PRECIO',
     noModelMessage: 'Payoff conocido · modelo no disponible',
-    eyebrow: 'Decisión de spread',
+    eyebrow: 'Referencia de precio del spread',
     title: 'Precio · payoff · riesgo de la cuenta',
     tipGreen:
-      'Verde significa que la cotización pasa el modelo actual y tu límite de pérdida. Aún necesita una tesis y una revisión de ejecución.',
+      'La comparación con IV de mercado y el presupuesto de pérdida no son un pronóstico del trade. Usa la evaluación del candidato para definir y probar tus supuestos.',
     tipProbability:
-      'La probabilidad es neutral al riesgo y el EV del modelo usa una distribución simplificada de volatilidad plana. Ninguno es un pronóstico ni una tasa de acierto histórica.',
+      'La probabilidad usa IV de mercado y cada pata usa su propia IV mark en la comparación. Ninguna es un pronóstico físico ni una tasa de acierto histórica.',
     crossRoute: '{sell} venta → {buy} compra',
     nonAtomic: 'no atómico',
     bullish: 'alcista',
@@ -117,7 +117,7 @@ const messages = defineMessages(
     lossZone: 'zona de pérdida',
     cashPaid: 'Efectivo pagado',
     breakeven: 'Breakeven',
-    modelEv: 'EV del modelo',
+    modelEv: 'Diferencia del modelo de mercado',
     accountAtRisk: 'Cuenta en riesgo',
     roundTrip: 'Ida y vuelta est.',
     beforeTrading: 'Antes de operar · 3 revisiones',
@@ -146,8 +146,8 @@ const messages = defineMessages(
 );
 
 const STATUS = {
-  review: { label: 'reviewLabel', tone: 'review', message: 'reviewMessage' },
-  'no-edge': { label: 'noEdgeLabel', tone: 'avoid', message: 'noEdgeMessage' },
+  review: { label: 'reviewLabel', tone: 'neutral', message: 'reviewMessage' },
+  'no-edge': { label: 'noEdgeLabel', tone: 'neutral', message: 'noEdgeMessage' },
   'over-budget': { label: 'overBudgetLabel', tone: 'danger', message: 'overBudgetMessage' },
   'no-model': { label: 'noModelLabel', tone: 'neutral', message: 'noModelMessage' },
 } as const;

@@ -692,3 +692,4 @@ export * from './portfolio-assistant-evidence.js';
 
 export * from './paradex.js';
 export * from './thalex-account.js';
+export * from './alpha-evaluation.js';

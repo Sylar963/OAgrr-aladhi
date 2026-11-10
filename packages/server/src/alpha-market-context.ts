@@ -144,6 +144,7 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
   const richness = input.richness ?? null;
   const { state: volatilityState, stateSource } = volatilityStateOf(richness, ivPercentile30d);
   const spotState = spotRangeState(input.candles, input.spotPrice, expectedMoves[0]!.movePct);
+  // Compatibility for the excluded scanners; directional tabs use the candidate evaluator.
   const longCall =
     volatilityState === 'unavailable' || rangeState === 'unavailable'
       ? 'unavailable'

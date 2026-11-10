@@ -16,6 +16,7 @@ import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
 import LottoOutcomeBuilder from './LottoOutcomeBuilder';
+import LongOptionEvaluation from './LongOptionEvaluation';
 import { candidateToBuilderLeg } from './radar-builder';
 import { useLottoScanner } from './useLottoScanner';
 import styles from './LottoScannerPanel.module.css';
@@ -741,7 +742,10 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                 </div>
               </div>
               {selected && (
-                <CandidateInspector candidate={selected} onOpenBuilder={openInBuilderV2} />
+                <div>
+                  <CandidateInspector candidate={selected} onOpenBuilder={openInBuilderV2} />
+                  <LongOptionEvaluation key={`${selected.venue}:${selected.instrument}`} candidate={selected} />
+                </div>
               )}
             </div>
           )}

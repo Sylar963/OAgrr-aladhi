@@ -1,6 +1,6 @@
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
-import { act, cleanup, fireEvent, render as renderUi, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as renderUi, screen, within, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,6 +162,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('surgical Alpha enhancements', () => {
+  it('keeps manual scenarios behind the optional V2 section and explains the workflow', async () => {
+    render(<AlphaView />);
+    expect(screen.queryByText('Evaluate this trade')).toBeNull();
+    const summary = screen.getByText('V2 · Scenario lab & journal (optional)');
+    fireEvent.click(summary);
+    await waitFor(() => expect(screen.getByText('Evaluate this trade')).toBeTruthy());
+    expect(screen.getByText(/Market context above is automatic/)).toBeTruthy();
+    expect(screen.getByText(/results depend on your assumptions/)).toBeTruthy();
+    fireEvent.click(summary);
+    await waitFor(() => expect(screen.queryByText('Evaluate this trade')).toBeNull());
+  });
   it('retains original tools and adds debit tabs without mounting the replacement desk', () => {
     render(<AlphaView />);
     const tabs = within(screen.getByRole('tablist', { name: 'Alpha strategy' }));

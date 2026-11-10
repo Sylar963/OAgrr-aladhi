@@ -2,6 +2,8 @@ import { fmtIv, fmtPct, fmtUsdCompact } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import { fmtPercentile, fmtVolPts, fmtZ } from '@lib/vol-richness';
 import type { AlphaMarketContextResponse } from '@oggregator/protocol';
+import AlphaStrategyEvidence from './AlphaStrategyEvidence';
+import { contextMessages } from './alpha-context-messages';
 
 import styles from './AlphaContextStrip.module.css';
 
@@ -14,6 +16,7 @@ interface AlphaContextStripProps {
     | 'put-debit'
     | 'long-call'
     | 'long-put'
+    | 'protective-put'
     | 'short-straddle'
     | 'long-straddle'
     | 'iron-fly';
@@ -27,8 +30,8 @@ const messages = defineMessages(
       'Broad market heuristic, not a trade verdict. Past realized volatility is not a forecast. An unfavorable selling setup does not imply buying is profitable.',
     setupHeuristic: 'Setup heuristic',
     marketOnly: 'Market context',
-    separateEvaluation: 'EVALUATE SELECTED TRADE',
-    contextOnlyTitle: 'Historical and model-relative observations only. Evaluate the selected candidate below for direction, horizon, costs and execution.',
+    contextOnlyTitle:
+      'Automatic fit of this strategy to observed direction, horizon, volatility price and stress. Open the evidence below for reasons.',
     loading: 'LOADING',
     UNAVAILABLE: 'UNAVAILABLE',
     'CHECK DIRECTION + PRICE': 'CHECK DIRECTION + PRICE',
@@ -65,8 +68,8 @@ const messages = defineMessages(
       'Heurística amplia de mercado, no un veredicto de trade. La volatilidad realizada pasada no es un pronóstico. Un setup desfavorable para vender no implica que comprar sea rentable.',
     setupHeuristic: 'Heurística de setup',
     marketOnly: 'Contexto de mercado',
-    separateEvaluation: 'EVALÚA EL TRADE ELEGIDO',
-    contextOnlyTitle: 'Solo observaciones históricas y relativas al modelo. Evalúa el candidato seleccionado abajo para revisar dirección, horizonte, costos y ejecución.',
+    contextOnlyTitle:
+      'Encaje automático de la estrategia con dirección, horizonte, precio de volatilidad y estrés observados. Abre la evidencia abajo.',
     loading: 'CARGANDO',
     UNAVAILABLE: 'NO DISPONIBLE',
     'CHECK DIRECTION + PRICE': 'REVISA DIRECCIÓN + PRECIO',
@@ -126,80 +129,94 @@ function legacyScannerLabel(
 
 export default function AlphaContextStrip({ context, strategy, loading }: AlphaContextStripProps) {
   const t = useT(messages);
+  const tc = useT(contextMessages);
   const label = (value: string) => (isMessageKey(value) ? t(value) : value);
-  const legacy = strategy === 'short-straddle' || strategy === 'long-straddle' || strategy === 'iron-fly';
-  const setup = legacy ? legacyScannerLabel(context, strategy) : 'context';
+  const legacy =
+    strategy === 'short-straddle' || strategy === 'long-straddle' || strategy === 'iron-fly';
+  const setup = legacy
+    ? legacyScannerLabel(context, strategy)
+    : (context?.automatic?.assessments[strategy].verdict ?? 'unavailable');
   const move7d = context?.expectedMoves.find((move) => move.days === 7) ?? null;
   const vrp = context?.realized.vrp30d;
   const richness30d = context?.richness?.tenors['30d'] ?? null;
   const richness7d = context?.richness?.tenors['7d'] ?? null;
   const stateSource = context?.volatility.stateSource;
   return (
-    <div className={styles.strip} aria-label={t('aria')}>
-      <div
-        className={styles.setup}
-        data-fit={setup.toLowerCase()}
-        title={t(legacy ? 'setupTitle' : 'contextOnlyTitle')}
-      >
-        <span>{t(legacy ? 'setupHeuristic' : 'marketOnly')}</span>
-        <strong>{loading ? t('loading') : legacy ? label(setup) : t('separateEvaluation')}</strong>
+    <>
+      <div className={styles.strip} aria-label={t('aria')}>
+        <div
+          className={styles.setup}
+          data-fit={setup.toLowerCase()}
+          title={t(legacy ? 'setupTitle' : 'contextOnlyTitle')}
+        >
+          <span>{t(legacy ? 'setupHeuristic' : 'marketOnly')}</span>
+          <strong>
+            {loading
+              ? t('loading')
+              : legacy
+                ? label(setup)
+                : tc(context?.automatic?.assessments[strategy].verdict ?? 'unavailable')}
+          </strong>
+        </div>
+        <div>
+          <span>ATM IV 30D</span>
+          <strong>{fmtIv(context?.volatility.atmIv30d ?? null)}</strong>
+          <small title={t('ivContextTitle')}>
+            {historyBuilding(context)
+              ? t('ivHistory', {
+                  days: (context?.volatility.ivHistoryDays ?? 0).toFixed(1),
+                  min: MIN_PERCENTILE_HISTORY_DAYS,
+                })
+              : `90d ${fmtPercentile(context?.volatility.ivPercentile30d)}`}
+          </small>
+        </div>
+        <div
+          title={t('richnessTitle', {
+            band: ((context?.richness?.fairBand ?? 0.02) * 100).toFixed(0),
+            source: stateSource ?? t('unavailableLower'),
+          })}
+        >
+          <span>{t('ivVsFcst')}</span>
+          <strong>
+            {fmtVolPts(richness30d?.excessPremium)} / {fmtVolPts(richness7d?.excessPremium)}
+          </strong>
+          <small>
+            {label(richness30d?.state.toUpperCase() ?? 'UNAVAILABLE')} ·{' '}
+            {fmtZ(richness30d?.excessHistory.zScore)} {t('hist')} · 7D{' '}
+            {fmtZ(richness7d?.intraday.zScore24h)} 24h
+          </small>
+        </div>
+        <div>
+          <span>RV 7D / 30D</span>
+          <strong>
+            {fmtIv(context?.realized.rv7d ?? null)} / {fmtIv(context?.realized.rv30d ?? null)}
+          </strong>
+        </div>
+        <div>
+          <span>VRP 30D</span>
+          <strong>{vrp == null ? '—' : `${(vrp * 100).toFixed(1)}pp`}</strong>
+        </div>
+        <div>
+          <span>{t('implied7d')}</span>
+          <strong>{fmtPct(move7d?.movePct ?? null, 1)}</strong>
+          <small>{fmtUsdCompact(move7d?.moveUsd ?? null)}</small>
+        </div>
+        <div>
+          <span>{t('range')}</span>
+          <strong>{context ? label(context.range.state.toUpperCase()) : '—'}</strong>
+          <small>{fmtPct(context?.range.width14dPct ?? null, 1)} / 14d</small>
+        </div>
+        <div>
+          <span>{t('spotState')}</span>
+          <strong>
+            {context ? label(context.spotState.state.replaceAll('-', ' ').toUpperCase()) : '—'}
+          </strong>
+          <small>
+            {context?.sources.ivScope === 'mixed' ? t('mixedScope') : t('crossVenueScope')}
+          </small>
+        </div>
       </div>
-      <div>
-        <span>ATM IV 30D</span>
-        <strong>{fmtIv(context?.volatility.atmIv30d ?? null)}</strong>
-        <small title={t('ivContextTitle')}>
-          {historyBuilding(context)
-            ? t('ivHistory', {
-                days: (context?.volatility.ivHistoryDays ?? 0).toFixed(1),
-                min: MIN_PERCENTILE_HISTORY_DAYS,
-              })
-            : `90d ${fmtPercentile(context?.volatility.ivPercentile30d)}`}
-        </small>
-      </div>
-      <div
-        title={t('richnessTitle', {
-          band: ((context?.richness?.fairBand ?? 0.02) * 100).toFixed(0),
-          source: stateSource ?? t('unavailableLower'),
-        })}
-      >
-        <span>{t('ivVsFcst')}</span>
-        <strong>
-          {fmtVolPts(richness30d?.excessPremium)} / {fmtVolPts(richness7d?.excessPremium)}
-        </strong>
-        <small>
-          {label(richness30d?.state.toUpperCase() ?? 'UNAVAILABLE')} ·{' '}
-          {fmtZ(richness30d?.excessHistory.zScore)} {t('hist')} · 7D {fmtZ(richness7d?.intraday.zScore24h)} 24h
-        </small>
-      </div>
-      <div>
-        <span>RV 7D / 30D</span>
-        <strong>
-          {fmtIv(context?.realized.rv7d ?? null)} / {fmtIv(context?.realized.rv30d ?? null)}
-        </strong>
-      </div>
-      <div>
-        <span>VRP 30D</span>
-        <strong>{vrp == null ? '—' : `${(vrp * 100).toFixed(1)}pp`}</strong>
-      </div>
-      <div>
-        <span>{t('implied7d')}</span>
-        <strong>{fmtPct(move7d?.movePct ?? null, 1)}</strong>
-        <small>{fmtUsdCompact(move7d?.moveUsd ?? null)}</small>
-      </div>
-      <div>
-        <span>{t('range')}</span>
-        <strong>{context ? label(context.range.state.toUpperCase()) : '—'}</strong>
-        <small>{fmtPct(context?.range.width14dPct ?? null, 1)} / 14d</small>
-      </div>
-      <div>
-        <span>{t('spotState')}</span>
-        <strong>
-          {context ? label(context.spotState.state.replaceAll('-', ' ').toUpperCase()) : '—'}
-        </strong>
-        <small>
-          {context?.sources.ivScope === 'mixed' ? t('mixedScope') : t('crossVenueScope')}
-        </small>
-      </div>
-    </div>
+      {!legacy && <AlphaStrategyEvidence context={context?.automatic} strategy={strategy} />}
+    </>
   );
 }

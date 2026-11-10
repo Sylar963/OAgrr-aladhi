@@ -38,12 +38,91 @@
   color: var(--accent-primary);
 }
 
-.setup[data-fit='expensive'] strong,
-.setup[data-fit='unfavorable'] strong {
+.setup[data-fit="expensive"] strong,
+.setup[data-fit="unfavorable"] strong {
   color: var(--color-loss);
 }
 
-.setup[data-fit='favorable'] strong {
+.setup[data-fit="poor-fit"] strong,
+.comparison [data-verdict="poor-fit"] {
+  color: var(--color-loss);
+}
+
+.setup[data-fit="supported"] strong,
+.comparison [data-verdict="supported"] {
+  color: var(--color-profit);
+}
+
+.setup[data-fit="conditional"] strong {
+  color: var(--text-secondary);
+}
+
+.evidence,
+.summary {
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+.headline span,
+.evidence small,
+.evidence p {
+  color: var(--text-dim);
+}
+
+.reasons {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.evidence summary {
+  cursor: pointer;
+  color: var(--accent-primary);
+}
+
+.evidenceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.evidenceGrid > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.evidenceGrid strong {
+  font-family: var(--font-mono);
+}
+
+.comparison {
+  width: min(100%, 680px);
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.comparison th,
+.comparison td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.comparison tr[data-selected="true"] {
+  background: var(--bg-elevated);
+  font-weight: 600;
+}
+
+.setup[data-fit="favorable"] strong {
   color: var(--color-profit);
 }
 

@@ -41,7 +41,7 @@ const messages = defineMessages(
     eyebrow: 'Spread pricing reference',
     title: 'Price · payoff · account risk',
     tipGreen:
-      'The market-IV comparison and loss budget are separate from a trade forecast. Use the candidate evaluation to state and test your assumptions.',
+      'The market-IV comparison and loss budget are pricing and sizing references. Market context above assesses strategy fit automatically. V2 offers optional candidate scenarios.',
     tipProbability:
       'Probability is a market-IV reference and each leg uses its own mark IV for the pricing comparison. Neither is a physical forecast or a historical win rate.',
     crossRoute: '{sell} sell → {buy} buy',
@@ -98,7 +98,7 @@ const messages = defineMessages(
     eyebrow: 'Referencia de precio del spread',
     title: 'Precio · payoff · riesgo de la cuenta',
     tipGreen:
-      'La comparación con IV de mercado y el presupuesto de pérdida no son un pronóstico del trade. Usa la evaluación del candidato para definir y probar tus supuestos.',
+      'La comparación con IV de mercado y el presupuesto de pérdida son referencias de precio y tamaño. El contexto de arriba evalúa automáticamente el encaje. V2 ofrece escenarios opcionales por candidato.',
     tipProbability:
       'La probabilidad usa IV de mercado y cada pata usa su propia IV mark en la comparación. Ninguna es un pronóstico físico ni una tasa de acierto histórica.',
     crossRoute: '{sell} venta → {buy} compra',

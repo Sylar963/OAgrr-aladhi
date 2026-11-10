@@ -3,9 +3,15 @@
 Scope: the four verticals, long calls, speculative long puts and protective puts. The
 straddle and iron-fly scanners and the existing Alpha workspace remain intact.
 
+This is the optional **V2 · Scenario lab & journal**. Open that section on the strategy
+tab to reveal the candidate evaluators and the walkthrough. The main
+[automatic market context](alpha-market-context.md) supplies strategy-fit verdicts without
+any user scenario; this lab does not replace or determine those verdicts.
+
 ## Use it
 
-1. Select the strategy, expiry, actual candidate and size using the existing controls.
+1. Open **V2 · Scenario lab & journal**. Select the strategy, expiry, actual candidate and
+   size using the existing controls.
 2. Open **Evaluate this trade**. Enter an explicit extra-cost reserve (zero is allowed) and
    optionally a maximum loss budget. The evaluator will not fill unknown fees with zero.
 3. To assess an expiry distribution, enable the scenario and enter the arithmetic mean

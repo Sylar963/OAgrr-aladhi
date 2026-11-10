@@ -13,6 +13,7 @@ import { useT } from '@lib/i18n';
 import { evaluationMessages } from './evaluation-messages';
 import { saveEvaluation } from './evaluation-journal';
 import styles from './AlphaEvaluationPanel.module.css';
+import { useAlphaV2 } from './AlphaV2Section';
 
 const numberOrNull = (value: string) => (value.trim() === '' ? null : Number(value));
 
@@ -26,7 +27,16 @@ function evaluationIdentity(candidate: AlphaEvaluationCandidate): string {
   ]);
 }
 
-export default function AlphaEvaluationPanel({
+export default function AlphaEvaluationPanel(props: {
+  candidate: AlphaEvaluationCandidate | null;
+  quantityControl?: ReactNode;
+  selectionKey?: string;
+}) {
+  const enabled = useAlphaV2();
+  return enabled ? <EvaluationPanel {...props} /> : null;
+}
+
+function EvaluationPanel({
   candidate,
   quantityControl,
   selectionKey,

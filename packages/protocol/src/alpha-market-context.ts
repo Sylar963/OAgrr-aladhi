@@ -1,11 +1,23 @@
 import { z } from 'zod';
 
 import { VolRichnessSchema } from './vol-richness.js';
+import { AlphaStrategyContextSchema } from './alpha-strategy-context.js';
 
 const NullableNumberSchema = z.number().nullable();
 
 export const AlphaMarketContextQuerySchema = z.object({
-  underlying: z.string().trim().min(2).max(20).transform((value) => value.toUpperCase()),
+  underlying: z
+    .string()
+    .trim()
+    .min(2)
+    .max(20)
+    .transform((value) => value.toUpperCase()),
+  expiryTs: z.coerce.number().finite().int().positive().optional(),
+  horizonDays: z.coerce.number().finite().min(1).max(90).optional(),
+  selectedIv: z.coerce.number().finite().positive().max(10).optional(),
+  ivAsOfMs: z.coerce.number().finite().int().positive().optional(),
+  selectedSkew: z.coerce.number().finite().min(-10).max(10).optional(),
+  selectedBfly: z.coerce.number().finite().min(-10).max(10).optional(),
 });
 
 export type AlphaMarketContextQuery = z.infer<typeof AlphaMarketContextQuerySchema>;
@@ -32,6 +44,7 @@ export const AlphaMarketContextResponseSchema = z.object({
   generatedAt: z.number(),
   underlying: z.string(),
   spotPrice: NullableNumberSchema,
+  automatic: AlphaStrategyContextSchema.optional(),
   volatility: z.object({
     state: z.enum(['compressed', 'normal', 'bid', 'unavailable']),
     // 'excess-premium': 30D IV against forecast plus usual premium; 'iv-percentile': fallback

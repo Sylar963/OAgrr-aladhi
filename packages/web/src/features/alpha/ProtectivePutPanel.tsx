@@ -367,6 +367,7 @@ const COLUMN_TIPS = {
 interface ProtectivePutPanelProps {
   underlying: string;
   venues: string[];
+  onObjectiveChange?: (objective: 'protective-put' | 'long-put') => void;
 }
 
 function pct(value: number | null | undefined, decimals = 1): string {
@@ -787,10 +788,14 @@ function ProtectionBuilder({
   );
 }
 
-export default function ProtectivePutPanel({ underlying, venues }: ProtectivePutPanelProps) {
+export default function ProtectivePutPanel({ underlying, venues, onObjectiveChange }: ProtectivePutPanelProps) {
   const t = useT(messages);
   const tc = useT(alphaMessages);
   const [view, setView] = useState<ScannerView>('guided');
+  function changeView(next: ScannerView) {
+    setView(next);
+    onObjectiveChange?.(next === 'guided' ? 'protective-put' : 'long-put');
+  }
   const [hedgeInputs, setHedgeInputs] = useState<Record<string, string>>(loadHedgeInputs);
   const spot = useAlphaMarketContext(underlying).data?.spotPrice;
   const suggestedHedge = defaultHedgeQty(spot);
@@ -869,10 +874,10 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
         </div>
         <div className={styles.headerActions}>
           <div className={styles.viewSwitch} role="group" aria-label={t('viewAria')}>
-            <button type="button" data-active={guided} aria-pressed={guided} onClick={() => setView('guided')}>
+            <button type="button" data-active={guided} aria-pressed={guided} onClick={() => changeView('guided')}>
               {t('protect')}
             </button>
-            <button type="button" data-active={!guided} aria-pressed={!guided} onClick={() => setView('advanced')}>
+            <button type="button" data-active={!guided} aria-pressed={!guided} onClick={() => changeView('advanced')}>
               {t('advancedRadar')}
             </button>
           </div>
@@ -1016,7 +1021,7 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
                 setRankBy('protection');
                 setMinOtmPct(0);
                 setPremiumCap(2_500);
-                setView('advanced');
+                changeView('advanced');
               }}
             />
           ) : data.candidates.length === 0 ? (

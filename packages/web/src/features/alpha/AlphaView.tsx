@@ -13,7 +13,7 @@ import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
 import AlphaEvaluationPanel from './AlphaEvaluationPanel';
-import AlphaEvaluationJournal from './AlphaEvaluationJournal';
+import AlphaV2Section, { AlphaV2Provider } from './AlphaV2Section';
 import { verticalEvaluationCandidate } from './evaluation-candidate';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
@@ -160,6 +160,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
 
   const isMobile = useIsMobile();
   const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
+  const [v2Open, setV2Open] = useState(false);
   const isSpread = !isScannerStrategy(strategy);
   const kind: SpreadKind = isScannerStrategy(strategy) ? 'call-credit' : strategy;
   const [shortStrike, setShortStrike] = useState<number | null>(null);
@@ -247,14 +248,28 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     sellStrike: shortStrike,
     buyStrike: longStrike,
   });
-  const evaluationCandidate = selection && chain
-    ? verticalEvaluationCandidate(selection.candidate, chain, selection.route,
-      Number(sizing.equity) * Number(sizing.riskPct) / 100)
-    : null;
+  const evaluationCandidate =
+    selection && chain
+      ? verticalEvaluationCandidate(
+          selection.candidate,
+          chain,
+          selection.route,
+          (Number(sizing.equity) * Number(sizing.riskPct)) / 100,
+        )
+      : null;
   const evaluationKey = JSON.stringify([
-    underlying, kind, expiry, shortStrike, longStrike, preferredVenue, preferredBuyVenue,
-    scanVenues, quantityIsAuto ? 'auto' : storedSizing.quantity,
-    storedSizing.equity, storedSizing.riskPct, storedSizing.reserve,
+    underlying,
+    kind,
+    expiry,
+    shortStrike,
+    longStrike,
+    preferredVenue,
+    preferredBuyVenue,
+    scanVenues,
+    quantityIsAuto ? 'auto' : storedSizing.quantity,
+    storedSizing.equity,
+    storedSizing.riskPct,
+    storedSizing.reserve,
   ]);
   function loadStrikes(candidate: VerticalEconomics) {
     setStrategy(candidate.kind);
@@ -284,6 +299,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
   }
 
   const atmStrike = chain?.stats.atmStrike ?? null;
+  const [putObjective, setPutObjective] = useState<'protective-put' | 'long-put'>('protective-put');
 
   const sortedStrikes = useMemo(() => {
     if (!chain) return null;
@@ -330,7 +346,46 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
   }, [sortedStrikes, atmStrike, kind, shortStrike, longStrike]);
 
   const { data: regime } = useRegimeQuery(tradfi ? '' : underlying);
-  const marketContext = useAlphaMarketContext(underlying, !tradfi);
+  const currentChain =
+    chain?.underlying === underlying && chain.expiry === expiry ? chain : undefined;
+  const atmQuotes = currentChain?.strikes.find(
+    (row) => row.strike === currentChain.stats.atmStrike,
+  );
+  const contextNow = Date.now();
+  const freshAtm = [atmQuotes?.call, atmQuotes?.put]
+    .flatMap((side) =>
+      Object.entries(side?.venues ?? {})
+        .filter(([venue]) => scanVenues.some((active) => active === venue))
+        .map(([, quote]) => quote),
+    )
+    .filter(
+      (quote) =>
+        quote.markIv != null &&
+        quote.markIv > 0 &&
+        quote.asOfMs != null &&
+        quote.asOfMs <= contextNow &&
+        contextNow - quote.asOfMs <= 120_000,
+    );
+  const marketContext = useAlphaMarketContext(
+    underlying,
+    !tradfi && (!isSpread || currentChain?.expiryTs != null),
+    isSpread
+      ? {
+          ...(currentChain?.expiryTs != null && { expiryTs: currentChain.expiryTs }),
+          ...(freshAtm.length > 0 && {
+            selectedIv: freshAtm.reduce((sum, q) => sum + q.markIv!, 0) / freshAtm.length,
+            ivAsOfMs: Math.min(...freshAtm.map((q) => q.asOfMs!)),
+            ...(currentChain?.stats.skew25d != null && {
+              selectedSkew: currentChain.stats.skew25d,
+            }),
+            ...(currentChain?.stats.bfly25d != null && {
+              selectedBfly: currentChain.stats.bfly25d,
+            }),
+          }),
+          scope: scanVenues.join(','),
+        }
+      : { horizonDays: 30 },
+  );
   const regimeDominant = regime?.dominant ?? null;
 
   const analysis = useVerticalSpreadAnalysis({
@@ -470,150 +525,159 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
   );
 
   return (
-    <div className={styles.view}>
-      <div className={styles.strategyBar}>
-        <button type="button" className={styles.assetButton} onClick={changeAsset}>
-          <span>ALPHA</span>
-          <strong>{underlying}</strong>
-        </button>
-        <div className={styles.strategyTabs} role="tablist" aria-label={t('strategyAria')}>
-          {(tradfi ? SPREAD_STRATEGIES : STRATEGIES).map((item) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={strategy === item.id}
-              data-active={strategy === item.id}
-              key={item.id}
-              onClick={() => {
-                if (item.id === strategy) return;
-                if (isScannerStrategy(item.id)) {
+    <AlphaV2Provider value={v2Open}>
+      <div className={styles.view}>
+        <div className={styles.strategyBar}>
+          <button type="button" className={styles.assetButton} onClick={changeAsset}>
+            <span>ALPHA</span>
+            <strong>{underlying}</strong>
+          </button>
+          <div className={styles.strategyTabs} role="tablist" aria-label={t('strategyAria')}>
+            {(tradfi ? SPREAD_STRATEGIES : STRATEGIES).map((item) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={strategy === item.id}
+                data-active={strategy === item.id}
+                key={item.id}
+                onClick={() => {
+                  if (item.id === strategy) return;
+                  if (isScannerStrategy(item.id)) {
+                    if (item.id === 'long-put') setPutObjective('protective-put');
+                    setStrategy(item.id);
+                    return;
+                  }
+                  const defaults = defaultsFor(item.id);
                   setStrategy(item.id);
-                  return;
-                }
-                const defaults = defaultsFor(item.id);
-                setStrategy(item.id);
-                setPreferredBuyVenue(null);
-                if (defaults) {
-                  setShortStrike(defaults.shortStrike);
-                  setLongStrike(defaults.longStrike);
-                }
-              }}
-            >
-              {t(item.label)}
-            </button>
-          ))}
+                  setPreferredBuyVenue(null);
+                  if (defaults) {
+                    setShortStrike(defaults.shortStrike);
+                    setLongStrike(defaults.longStrike);
+                  }
+                }}
+              >
+                {t(item.label)}
+              </button>
+            ))}
+          </div>
+          {!tradfi && (
+            <span className={styles.venueScope}>{t('activeVenues', { n: scanVenues.length })}</span>
+          )}
         </div>
-        {!tradfi && (
-          <span className={styles.venueScope}>{t('activeVenues', { n: scanVenues.length })}</span>
-        )}
-      </div>
 
-      {!isMobile && isSpread && (
-        <ExpiryBar
-          underlying={underlying}
-          spotPrice={chain?.stats.forwardPriceUsd}
-          expiries={expiries}
-          selected={expiry}
-          onSelect={setExpiry}
-          onChangeAsset={changeAsset}
-          {...(prefetch && { onPrefetch: prefetch })}
-        />
-      )}
-
-      {!tradfi && (
-        <AlphaContextStrip
-          context={marketContext.data ?? null}
-          strategy={strategy}
-          loading={marketContext.isLoading}
-        />
-      )}
-      {(isSpread || strategy === 'long-call' || strategy === 'long-put') && <AlphaEvaluationJournal />}
-
-      {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
-        <AlphaAccountSummary
-          defaultVenue={
-            tradeVenue === 'paradex' || !scanVenues.includes('thalex') ? 'paradex' : 'thalex'
-          }
-          {...(isSpread && { onUseEquity: (equity: number) => update('equity', String(equity)) })}
-        />
-      )}
-      {!tradfi &&
-        isScannerStrategy(strategy) &&
-        strategy !== 'short-straddle' &&
-        strategy !== 'long-straddle' &&
-        scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
-
-      {strategy === 'long-call' && (
-        <div className={styles.scannerWorkspace}>
-          <LottoScannerPanel underlying={underlying} venues={scanVenues} />
-        </div>
-      )}
-
-      {strategy === 'long-put' && (
-        <div className={styles.scannerWorkspace}>
-          <ProtectivePutPanel underlying={underlying} venues={scanVenues} />
-        </div>
-      )}
-
-      {strategy === 'short-straddle' && (
-        <div className={styles.scannerWorkspace}>
-          <StraddleScannerPanel underlying={underlying} venues={scanVenues} />
-        </div>
-      )}
-
-      {strategy === 'long-straddle' && (
-        <div className={styles.scannerWorkspace}>
-          <LongStraddlePanel underlying={underlying} venues={scanVenues} />
-        </div>
-      )}
-
-      {strategy === 'iron-fly' && (
-        <div className={styles.scannerWorkspace}>
-          <IronFlyPanel underlying={underlying} venues={scanVenues} />
-        </div>
-      )}
-
-      {isSpread && isLoading && !chain && (
-        <div className={styles.state}>
-          <Spinner size="lg" label={t('loadingChain')} />
-        </div>
-      )}
-
-      {isSpread && error && !chain && (
-        <div className={styles.state}>
-          <EmptyState
-            icon="⚠︎"
-            title={t('failedChain')}
-            detail={error instanceof Error ? error.message : t('checkConnection')}
+        {!isMobile && isSpread && (
+          <ExpiryBar
+            underlying={underlying}
+            spotPrice={chain?.stats.forwardPriceUsd}
+            expiries={expiries}
+            selected={expiry}
+            onSelect={setExpiry}
+            onChangeAsset={changeAsset}
+            {...(prefetch && { onPrefetch: prefetch })}
           />
-        </div>
-      )}
+        )}
 
-      {isSpread && chain && chain.strikes.length === 0 && (
-        <EmptyState
-          icon="∅"
-          title={t('noOptions')}
-          detail={t('noVenuesData', { underlying, expiry })}
-        />
-      )}
+        {!tradfi && (
+          <AlphaContextStrip
+            context={marketContext.data ?? null}
+            strategy={strategy === 'long-put' ? putObjective : strategy}
+            loading={marketContext.isLoading}
+          />
+        )}
+        {(isSpread || strategy === 'long-call' || strategy === 'long-put') && (
+          <AlphaV2Section open={v2Open} onOpenChange={setV2Open} />
+        )}
 
-      {isSpread &&
-        chain &&
-        chain.strikes.length > 0 &&
-        (isMobile ? (
-          // On mobile: signal first (what users come for), then router + smile,
-          // then the strike builder at the bottom (less central on small screens).
-          <div className={styles.mobileStack}>
-            {signalStack}
-            {builder}
+        {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
+          <AlphaAccountSummary
+            defaultVenue={
+              tradeVenue === 'paradex' || !scanVenues.includes('thalex') ? 'paradex' : 'thalex'
+            }
+            {...(isSpread && { onUseEquity: (equity: number) => update('equity', String(equity)) })}
+          />
+        )}
+        {!tradfi &&
+          isScannerStrategy(strategy) &&
+          strategy !== 'short-straddle' &&
+          strategy !== 'long-straddle' &&
+          scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
+
+        {strategy === 'long-call' && (
+          <div className={styles.scannerWorkspace}>
+            <LottoScannerPanel underlying={underlying} venues={scanVenues} />
           </div>
-        ) : (
-          <div className={styles.grid}>
-            {builder}
-            <div className={styles.rightColumn}>{signalStack}</div>
+        )}
+
+        {strategy === 'long-put' && (
+          <div className={styles.scannerWorkspace}>
+            <ProtectivePutPanel
+              underlying={underlying}
+              venues={scanVenues}
+              onObjectiveChange={setPutObjective}
+            />
           </div>
-        ))}
-    </div>
+        )}
+
+        {strategy === 'short-straddle' && (
+          <div className={styles.scannerWorkspace}>
+            <StraddleScannerPanel underlying={underlying} venues={scanVenues} />
+          </div>
+        )}
+
+        {strategy === 'long-straddle' && (
+          <div className={styles.scannerWorkspace}>
+            <LongStraddlePanel underlying={underlying} venues={scanVenues} />
+          </div>
+        )}
+
+        {strategy === 'iron-fly' && (
+          <div className={styles.scannerWorkspace}>
+            <IronFlyPanel underlying={underlying} venues={scanVenues} />
+          </div>
+        )}
+
+        {isSpread && isLoading && !chain && (
+          <div className={styles.state}>
+            <Spinner size="lg" label={t('loadingChain')} />
+          </div>
+        )}
+
+        {isSpread && error && !chain && (
+          <div className={styles.state}>
+            <EmptyState
+              icon="⚠︎"
+              title={t('failedChain')}
+              detail={error instanceof Error ? error.message : t('checkConnection')}
+            />
+          </div>
+        )}
+
+        {isSpread && chain && chain.strikes.length === 0 && (
+          <EmptyState
+            icon="∅"
+            title={t('noOptions')}
+            detail={t('noVenuesData', { underlying, expiry })}
+          />
+        )}
+
+        {isSpread &&
+          chain &&
+          chain.strikes.length > 0 &&
+          (isMobile ? (
+            // On mobile: signal first (what users come for), then router + smile,
+            // then the strike builder at the bottom (less central on small screens).
+            <div className={styles.mobileStack}>
+              {signalStack}
+              {builder}
+            </div>
+          ) : (
+            <div className={styles.grid}>
+              {builder}
+              <div className={styles.rightColumn}>{signalStack}</div>
+            </div>
+          ))}
+      </div>
+    </AlphaV2Provider>
   );
 }
 

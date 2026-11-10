@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-10-27. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-11-10. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -17,6 +17,16 @@ read, a trained model, a validated trading system, or personalized investment ad
    a hypothesis to a validated strategy based on one profitable trade.
 
 ## Source and reading ledger
+
+2026-11-10 Alpha context review: [OIC bull call spread](https://www.optionseducation.org/strategies/all-strategies/bull-call-spread-debit-call-spread),
+[CME bull spread](https://www.cmegroup.com/education/courses/option-strategies/bull-spread),
+and [Cboe portfolio protection](https://www.cboe.com/insights/posts/how-to-protect-your-portfolio-during-market-uncertainty).
+Reviewed directional vertical exposure, partial vega offset and put insurance purpose.
+These distinctions justify separating automatic strategy fit from optional user scenarios;
+they do not establish an edge. The new price-pressure, delivery-range and stress gates are
+explicit unvalidated engineering rules. Definitions, assumptions, source freshness and
+regressions are recorded in [Alpha market context](../alpha-market-context.md). IV percentile
+alone remains insufficient for cheap/rich claims. No additional book chapters were reviewed.
 
 Page numbers below are printed pages unless explicitly called PDF pages. Notes are paraphrases.
 

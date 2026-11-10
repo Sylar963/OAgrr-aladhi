@@ -22,7 +22,10 @@ import {
 export async function alphaMarketContextRoute(app: FastifyInstance) {
   app.get<{ Querystring: { underlying?: string } }>(
     '/alpha/market-context',
-    async (req, reply): Promise<AlphaMarketContextResponse | { error: string; details?: unknown }> => {
+    async (
+      req,
+      reply,
+    ): Promise<AlphaMarketContextResponse | { error: string; details?: unknown }> => {
       const parsed = AlphaMarketContextQuerySchema.safeParse(req.query);
       if (!parsed.success) {
         return reply.status(400).send({
@@ -31,19 +34,27 @@ export async function alphaMarketContextRoute(app: FastifyInstance) {
         });
       }
 
-      const { underlying } = parsed.data;
+      const { underlying, ...horizon } = parsed.data;
       const ivHistory = isIvHistoryReady() ? ivHistoryService.query(underlying, 90) : null;
       let candles: SpotCandle[] = [];
+      let hourlyCandles: SpotCandle[] = [];
       if (isSpotCandlesReady() && isSpotCandleUnderlying(underlying)) {
-        try {
-          candles = await spotCandleService.getCandles(
-            underlying,
-            86_400,
-            DAILY_SPOT_HISTORY_DAYS,
+        const [daily, hourly] = await Promise.allSettled([
+          spotCandleService.getCandles(underlying, 86_400, DAILY_SPOT_HISTORY_DAYS),
+          spotCandleService.getCandles(underlying, 3_600, 240),
+        ]);
+        if (daily.status === 'fulfilled') candles = daily.value;
+        else
+          req.log.warn(
+            { error: daily.reason, underlying },
+            'Alpha market context spot history unavailable',
           );
-        } catch (error: unknown) {
-          req.log.warn({ error, underlying }, 'Alpha market context spot history unavailable');
-        }
+        if (hourly.status === 'fulfilled') hourlyCandles = hourly.value;
+        else
+          req.log.warn(
+            { error: hourly.reason, underlying },
+            'Alpha hourly context unavailable; using completed daily history',
+          );
       }
       const regime =
         isRegimeReady() && (underlying === 'BTC' || underlying === 'ETH')
@@ -65,6 +76,8 @@ export async function alphaMarketContextRoute(app: FastifyInstance) {
         candles,
         regime,
         richness,
+        hourlyCandles,
+        horizon,
       });
     },
   );

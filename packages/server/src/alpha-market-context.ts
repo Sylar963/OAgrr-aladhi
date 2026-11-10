@@ -1,5 +1,7 @@
 import {
   realizedVol,
+  buildAlphaStrategyContext,
+  type AlphaStrategyContextInput,
   type IvHistoryResponse,
   type RegimeQueryResult,
   type SpotCandle,
@@ -17,6 +19,11 @@ interface AlphaMarketContextInput {
   candles: SpotCandle[];
   regime: RegimeQueryResult | null;
   richness?: VolRichness | null;
+  hourlyCandles?: SpotCandle[];
+  horizon?: Pick<
+    AlphaStrategyContextInput,
+    'expiryTs' | 'horizonDays' | 'selectedIv' | 'ivAsOfMs' | 'selectedSkew' | 'selectedBfly'
+  >;
 }
 
 type VolatilityState = AlphaMarketContextResponse['volatility']['state'];
@@ -42,7 +49,10 @@ function volatilityStateOf(
   };
 }
 
-function ivChange(series: IvHistoryResponse['tenors']['30d']['series'], days: number): number | null {
+function ivChange(
+  series: IvHistoryResponse['tenors']['30d']['series'],
+  days: number,
+): number | null {
   const current = series.at(-1);
   if (current?.atmIv == null) return null;
   const cutoff = current.ts - days * 86_400_000;
@@ -101,14 +111,15 @@ function spotRangeState(
   const boundary = direction === 'up' ? high : low;
   const extensionPct = (Math.abs(spotPrice - boundary) / boundary) * 100;
   return {
-    state:
-      expectedMovePct != null && extensionPct > expectedMovePct ? 'extended' : 'breaking-out',
+    state: expectedMovePct != null && extensionPct > expectedMovePct ? 'extended' : 'breaking-out',
     direction,
     extensionPct,
   };
 }
 
-export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMarketContextResponse {
+export function buildAlphaMarketContext(
+  input: AlphaMarketContextInput,
+): AlphaMarketContextResponse {
   const history7d = input.ivHistory?.tenors['7d'] ?? null;
   const history30d = input.ivHistory?.tenors['30d'] ?? null;
   const atmIv7d = history7d?.current.atmIv ?? null;
@@ -128,7 +139,8 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
     return {
       days,
       iv,
-      moveUsd: movePct == null || input.spotPrice == null ? null : input.spotPrice * movePct / 100,
+      moveUsd:
+        movePct == null || input.spotPrice == null ? null : (input.spotPrice * movePct) / 100,
       movePct,
     };
   });
@@ -148,13 +160,13 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
   const longCall =
     volatilityState === 'unavailable' || rangeState === 'unavailable'
       ? 'unavailable'
-        : volatilityState === 'bid' || spotState.state === 'extended'
-          ? 'expensive'
-          : volatilityState === 'compressed' &&
-              spotState.direction !== 'down' &&
-              (rangeState === 'coiled' || spotState.state === 'breaking-out')
-            ? 'favorable'
-            : 'watch';
+      : volatilityState === 'bid' || spotState.state === 'extended'
+        ? 'expensive'
+        : volatilityState === 'compressed' &&
+            spotState.direction !== 'down' &&
+            (rangeState === 'coiled' || spotState.state === 'breaking-out')
+          ? 'favorable'
+          : 'watch';
   // Insurance is cheapest when vol is quiet or spot has run up; after a breakdown, puts carry the panic bid.
   const protectivePut =
     volatilityState === 'unavailable'
@@ -178,6 +190,13 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
     generatedAt: input.nowMs,
     underlying: input.underlying,
     spotPrice: input.spotPrice,
+    automatic: buildAlphaStrategyContext({
+      nowMs: input.nowMs,
+      candles: input.candles,
+      hourlyCandles: input.hourlyCandles ?? [],
+      ivHistory: input.ivHistory,
+      ...input.horizon,
+    }),
     volatility: {
       state: volatilityState,
       stateSource,

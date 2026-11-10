@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AlphaMarketContextResponse, AlphaStrategyContext } from '@oggregator/protocol';
 import AlphaContextStrip from './AlphaContextStrip';
@@ -81,52 +81,63 @@ function context(): AlphaMarketContextResponse {
 
 afterEach(cleanup);
 
-describe('automatic market verdict', () => {
-  it('shows an automatic verdict and explanations, independent of the legacy generic setup', () => {
+describe('compact premium context', () => {
+  it('shows pricing color independently of directional verdicts and keeps measurements collapsed', () => {
     const data = context();
     const view = render(
       <AlphaContextStrip context={data} strategy="call-credit" loading={false} />,
     );
     const strip = screen.getByLabelText('Alpha market context');
-    expect(strip.textContent).toContain('CONDITIONS SUPPORT');
+    expect(strip.textContent).toContain('RICH');
+    expect(screen.getByText('RICH').closest('[data-tone]')?.getAttribute('data-tone')).toBe('good');
+    expect(strip.textContent).toContain('3.0D to expiry');
     expect(
-      screen.getByText('Downward price pressure supports this bearish structure.'),
-    ).toBeTruthy();
-    expect(screen.getByText('Selected expiry · 3.0D remaining')).toBeTruthy();
-    expect(screen.queryByText('EVALUATE SELECTED TRADE')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Evaluate/ })).toBeNull();
-    view.rerender(<AlphaContextStrip context={data} strategy="put-credit" loading={false} />);
-    expect(strip.textContent).toContain('POOR FIT');
-    expect(
-      screen.getByText('Observed price pressure opposes this strategy’s direction.'),
-    ).toBeTruthy();
+      screen.queryByText(/Downward price pressure|Why this verdict|CONDITIONS SUPPORT/),
+    ).toBeNull();
+    const details = screen.getByText('Volatility details').closest('details')!;
+    expect(details.open).toBe(false);
+    fireEvent.click(screen.getByText('Volatility details'));
+    expect(details.open).toBe(true);
+    view.rerender(<AlphaContextStrip context={data} strategy="call-debit" loading={false} />);
+    expect(screen.getByText('RICH').closest('[data-tone]')?.getAttribute('data-tone')).toBe('bad');
   });
 
-  it('explains insurance separately and labels scanner horizons explicitly', () => {
+  it('can show high absolute IV as cheap when the matched realized reference is higher', () => {
+    const data = context();
+    data.automatic!.pricing.atmIv = 0.8;
+    data.automatic!.pricing.forecastVol = 1;
+    render(<AlphaContextStrip context={data} strategy="call-debit" loading={false} />);
+    expect(screen.getByText('CHEAP').closest('[data-tone]')?.getAttribute('data-tone')).toBe(
+      'good',
+    );
+    expect(screen.getByLabelText('Alpha market context').textContent).toContain('80.0% / 100.0%');
+    expect(screen.getByText('−20.0 pts')).toBeTruthy();
+  });
+
+  it('labels multi-expiry scanner context as a reference and withholds missing pricing', () => {
     const data = context();
     data.automatic!.horizonSource = 'scan-reference';
     data.automatic!.horizonDays = 30;
-    render(<AlphaContextStrip context={data} strategy="protective-put" loading={false} />);
-    expect(screen.getAllByText('Protective put · insurance').length).toBeGreaterThan(0);
-    expect(screen.getByText(/This put protects owned spot/)).toBeTruthy();
-    expect(
-      screen.getByText('30.0D scanning reference · individual candidate expiries can differ'),
-    ).toBeTruthy();
-  });
-
-  it('withholds the verdict when automatic evidence is absent instead of reviving the old naive setup', () => {
-    const data = context();
-    delete data.automatic;
-    render(<AlphaContextStrip context={data} strategy="long-call" loading={false} />);
-    expect(screen.getByLabelText('Alpha market context').textContent).toContain(
-      'INSUFFICIENT DATA',
+    const view = render(
+      <AlphaContextStrip context={data} strategy="protective-put" loading={false} />,
     );
-    expect(screen.getByText(/No scenario inputs are required/)).toBeTruthy();
+    expect(screen.getByText('30.0D reference')).toBeTruthy();
+    delete data.automatic;
+    view.rerender(<AlphaContextStrip context={data} strategy="long-call" loading={false} />);
+    expect(screen.getByLabelText('Alpha market context').textContent).toContain('UNAVAILABLE');
+    expect(screen.queryByText('FAVORABLE')).toBeNull();
   });
 
-  it('preserves excluded scanners without applying the new strategy rules', () => {
+  it('retains excluded scanner setup rules', () => {
     render(<AlphaContextStrip context={context()} strategy="iron-fly" loading={false} />);
     expect(screen.getByLabelText('Alpha market context').textContent).toContain('FAVORABLE');
-    expect(screen.queryByText(/Why this verdict/)).toBeNull();
+  });
+
+  it('withholds colors for stale context', () => {
+    const data = context();
+    data.generatedAt -= 121_000;
+    render(<AlphaContextStrip context={data} strategy="put-credit" loading={false} />);
+    expect(screen.queryByText('RICH')).toBeNull();
+    expect(screen.getAllByText('UNAVAILABLE').length).toBeGreaterThan(0);
   });
 });

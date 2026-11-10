@@ -1,38 +1,39 @@
 # Alpha automatic market context
 
-The main market-context strip answers **“Do current observed conditions support this
-strategy?”** automatically. It requires no thesis, scenario inputs, selected strikes,
-account equity or trade evaluation. Optional trade scenarios and the journal live behind
-**V2 · Scenario lab & journal** on each of the six strategy tabs.
+Alpha now shows compact premium color signals, with detailed measurements available on demand.
+The builder, original strategy tabs, venue alternatives and scanners remain available.
 
-## Read the result
+## Read the pricing signals
 
-| Verdict | Meaning |
+| Signal | Meaning |
 | --- | --- |
-| CONDITIONS SUPPORT | The available market conditions support this structure's purpose under the rules below. This is not a profit probability or approval of any price. |
-| CONDITIONAL | Conditions conflict, pricing is unresolved, or risks need qualification. The visible reasons identify which. |
-| POOR FIT | A speculative strategy's direction opposes established observed price pressure. This is a market-condition conflict, not proof that a contrarian trade cannot profit. |
-| INSUFFICIENT DATA | The horizon or completed price history cannot support an assessment. |
+| IV price / IV − RV ref | Selected-expiry ATM IV versus the same-horizon RV estimate. Cheap/rich uses the existing ±2-point display band; high absolute IV can still be relatively cheap. |
+| Above usual premium | IV − matched RV estimate − the usual IV/RV premium from the 7D or 30D baseline. That baseline is a labeled tenor proxy. Missing history stays unavailable. |
+| Vol stress | Existing acceleration/backwardation flags, displayed separately from price. |
+| Long leg dollar saving / sold leg dollar richness | Actual ask plus standalone fees/reserve versus reference long value, or actual bid minus standalone fee versus reference short value. |
+| Spread dollar advantage | Reference value minus all-in debit, or net credit minus reference liability, at the selected strikes and size. A leg's good price does not guarantee a good spread price. |
+| Single option | The same long option for debit spreads; a same-direction long put/call at the short strike for call/put credits. Different credit and outright payoffs are explicitly labeled. |
 
-The first three reasons are visible. **Why this verdict** expands the measurements, remaining
-reasons and all-strategy comparison. Calls and puts have opposing directional exposure;
-credit versus debit alone does not determine a market view.
+Green means that individual price condition is met; red means unmet, amber mixed/near
+reference, and gray unavailable. None is a direction forecast or a trade approval.
+The dollar checks use flat matched forecast volatility, current venue forwards and zero
+rates in Black-76. They include bid/ask, known entry fees and the manual cost reserve.
+They withhold comparisons for inverse settlement, cross-venue pairs, stale or missing
+quotes, or a wrong-expiry/asset/stale reference. They do not change scanner ranking or execution.
+See [the reading and calculation ledger](knowledge/options-trading.md#alpha-dollar-premiums-and-spread-versus-single-option-2026-11-10)
+for formulas, assumptions, source pages and tests.
 
-| Structure | Purpose | Support conditions |
-| --- | --- | --- |
-| Call credit | Bearish / range carry | Down pressure with resolved volatility pricing that is not cheap and no stress; or range with expensive volatility and no stress. |
-| Put credit | Bullish / range carry | Up pressure under the same carry conditions; or range with expensive volatility and no stress. |
-| Call debit | Bullish | Up pressure, fresh matched ATM IV, at least one day remaining. Rich ATM IV alone does not reject a vertical, whose legs offset part of their vega. |
-| Put debit | Bearish | Down pressure under the same directional-vertical conditions. |
-| Long call | Bullish / long volatility | Up pressure, 25Δ call-IV proxy below the historical delivery range, at least one day remaining. |
-| Speculative long put | Bearish / long volatility | Down pressure, 25Δ put-IV proxy below that range, at least one day remaining. |
-| Protective put | Insurance on owned spot | Does not require bearish pressure. Relatively cheap downside insurance supports the purpose; expensive or unresolved insurance is conditional. Actual floor and ownership matter. |
+**Compare costs** opens the spread/standalone dollar table, sold-wing value, actual funding
+percentage, cap strike and expiry crossover. It does not assume the cap fits a user's target.
+**Volatility details** opens historical delivery, wing-IV proxies, own-IV history, usual
+premium, implied move, range and acceleration. **Account balances** and **V2 · Scenario lab
+& journal** are collapsed by default. All of these and the trade controls share a single
+vertical scroll area, so expanding a panel cannot trap the builder below an unscrollable header.
 
-Guided Long Put is insurance; Advanced switches its main context to speculative long-put
-exposure. Its table still shows bet and insurance economics side by side. Spread tabs use
-the selected chain's exact expiry. Long-option scanners show an explicit **30D scanning
-reference** because they list multiple expiries; that reference is not an assessment of each
-candidate's expiry. Sell straddle, buy straddle and iron fly retain their existing rules.
+Long-option scanners label the strip as a **30D reference**, because their candidates span
+multiple expiries. Sell/buy straddle and iron-fly scanner setup rules are preserved.
+The API still returns its previous directional `assessments` for compatibility; the UI no
+longer presents that verdict, its reasons, or the all-strategy comparison table.
 
 ## Measurements and explicit assumptions
 
@@ -86,7 +87,7 @@ similar market fit; the system does not invent distinctions to force different s
 - Core: pure `buildAlphaStrategyContext` owns calculations and ordered strategy rules.
 - Server: obtains daily/hourly history independently and adds the automatic response.
 - Web: submits current chain observations automatically, refreshes every 30 seconds,
-  presents verdicts/reasons, and isolates manual evaluation behind the optional V2 switch.
+  presents compact pricing colors and dollar comparisons, and isolates manual evaluation behind the optional V2 switch.
 
 Regression fixtures cover direction conflicts despite cheap IV, debit versus outright
 volatility exposure, put-skew costs, insurance, reversals, acceleration, selected-expiry
@@ -99,3 +100,17 @@ Reviewed primary sources: [OIC bull call spread](https://www.optionseducation.or
 [CME bull spread](https://www.cmegroup.com/education/courses/option-strategies/bull-spread),
 and [Cboe portfolio protection](https://www.cboe.com/insights/posts/how-to-protect-your-portfolio-during-market-uncertainty).
 These support payoff/exposure distinctions, not the numeric gates or a BTC edge.
+
+## Compact pricing UI validation (2026-11-10)
+
+- `VITEST_MAX_WORKERS=1 npm_config_workspace_concurrency=1 pnpm precommit`: passed,
+  4,643 tests across 569 files; final focused pricing/context/workspace checks: 39 passed.
+- Web typecheck and production build passed. The final frontend bundle is installed locally;
+  `ogg-backend.service` was restarted and returned healthy.
+- Chromium verified all Alpha tabs, collapsed defaults, expanding optional panels, editing
+  sizing after expansion, and scrolling to the bottom at 1200px, 768px and 390px widths.
+  No document overflow or browser page errors. At 1550×820, the content scroll area retained
+  626px height while expanded panels increased scrollable content from 4548px to 4955px.
+- A live linear put-debit example showed a positive long-leg saving alongside a negative
+  net-spread difference. Deterministic tests cover all four verticals and credit green gates.
+  Browser checks validate UI behavior and displayed arithmetic, not fillability or performance.

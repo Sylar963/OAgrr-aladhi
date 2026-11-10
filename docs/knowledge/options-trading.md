@@ -33,7 +33,7 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | Source | Reviewed material | Status / limits |
 | --- | --- | --- |
 | [Sinclair, Volatility Trading](../Volatility+Trading+-+Euan+Sinclair.pdf) | Introduction pp. 1, 3; rich-for-a-reason pp. 15–16; forecasting pp. 32–33, 39–44 (vol cone, implied premium), 47, 52–54 (events); hedging/tails pp. 78, 85, 87–99; money management pp. 101, 109, 118–126; trade evaluation pp. 128–129; psychology pp. 152–154, 156–157, 161–162; examples pp. 168–175; contents | Selective reading. In this file printed page +13 gives the 1-based PDF page. Short-vol passages were added 2026-09-26 from text extraction and spot-checked (pp. 39–43, 97). Estimator details pp. 17–31 and parts of the Kelly derivation were NOT read. |
-| [Bennett, Trading Volatility](../Colin_Bennett_Trading_Volatility_Trading_Volatility,_Correlation.pdf) | Contents; introductory/executive material; option trading pp. 10–13, 20, 24, 30; option structures p. 32; hedging p. 41; term structure pp. 49–50, 138–146; volatility overpricing pp. 84–85; events pp. 124–125; hedging noise pp. 128–135 | Equity-focused historical observations, not BTC findings. Printed page +1 gives PDF page. Extraction failed on PDF pp. 34 and 39; formulas are garbled on PDF pp. 126–127 and 147. Do not infer their text. Variance-swap and exotics chapters were not read. |
+| [Bennett, Trading Volatility](../Colin_Bennett_Trading_Volatility_Trading_Volatility,_Correlation.pdf) | Contents; introductory/executive material; option trading pp. 10–13, 20, 24, 30; protection pp. 26–28; option structures p. 32; hedging p. 41; term structure pp. 49–50, 138–146; volatility overpricing pp. 84–85; events pp. 124–125; hedging noise pp. 128–135 | Equity-focused historical observations, not BTC findings. Printed page +1 gives PDF page. Extraction failed on PDF pp. 34 and 39; formulas are garbled on PDF pp. 126–127 and 147. Do not infer their text. Variance-swap and exotics chapters were not read. |
 | [Casanovas, Opciones financieras, 7th ed.](../Casanovas_Ramón,_Montserrat_Opciones_financieras_7a_ed_Larousse.pdf) | Contents; §5.2.1 pp. 113–116, 118–120 | Reviewed definitions and bull/bear vertical payoffs. PDF and printed pages match in this section. Historical Spanish market/legal material is not current exchange guidance. |
 | [Natenberg, Option Volatility & Pricing](../Sheldon_Natenberg_Option_Volatility_&_Pricing_Advanced_Trading_Strategies.pdf) | None | File is **0 bytes**. Needs re-upload. Do not attribute learning to it. |
 | Web sources on IV richness (2026-10-02) | [FlashAlpha VRP article](https://flashalpha.com/articles/volatility-risk-premium-api-find-overpriced-iv); vol-cone explainers ([LuxAlgo](https://www.luxalgo.com/library/concept/volatility-cones/), [Amberdata](https://blog.amberdata.io/estimating-future-volatility-ranges-with-volatility-cones), [Montréal Exchange](https://www.m-x.ca/f_publications_en/cone_vol_en.pdf)); DVOL VRP definitions ([Amberdata docs](https://docs.amberdata.io/docs/iv-dvol)); BTC HAR-RV forecasting ([Bouri et al. 2020](https://repository.up.ac.za/bitstream/handle/2263/76318/Bouri_Forecasting_2020.pdf?sequence=1)) | Vendor articles and abstracts, read for framing only. They agree with Sinclair K12–K14; none is evidence of a BTC edge. The HAR-RV paper was not read past its abstract. |
@@ -44,6 +44,64 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | Gamma flip audit (2026-10-27 UTC) | [SpotGamma Gamma Flip](https://support.spotgamma.com/hc/en-us/articles/15413261162387-Gamma-Flip); [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma) | Definitions and conditional hedging mechanics checked against the implementation and public live BTC profiles; no evidence of predictive performance. See the audit below. |
 | Paradex RFQ and equity APIs (2026-11-08, client date) | Official account, RFQ list/BBO/create/markets and read-only authentication documentation | API mechanics reviewed for Alpha integration; no authenticated live-account validation or RFQ strategy-performance evidence. See integration notes below. |
 | Alpha strategy heuristic audit (2026-11-09, client date) | Current context/label/scanner source at `a2953014`; [CME bull spreads](https://www.cmegroup.com/education/courses/option-strategies/bull-spread), [OIC bear call spread](https://www.optionseducation.org/strategies/all-strategies/bear-call-spread-credit-call-spread), [OIC protective put](https://www.optionseducation.org/strategies/all-strategies/protective-put-married-put) | Engineering audit, no trading-rule changes or performance validation. Credit tabs share one direction-blind setup rule; debit headlines are fixed; Protect and Bet share the insurance heuristic. Regime is context, not an input to these setup branches or the main sized-spread status. Missing spot can still permit favorable long calls; unavailable volatility state can still permit favorable credits. Local visual audit: `docs/analysis/alpha-strategy-heuristics.html` and companion Markdown. |
+
+## Alpha dollar premiums and spread versus single option (2026-11-10)
+
+Reading note: locally extracted and reviewed **Bennett pp. 26–28 and 32** (PDF pages
+27–29 and 33); re-read **Sinclair pp. 39–43** (PDF pages 52–56). No additional Sinclair
+estimator chapters were reviewed. Official [OIC bull call spread](https://www.optionseducation.org/strategies/all-strategies/bull-call-spread-debit-call-spread)
+and [Schwab long call versus bull call spread](https://www.schwab.com/learn/story/option-strategy-spotlight-long-call-vs-bull-call-spread)
+were checked for payoff and exposure mechanics, not performance evidence.
+
+| Principle | Application and limit |
+| --- | --- |
+| Sinclair pp. 39–41: compare implied volatility with a distribution of realized volatility at the same holding horizon. A point forecast alone hides the range. | Keep the existing matched-horizon reference and historical delivery band. An 80% IV can be below a 100% RV estimate. Own-IV percentile is not a richness test. The derived delivery band is an engineering adaptation, not a book formula or confidence interval. |
+| Sinclair pp. 41–43: option insurance normally commands a premium; account for its usual size before calling a price unusually rich. | Show IV minus matched RV estimate separately from excess above the usual premium. The existing 7D/30D historical baseline is explicitly a tenor proxy, not the selected venue/strike/expiry's proven premium. Missing baseline remains unknown. |
+| Bennett pp. 26–28: selling an OTM put reduces cost but forfeits protection below that strike. His approximate one-third funding rule concerns equity put protection. | Display actual net cost saving and sold-wing proceeds at bid, after fees. Do not impose one-third as a BTC threshold or treat a cheap put spread as full crash insurance. |
+| Bennett p. 32: a call spread exchanges some upside for lower entry cost; the short strike can reflect a target. | Show single-option cost, vertical debit, cash saving, cap strike and the expiry price where the outright overtakes the spread. No automatic target is inferred. |
+
+Engineering derivation in `web/features/alpha/premium-comparison.ts`: for quantity q,
+known entry fees f and reserve r, net entry cash N = q(sell bid − buy ask) − f − r.
+At a flat matched-horizon volatility estimate and each leg's venue forward, B and S denote
+q times each leg's Black-76 value (zero discounting). **Spread dollar advantage = N + B − S**,
+which is net credit minus reference liability for a credit, or reference asset value minus
+all-in debit for a debit. This is a price comparison under a lognormal reference at the
+current forward, not a directional physical expected return. A cheap long leg need not
+make a cheap vertical; a rich short leg need not make a rich credit after the hedge cost.
+
+For a debit, single-option all-in cost O uses that same long option's ask, standalone fee
+and the same reserve. Spread all-in debit D includes the venue's existing combo fee
+assumption. Savings = O − D. If savings are positive, equal expiry P&L occurs at
+short strike + savings/q for calls or short strike − savings/q for puts. Beyond that level
+in the favorable direction, the single option pays more. A negative put crossover lies
+outside nonnegative settlement prices; it does not imply a reachable crossing.
+For credit comparisons the same-direction outright is a put against a call credit, or a
+call against a put credit, at the short strike; these are **different payoffs**, not a
+parity replacement or an automatic preference.
+
+The new comparison withholds dollar signals for cross-venue and inverse-settled pairs,
+missing/stale quotes or fees, a stale/wrong-asset/wrong-expiry RV reference, or an unsupported
+horizon. It does not silently use marks or zero costs. Existing inverse routing economics
+remain under their previous forward-hedge assumptions. Display colors describe separate
+price conditions; no overall green trade approval is inferred. The primary debit color requires
+both a cheap long leg and positive net spread advantage. A credit can turn green only when
+both dollar checks are positive, excess above the usual premium exceeds the display band,
+and acceleration/backwardation measurements are available and unflagged. Missing usual-premium
+or stress history leaves this combined credit price check amber, never green. A one-cent dollar tolerance
+and the existing ±2-vol-point display band are unvalidated engineering choices.
+
+UI: one vertical scroll area owns the context, optional panels and trade workspace.
+Account balances, volatility details, scenario lab/journal and cost breakdown start collapsed.
+The former directional verdict prose/table is no longer rendered; existing server/API
+assessments remain for compatibility. Preserve all Alpha tabs, builder controls and scanners.
+
+Required tests: both rights and credit/debit cash signs; actual quantity/fees/reserve;
+debit-versus-outright expiry crossover identity; rich short with poor net spread price;
+cheap long with poor net spread price; invalid/stale/mismatched references and quotes;
+unknown baseline; and scroll reachability with expanded optional panels on desktop/mobile.
+Status: **reading notes and engineering derivations; no validated BTC edge**. Event/jump
+models, smile-aware forecasts, realized fill costs and chronological holdout validation
+remain necessary before interpreting positive reference differences as tradable returns.
 
 ## Paradex RFQ and current-equity integration (2026-11-08, client date)
 

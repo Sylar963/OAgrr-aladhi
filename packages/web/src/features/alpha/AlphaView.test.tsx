@@ -1,6 +1,14 @@
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
-import { act, cleanup, fireEvent, render as renderUi, screen, within, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as renderUi,
+  screen,
+  within,
+  waitFor,
+} from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +18,9 @@ import type { SpreadCandidate } from './spread-scanner';
 import { setTestMarket } from '@/test/market-state';
 
 function render(ui: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  });
   return renderUi(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
@@ -41,7 +51,13 @@ vi.mock('@components/auth/AccountSessionProvider', () => ({
   useAccountSession: () => ({ status: 'ready' }),
 }));
 vi.mock('@features/portfolio', () => ({
-  ParadexAccountSummary: ({ onUseEquity, accountSelector }: { onUseEquity?: (equity: number) => void; accountSelector?: React.ReactNode }) => (
+  ParadexAccountSummary: ({
+    onUseEquity,
+    accountSelector,
+  }: {
+    onUseEquity?: (equity: number) => void;
+    accountSelector?: React.ReactNode;
+  }) => (
     <div>
       {accountSelector}
       <button type="button" onClick={() => onUseEquity?.(1234)}>
@@ -49,7 +65,13 @@ vi.mock('@features/portfolio', () => ({
       </button>
     </div>
   ),
-  ThalexAccountSummary: ({ onUseEquity, accountSelector }: { onUseEquity?: (equity: number) => void; accountSelector?: React.ReactNode }) => (
+  ThalexAccountSummary: ({
+    onUseEquity,
+    accountSelector,
+  }: {
+    onUseEquity?: (equity: number) => void;
+    accountSelector?: React.ReactNode;
+  }) => (
     <div>
       {accountSelector}
       <button type="button" onClick={() => onUseEquity?.(2400)}>
@@ -162,6 +184,19 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('surgical Alpha enhancements', () => {
+  it('keeps optional panels collapsed inside the same scrollable workspace as the builder', () => {
+    render(<AlphaView />);
+    const workspace = screen.getByLabelText('Alpha workspace');
+    const account = screen.getByText('Account balances').closest('details')!;
+    const lab = screen.getByText('V2 · Scenario lab & journal (optional)').closest('details')!;
+    expect(account.open).toBe(false);
+    expect(lab.open).toBe(false);
+    expect(workspace.contains(account)).toBe(true);
+    expect(workspace.contains(lab)).toBe(true);
+    expect(workspace.contains(screen.getByLabelText('Account equity · USD'))).toBe(true);
+    fireEvent.click(screen.getByText('Account balances'));
+    expect(account.open).toBe(true);
+  });
   it('keeps manual scenarios behind the optional V2 section and explains the workflow', async () => {
     render(<AlphaView />);
     expect(screen.queryByText('Evaluate this trade')).toBeNull();
@@ -431,7 +466,6 @@ it('shows Paradex RFQ controls before manual sizing and adopts equity only on re
   expect(input.value).toBe('1234');
   expect(mocks.scan).toHaveBeenCalledWith(expect.objectContaining({ equity: 1234 }));
 });
-
 
 it('offers Thalex equity even when Paradex is not an active quote venue', () => {
   setTestMarket({ activeVenues: ['thalex'] });

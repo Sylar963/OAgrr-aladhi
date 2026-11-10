@@ -12,6 +12,7 @@ import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
+import AlphaPremiumComparison from './AlphaPremiumComparison';
 import AlphaEvaluationPanel from './AlphaEvaluationPanel';
 import AlphaV2Section, { AlphaV2Provider } from './AlphaV2Section';
 import { verticalEvaluationCandidate } from './evaluation-candidate';
@@ -90,6 +91,8 @@ const messages = defineMessages(
     emptyQuote:
       'No eligible quote for these strikes, venue, and size. Check sizing, expiry, quote exclusions, or load an alternative below.',
     portfolioRisk: 'Existing portfolio risk · {venue}',
+    accountDetails: 'Account balances',
+    tools: 'Optional tools',
     strategyAria: 'Alpha strategy',
     activeVenues: '{n} ACTIVE VENUES',
     loadingChain: 'Loading chain data…',
@@ -116,6 +119,8 @@ const messages = defineMessages(
     emptyQuote:
       'No hay cotización elegible para estos strikes, exchange y tamaño. Revisa el tamaño, el vencimiento y las exclusiones de cotizaciones, o carga una alternativa abajo.',
     portfolioRisk: 'Riesgo actual del portafolio · {venue}',
+    accountDetails: 'Saldos de la cuenta',
+    tools: 'Herramientas opcionales',
     strategyAria: 'Estrategia Alpha',
     activeVenues: '{n} EXCHANGES ACTIVOS',
     loadingChain: 'Cargando datos de la cadena…',
@@ -451,6 +456,14 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
 
   const signalStack = (
     <>
+      {!tradfi && (
+        <AlphaPremiumComparison
+          candidate={selection?.candidate ?? null}
+          route={selection?.route ?? null}
+          chain={currentChain}
+          context={marketContext.data ?? null}
+        />
+      )}
       <SignalCard
         candidate={selection?.candidate ?? null}
         route={selection?.route ?? null}
@@ -565,117 +578,127 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
           )}
         </div>
 
-        {!isMobile && isSpread && (
-          <ExpiryBar
-            underlying={underlying}
-            spotPrice={chain?.stats.forwardPriceUsd}
-            expiries={expiries}
-            selected={expiry}
-            onSelect={setExpiry}
-            onChangeAsset={changeAsset}
-            {...(prefetch && { onPrefetch: prefetch })}
-          />
-        )}
-
-        {!tradfi && (
-          <AlphaContextStrip
-            context={marketContext.data ?? null}
-            strategy={strategy === 'long-put' ? putObjective : strategy}
-            loading={marketContext.isLoading}
-          />
-        )}
-        {(isSpread || strategy === 'long-call' || strategy === 'long-put') && (
-          <AlphaV2Section open={v2Open} onOpenChange={setV2Open} />
-        )}
-
-        {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
-          <AlphaAccountSummary
-            defaultVenue={
-              tradeVenue === 'paradex' || !scanVenues.includes('thalex') ? 'paradex' : 'thalex'
-            }
-            {...(isSpread && { onUseEquity: (equity: number) => update('equity', String(equity)) })}
-          />
-        )}
-        {!tradfi &&
-          isScannerStrategy(strategy) &&
-          strategy !== 'short-straddle' &&
-          strategy !== 'long-straddle' &&
-          scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
-
-        {strategy === 'long-call' && (
-          <div className={styles.scannerWorkspace}>
-            <LottoScannerPanel underlying={underlying} venues={scanVenues} />
-          </div>
-        )}
-
-        {strategy === 'long-put' && (
-          <div className={styles.scannerWorkspace}>
-            <ProtectivePutPanel
+        <div className={styles.workspace} aria-label="Alpha workspace">
+          {!isMobile && isSpread && (
+            <ExpiryBar
               underlying={underlying}
-              venues={scanVenues}
-              onObjectiveChange={setPutObjective}
+              spotPrice={chain?.stats.forwardPriceUsd}
+              expiries={expiries}
+              selected={expiry}
+              onSelect={setExpiry}
+              onChangeAsset={changeAsset}
+              {...(prefetch && { onPrefetch: prefetch })}
             />
-          </div>
-        )}
+          )}
 
-        {strategy === 'short-straddle' && (
-          <div className={styles.scannerWorkspace}>
-            <StraddleScannerPanel underlying={underlying} venues={scanVenues} />
+          {!tradfi && (
+            <AlphaContextStrip
+              context={marketContext.data ?? null}
+              strategy={strategy === 'long-put' ? putObjective : strategy}
+              loading={marketContext.isLoading}
+            />
+          )}
+          <div className={styles.optionalTools} aria-label={t('tools')}>
+            {!tradfi && (scanVenues.includes('paradex') || scanVenues.includes('thalex')) && (
+              <details>
+                <summary>{t('accountDetails')}</summary>
+                <AlphaAccountSummary
+                  defaultVenue={
+                    tradeVenue === 'paradex' || !scanVenues.includes('thalex')
+                      ? 'paradex'
+                      : 'thalex'
+                  }
+                  {...(isSpread && {
+                    onUseEquity: (equity: number) => update('equity', String(equity)),
+                  })}
+                />
+              </details>
+            )}
+            {(isSpread || strategy === 'long-call' || strategy === 'long-put') && (
+              <AlphaV2Section open={v2Open} onOpenChange={setV2Open} />
+            )}
           </div>
-        )}
+          {!tradfi &&
+            isScannerStrategy(strategy) &&
+            strategy !== 'short-straddle' &&
+            strategy !== 'long-straddle' &&
+            scanVenues.includes('paradex') && <ParadexVenueCard underlying={underlying} />}
 
-        {strategy === 'long-straddle' && (
-          <div className={styles.scannerWorkspace}>
-            <LongStraddlePanel underlying={underlying} venues={scanVenues} />
-          </div>
-        )}
+          {strategy === 'long-call' && (
+            <div className={styles.scannerWorkspace}>
+              <LottoScannerPanel underlying={underlying} venues={scanVenues} />
+            </div>
+          )}
 
-        {strategy === 'iron-fly' && (
-          <div className={styles.scannerWorkspace}>
-            <IronFlyPanel underlying={underlying} venues={scanVenues} />
-          </div>
-        )}
+          {strategy === 'long-put' && (
+            <div className={styles.scannerWorkspace}>
+              <ProtectivePutPanel
+                underlying={underlying}
+                venues={scanVenues}
+                onObjectiveChange={setPutObjective}
+              />
+            </div>
+          )}
 
-        {isSpread && isLoading && !chain && (
-          <div className={styles.state}>
-            <Spinner size="lg" label={t('loadingChain')} />
-          </div>
-        )}
+          {strategy === 'short-straddle' && (
+            <div className={styles.scannerWorkspace}>
+              <StraddleScannerPanel underlying={underlying} venues={scanVenues} />
+            </div>
+          )}
 
-        {isSpread && error && !chain && (
-          <div className={styles.state}>
+          {strategy === 'long-straddle' && (
+            <div className={styles.scannerWorkspace}>
+              <LongStraddlePanel underlying={underlying} venues={scanVenues} />
+            </div>
+          )}
+
+          {strategy === 'iron-fly' && (
+            <div className={styles.scannerWorkspace}>
+              <IronFlyPanel underlying={underlying} venues={scanVenues} />
+            </div>
+          )}
+
+          {isSpread && isLoading && !chain && (
+            <div className={styles.state}>
+              <Spinner size="lg" label={t('loadingChain')} />
+            </div>
+          )}
+
+          {isSpread && error && !chain && (
+            <div className={styles.state}>
+              <EmptyState
+                icon="⚠︎"
+                title={t('failedChain')}
+                detail={error instanceof Error ? error.message : t('checkConnection')}
+              />
+            </div>
+          )}
+
+          {isSpread && chain && chain.strikes.length === 0 && (
             <EmptyState
-              icon="⚠︎"
-              title={t('failedChain')}
-              detail={error instanceof Error ? error.message : t('checkConnection')}
+              icon="∅"
+              title={t('noOptions')}
+              detail={t('noVenuesData', { underlying, expiry })}
             />
-          </div>
-        )}
+          )}
 
-        {isSpread && chain && chain.strikes.length === 0 && (
-          <EmptyState
-            icon="∅"
-            title={t('noOptions')}
-            detail={t('noVenuesData', { underlying, expiry })}
-          />
-        )}
-
-        {isSpread &&
-          chain &&
-          chain.strikes.length > 0 &&
-          (isMobile ? (
-            // On mobile: signal first (what users come for), then router + smile,
-            // then the strike builder at the bottom (less central on small screens).
-            <div className={styles.mobileStack}>
-              {signalStack}
-              {builder}
-            </div>
-          ) : (
-            <div className={styles.grid}>
-              {builder}
-              <div className={styles.rightColumn}>{signalStack}</div>
-            </div>
-          ))}
+          {isSpread &&
+            chain &&
+            chain.strikes.length > 0 &&
+            (isMobile ? (
+              // On mobile: signal first (what users come for), then router + smile,
+              // then the strike builder at the bottom (less central on small screens).
+              <div className={styles.mobileStack}>
+                {signalStack}
+                {builder}
+              </div>
+            ) : (
+              <div className={styles.grid}>
+                {builder}
+                <div className={styles.rightColumn}>{signalStack}</div>
+              </div>
+            ))}
+        </div>
       </div>
     </AlphaV2Provider>
   );

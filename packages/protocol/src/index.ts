@@ -694,3 +694,4 @@ export * from './paradex.js';
 export * from './thalex-account.js';
 export * from './alpha-evaluation.js';
 export * from './alpha-strategy-context.js';
+export * from './expected-move.js';

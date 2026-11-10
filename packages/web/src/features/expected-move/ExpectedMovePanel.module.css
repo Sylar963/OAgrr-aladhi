@@ -1,0 +1,232 @@
+.panel {
+  padding: var(--space-4);
+  height: 100%;
+  overflow: auto;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+.header,
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+}
+.header {
+  margin-bottom: var(--space-5);
+}
+.header h2 {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  margin: 0 auto 4px 0;
+}
+.panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-tertiary);
+}
+.panel select,
+.panel input,
+.panel button {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 7px 8px;
+  font: inherit;
+  min-height: 34px;
+  max-width: 100%;
+}
+.panel input {
+  width: 100px;
+}
+.panel :is(select, input, button, summary):focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
+}
+.source {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  letter-spacing: 0.06em;
+  margin: 14px 0;
+}
+.source span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.metric > span {
+  color: var(--text-tertiary);
+}
+.metric > strong {
+  color: var(--text-primary);
+  font-size: clamp(21px, 3cqi, 34px);
+  font-weight: 500;
+  line-height: 1.2;
+}
+.metric > small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.band {
+  margin: 30px 0 22px;
+}
+.rail {
+  height: 7px;
+  position: relative;
+  background: var(--accent-primary-dim);
+  border: 1px solid var(--accent-primary);
+  border-radius: 2px;
+  margin: 0 6px;
+}
+.center {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  left: 50%;
+  border-left: 1px dashed var(--text-dim);
+}
+.marker {
+  position: absolute;
+  width: 3px;
+  height: 21px;
+  top: -8px;
+  background: var(--text-primary);
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 3px var(--bg-panel);
+}
+.boundaries,
+.foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+.foot {
+  margin: 18px 0;
+}
+.warning {
+  color: var(--color-warning);
+}
+.alert {
+  color: var(--color-warning);
+  background: var(--bg-elevated);
+  border-left: 2px solid var(--color-warning);
+  padding: 12px;
+  line-height: 1.6;
+}
+.note {
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.note a {
+  color: var(--accent-primary);
+}
+.panel details {
+  border-top: 1px solid var(--border-subtle);
+  padding: 14px 0;
+}
+.panel summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  min-height: 24px;
+}
+.panel details[open] > summary {
+  margin-bottom: 14px;
+}
+.comparison {
+  display: grid;
+  grid-template-columns: 0.7fr 1fr 1fr;
+  margin-top: 18px;
+  border: 1px solid var(--border-default);
+}
+.comparison > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+.comparison > div + div {
+  border-left: 1px solid var(--border-default);
+}
+.comparison span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.comparison strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.comparison small {
+  display: block;
+  margin-top: 6px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.tableWrap {
+  overflow-x: auto;
+}
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.panel th,
+.panel td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: right;
+}
+.panel th {
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.panel th:first-child,
+.panel td:first-child {
+  text-align: left;
+}
+.panel td[data-outcome="large"] {
+  color: var(--color-warning);
+}
+@container widget (max-width: 430px) {
+  .panel {
+    padding: var(--space-3);
+  }
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+  .comparison > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--border-default);
+  }
+  .metrics {
+    gap: var(--space-2);
+  }
+  .metric > strong {
+    font-size: 24px;
+  }
+}

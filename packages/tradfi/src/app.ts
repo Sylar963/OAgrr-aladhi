@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { candlesRoute } from './routes/candles.js';
 import { chainsRoute } from './routes/chains.js';
 import { expiriesRoute } from './routes/expiries.js';
+import { expectedMoveRoute } from './routes/expected-move.js';
 import { healthRoute } from './routes/health.js';
 import { ivHistoryRoute } from './routes/iv-history.js';
 import { sectorsRoute } from './routes/sectors.js';
@@ -49,6 +50,7 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(healthRoute(deps));
   void app.register(underlyingsRoute(deps));
   void app.register(expiriesRoute(deps));
+  void app.register(expectedMoveRoute(deps));
   void app.register(chainsRoute(deps));
   void app.register(wsChainRoute(deps));
   void app.register(wsUnderlyingCandlesRoute(deps));

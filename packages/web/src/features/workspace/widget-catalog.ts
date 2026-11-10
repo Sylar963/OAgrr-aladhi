@@ -22,6 +22,7 @@ const cardMessages = defineMessages(
     'surface-3d': '3D vol surface',
     'iv-rank': 'IV rank',
     'skew-history': 'Skew history',
+    'expected-move': 'Expected move',
   } satisfies Record<CardKind, string>,
   {
     'chain-table': 'Tabla de la cadena',
@@ -42,6 +43,7 @@ const cardMessages = defineMessages(
     'surface-3d': 'Superficie de volatilidad 3D',
     'iv-rank': 'Rango de IV',
     'skew-history': 'Historial de skew',
+    'expected-move': 'Movimiento esperado',
   },
 );
 

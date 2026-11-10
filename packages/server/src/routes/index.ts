@@ -12,6 +12,7 @@ import { blockStrikeBucketsRoute } from './block-strike-buckets.js';
 import { callPutFlowRoute } from './call-put-flow.js';
 import { chainsRoute } from './chains.js';
 import { dvolHistoryRoute } from './dvol-history.js';
+import { expectedMoveRoute } from './expected-move.js';
 import { volHeatmapRoute } from './vol-heatmap.js';
 import { expiriesRoute } from './expiries.js';
 import { flowRoute } from './flow.js';
@@ -106,6 +107,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(blockStrikeBucketsRoute, { prefix: '/api' });
   app.register(callPutFlowRoute, { prefix: '/api' });
   app.register(dvolHistoryRoute, { prefix: '/api' });
+  app.register(expectedMoveRoute, { prefix: '/api' });
   app.register(volHeatmapRoute, { prefix: '/api' });
   app.register(liquidityRoute, { prefix: '/api', runtime: orderBookRuntime });
   app.register(spotCandlesRoute, { prefix: '/api' });

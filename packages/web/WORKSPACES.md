@@ -142,6 +142,45 @@ The feed hub's three-chain limit is unchanged. Hidden widgets unmount, and layou
 subscribe to market ticks. Dockview stays outside the entry bundle and is never requested by the
 mobile single-view renderer. Keep the existing ten-socket budget when extending the catalog.
 
+## Expected Move panel
+
+Use **+ Widget → Expected move** in a desktop workspace. The panel follows its workspace's
+asset or can be pinned to BTC, ETH, or SPX. Unsupported workspace assets show an explicit
+unavailable state. SPX reads the existing separate TradFi service through `/tradfi-api`.
+The widget adds no browser WebSocket subscription and loads lazily. Its settings are stored
+per layout in `ogg.expectedMovePanels.v1`; layout placement uses the existing Dockview storage.
+
+- BTC/ETH sessions start at 00:00 or 08:00 UTC. Expected daily move uses DVOL / √365.
+  The fixed reference is the preceding completed hourly DVOL close, with spot open and
+  OHLC from the existing aggregated spot runtime. A minute-price tail supplies the current
+  observation. Missing opening IV or hourly gaps are not filled from later observations.
+- SPX compares cash open to cash close using prior-trading-day VIX / √252. It excludes
+  overnight gaps. Daily bars establish which sessions existed, so weekends and holidays
+  do not create synthetic sessions. New York times follow DST. Completion waits until
+  16:15 local time, conservatively including early-close days. A minute-price tail is
+  required for a complete current observation. The VIX and SPX data need feed access.
+- Opening and live full-day estimates are separate. Live IV never changes the denominator
+  for a completed-day classification or daily alert. Absolute return and high–low range
+  are separate; neither is labeled as realized volatility. Alerts compare absolute return
+  with the full-day opening benchmark, not with an elapsed-time volatility forecast.
+- Expand **ATM straddle** to select venue and expiry. It uses one venue and matching
+  settlement timestamps, fresh two-sided quotes and displayed sizes. USD premiums are
+  per base unit (SPX points). The index-vol Black-76 model uses actual calendar time to
+  expiry, not a one-day premium for every expiry. The surface reference excludes the ATM
+  strike and interpolates implied variance in log strike between the nearest fresh OTM
+  quotes on both sides; it never extrapolates or substitutes the ATM mark. The forward
+  still comes from the venue chain, so this is not a fully independent valuation.
+- Comparisons are undiscounted model differences before fees, not execution approvals or
+  evidence of a trading edge. Two leg prices do not guarantee simultaneous combo fills.
+  A missing reference stays unavailable. Freshness gates suppress stale move alerts and
+  cached straddle prices. The panel refreshes daily context every 60 seconds and optional
+  straddle context every 15 seconds; the backend shares bounded/cached source reads.
+
+Historical opening references come from exchange candle history, not from a new local
+snapshot database. They survive application restarts through refetching but can inherit
+upstream candle corrections. This panel does not reconstruct historical option books or
+infer Vanna or dealer inventory.
+
 ## Verification
 
 Run `pnpm precommit` and `pnpm --filter @oggregator/web build`. On machines with heavy concurrent

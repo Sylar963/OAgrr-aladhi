@@ -595,3 +595,11 @@ export { reconcileFlowPosition, flowPositionEffect, type FlowIntervalTape } from
 export { FlowOiRecorder } from './core/flow-oi-recorder.js';
 export { evaluateAlphaTrade, type AlphaEvaluationMarket } from './services/alpha-evaluation.js';
 export { buildAlphaStrategyContext, type AlphaStrategyContextInput } from './services/alpha-strategy-context.js';
+export {
+  expectedMoveFraction,
+  buildExpectedMoveSession,
+  buildCryptoMoveSessions,
+  evaluateExpectedStraddle,
+  STRADDLE_MAD_FACTOR,
+  type ExpectedMoveSessionInput,
+} from './services/expected-move.js';

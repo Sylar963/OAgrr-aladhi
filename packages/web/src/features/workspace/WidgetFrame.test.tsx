@@ -46,6 +46,9 @@ vi.mock('@features/analytics', () => ({
 }));
 vi.mock('@features/gex', () => ({ GexView: () => <div>view:gex</div> }));
 vi.mock('@features/news', () => ({ NewsView: () => <div>view:news</div> }));
+vi.mock('@features/expected-move', () => ({
+  ExpectedMovePanel: () => <div>card:expected-move</div>,
+}));
 
 function kindsWith(trait: 'chainFeed' | 'requiresAccount' | 'mobileToolbar'): TabId[] {
   return TABS.map((tab) => tab.id).filter((id) => WIDGET_TRAITS[id][trait]);
@@ -112,8 +115,8 @@ describe('card widgets', () => {
     (kind) => !TABS.some((tab) => tab.id === kind),
   );
 
-  it('lists eighteen cards', () => {
-    expect(cardKinds).toHaveLength(18);
+  it('lists nineteen cards', () => {
+    expect(cardKinds).toHaveLength(19);
   });
 
   it.each(cardKinds)('renders the %s card without needing an account', async (kind) => {

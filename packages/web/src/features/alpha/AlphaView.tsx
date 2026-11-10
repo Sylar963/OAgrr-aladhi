@@ -12,7 +12,7 @@ import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
-import AlphaEvaluationPanel, { evaluationIdentity } from './AlphaEvaluationPanel';
+import AlphaEvaluationPanel from './AlphaEvaluationPanel';
 import AlphaEvaluationJournal from './AlphaEvaluationJournal';
 import { verticalEvaluationCandidate } from './evaluation-candidate';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
@@ -251,6 +251,11 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     ? verticalEvaluationCandidate(selection.candidate, chain, selection.route,
       Number(sizing.equity) * Number(sizing.riskPct) / 100)
     : null;
+  const evaluationKey = JSON.stringify([
+    underlying, kind, expiry, shortStrike, longStrike, preferredVenue, preferredBuyVenue,
+    scanVenues, quantityIsAuto ? 'auto' : storedSizing.quantity,
+    storedSizing.equity, storedSizing.riskPct, storedSizing.reserve,
+  ]);
   function loadStrikes(candidate: VerticalEconomics) {
     setStrategy(candidate.kind);
     setShortStrike(candidate.sellStrike);
@@ -412,7 +417,8 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         {...(builderLegs && { onOpenBuilder: openInBuilder })}
       />
       <AlphaEvaluationPanel
-        key={evaluationCandidate == null ? 'empty' : evaluationIdentity(evaluationCandidate)}
+        key={evaluationKey}
+        selectionKey={evaluationKey}
         candidate={evaluationCandidate}
       />
       <AlphaVenueOpportunities

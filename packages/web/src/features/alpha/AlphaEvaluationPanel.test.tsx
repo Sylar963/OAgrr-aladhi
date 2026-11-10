@@ -20,17 +20,40 @@ function mount() {
   });
   const view = render(
     <QueryClientProvider client={client}>
-      <AlphaEvaluationPanel candidate={evaluationCandidateFixture()} />
+      <AlphaEvaluationPanel
+        candidate={evaluationCandidateFixture()}
+        selectionKey="selected-trade"
+      />
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByText('Evaluate this trade'));
   mocks.post.mockImplementation(async (_path: string, request: AlphaEvaluationRequest) =>
     evaluationResponseFixture(request),
   );
-  return view;
+  return { view, client };
 }
 
 describe('candidate evaluation UI', () => {
+  it('retains a frozen assessment when its live quote becomes unavailable', async () => {
+    const { view, client } = mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Evaluate current quotes' }));
+    await screen.findByText(/Frozen assessment/);
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <AlphaEvaluationPanel candidate={null} selectionKey="selected-trade" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText(/Frozen assessment/)).toBeTruthy();
+    expect(screen.getByText(/current eligible quote is unavailable/)).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Evaluate current quotes' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: 'Save evaluation locally' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
   it('requires explicit scenario values and sends the selected snapshot only on request', async () => {
     mount();
     expect(mocks.post).not.toHaveBeenCalled();

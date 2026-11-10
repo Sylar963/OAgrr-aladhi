@@ -3,6 +3,25 @@
 Scope: the four verticals, long calls, speculative long puts and protective puts. The
 straddle and iron-fly scanners and the existing Alpha workspace remain intact.
 
+## Use it
+
+1. Select the strategy, expiry, actual candidate and size using the existing controls.
+2. Open **Evaluate this trade**. Enter an explicit extra-cost reserve (zero is allowed) and
+   optionally a maximum loss budget. The evaluator will not fill unknown fees with zero.
+3. To assess an expiry distribution, enable the scenario and enter the arithmetic mean
+   return, annual volatility and optional mean-return sensitivity. Write the thesis and
+   invalidation before requesting the calculation.
+4. **Evaluate current quotes** freezes the submitted legs and observations. A later quote
+   outage does not erase that assessment. Refresh the evaluation to assess new quotes;
+   a frozen assessment is not a current execution commitment.
+5. Save the evaluation to the browser journal. After the decision or exit, record a user-
+   reported outcome, distinguishing expiry, early exit and not traded. An optional actual
+   settlement price belongs only to expiry outcomes. Export JSON regularly for backup.
+
+No order is submitted. The journal does not synchronize across browsers or accounts, and
+does not verify reported fills or prove profitability. Save time, evaluation time and exit
+time remain distinct so retrospective entries can be excluded from prospective research.
+
 ## Contract
 
 `POST /api/alpha/evaluate` evaluates a client quote snapshot. It never places an order,

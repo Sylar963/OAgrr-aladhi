@@ -5,6 +5,8 @@ export const evaluationMessages = defineMessages(
     title: 'Evaluate this trade',
     intro: 'Keep direction, price, stress and execution separate.',
     noCandidate: 'Select an eligible candidate and size to evaluate its actual quotes.',
+    quoteUnavailable:
+      'A current eligible quote is unavailable. Your previous assessment remains frozen and can be saved unchanged.',
     scenarioToggle: 'Evaluate my expiry distribution',
     mean: 'Mean return to expiry · %',
     vol: 'Annual volatility · %',
@@ -122,6 +124,8 @@ export const evaluationMessages = defineMessages(
     title: 'Evaluar este trade',
     intro: 'Separa dirección, precio, estrés y ejecución.',
     noCandidate: 'Selecciona un candidato y tamaño elegibles para evaluar sus cotizaciones reales.',
+    quoteUnavailable:
+      'No hay cotización actual elegible. La evaluación anterior sigue congelada y puede guardarse sin cambios.',
     scenarioToggle: 'Evaluar mi distribución al vencimiento',
     mean: 'Retorno medio al vencimiento · %',
     vol: 'Volatilidad anual · %',

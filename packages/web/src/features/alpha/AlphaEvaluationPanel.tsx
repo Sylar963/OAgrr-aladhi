@@ -16,7 +16,7 @@ import styles from './AlphaEvaluationPanel.module.css';
 
 const numberOrNull = (value: string) => (value.trim() === '' ? null : Number(value));
 
-export function evaluationIdentity(candidate: AlphaEvaluationCandidate): string {
+function evaluationIdentity(candidate: AlphaEvaluationCandidate): string {
   return JSON.stringify([
     candidate.underlying,
     candidate.strategy,
@@ -29,18 +29,16 @@ export function evaluationIdentity(candidate: AlphaEvaluationCandidate): string 
 export default function AlphaEvaluationPanel({
   candidate,
   quantityControl,
+  selectionKey,
 }: {
   candidate: AlphaEvaluationCandidate | null;
   quantityControl?: ReactNode;
+  selectionKey?: string;
 }) {
   const t = useT(evaluationMessages);
   const client = useQueryClient();
-  const [reserve, setReserve] = useState(
-    candidate?.costReserve == null ? '' : String(candidate.costReserve),
-  );
-  const [budget, setBudget] = useState(
-    candidate?.lossBudget == null ? '' : String(candidate.lossBudget),
-  );
+  const [reserveInput, setReserve] = useState<string | null>(null);
+  const [budgetInput, setBudget] = useState<string | null>(null);
   const [scenarioEnabled, setScenarioEnabled] = useState(false);
   const [mean, setMean] = useState('');
   const [vol, setVol] = useState('');
@@ -48,18 +46,7 @@ export default function AlphaEvaluationPanel({
   const [thesis, setThesis] = useState('');
   const [invalidation, setInvalidation] = useState('');
   const [validationError, setValidationError] = useState(false);
-  const identity = candidate == null ? null : evaluationIdentity(candidate);
-  const formKey = JSON.stringify([
-    identity,
-    reserve,
-    budget,
-    scenarioEnabled,
-    mean,
-    vol,
-    uncertainty,
-    thesis,
-    invalidation,
-  ]);
+  const identity = selectionKey ?? (candidate == null ? null : evaluationIdentity(candidate));
   const evaluation = useMutation({
     mutationFn: async (input: { request: AlphaEvaluationRequest; formKey: string }) => ({
       response: AlphaEvaluationResponseSchema.parse(
@@ -75,6 +62,24 @@ export default function AlphaEvaluationPanel({
     retry: false,
   });
   const result = evaluation.data?.response;
+  const displayedCandidate = candidate ?? result?.request.candidate ?? null;
+  const reserve =
+    reserveInput ??
+    (displayedCandidate?.costReserve == null ? '' : String(displayedCandidate.costReserve));
+  const budget =
+    budgetInput ??
+    (displayedCandidate?.lossBudget == null ? '' : String(displayedCandidate.lossBudget));
+  const formKey = JSON.stringify([
+    identity,
+    reserve,
+    budget,
+    scenarioEnabled,
+    mean,
+    vol,
+    uncertainty,
+    thesis,
+    invalidation,
+  ]);
   const unchanged = evaluation.data?.formKey === formKey;
   const saved = save.isSuccess && save.variables?.id === result?.id;
 
@@ -108,13 +113,15 @@ export default function AlphaEvaluationPanel({
       <summary>{t('title')}</summary>
       <div className={styles.body}>
         <p>{t('intro')}</p>
-        {candidate != null && (
+        {displayedCandidate != null && (
           <div className={styles.identity}>
             <span>
-              {candidate.underlying} · {candidate.strategy}
+              {displayedCandidate.underlying} · {displayedCandidate.strategy}
             </span>
-            <span>{formatExpiry(new Date(candidate.expiryTs).toISOString().slice(0, 10))}</span>
-            {candidate.legs.map((leg) => (
+            <span>
+              {formatExpiry(new Date(displayedCandidate.expiryTs).toISOString().slice(0, 10))}
+            </span>
+            {displayedCandidate.legs.map((leg) => (
               <span key={`${leg.venue}:${leg.side}:${leg.instrument}`}>
                 {leg.side} {leg.quantity} · {leg.venue} · {leg.instrument}
               </span>
@@ -122,7 +129,8 @@ export default function AlphaEvaluationPanel({
           </div>
         )}
         {quantityControl}
-        {candidate == null ? (
+        {candidate == null && result != null && <p>{t('quoteUnavailable')}</p>}
+        {displayedCandidate == null ? (
           <p>{t('noCandidate')}</p>
         ) : (
           <>
@@ -211,7 +219,11 @@ export default function AlphaEvaluationPanel({
               </label>
             </div>
             <div className={styles.actions}>
-              <button type="button" disabled={evaluation.isPending} onClick={evaluate}>
+              <button
+                type="button"
+                disabled={evaluation.isPending || candidate == null}
+                onClick={evaluate}
+              >
                 {t(evaluation.isPending ? 'evaluating' : 'evaluate')}
               </button>
             </div>

@@ -4,9 +4,11 @@ import websocket from '@fastify/websocket';
 import { once } from 'node:events';
 import { revokePrivateWebSockets } from '../../websocket-security.js';
 
-const { storeMock, consumeWebSocketTicketMock } = vi.hoisted(() => ({
+const { storeMock, consumeWebSocketTicketMock, ensureParadexConnectedMock, getRuntimeMock } = vi.hoisted(() => ({
   storeMock: { enabled: false as boolean },
   consumeWebSocketTicketMock: vi.fn(),
+  ensureParadexConnectedMock: vi.fn().mockResolvedValue(true),
+  getRuntimeMock: vi.fn(),
 }));
 
 vi.mock('../../trading-services.js', () => ({
@@ -20,11 +22,13 @@ vi.mock('../../websocket-ticket-service.js', () => ({
 
 vi.mock('../../portfolio-services.js', () => ({
   bootstrapPortfolioForAccount: vi.fn().mockReturnValue(undefined),
-  getOrCreatePortfolioRuntime: vi.fn().mockReturnValue({
+  getOrCreatePortfolioRuntime: getRuntimeMock.mockReturnValue({
     getSnapshot: () => null,
     subscribe: () => () => {},
   }),
 }));
+
+vi.mock('./venue-credentials.js', () => ({ ensureParadexConnected: ensureParadexConnectedMock }));
 
 vi.mock('./events.js', () => ({
   portfolioEvents: { subscribe: () => () => {} },
@@ -68,6 +72,8 @@ describe('WS /ws/portfolio auth gate', () => {
   beforeEach(() => {
     storeMock.enabled = false;
     consumeWebSocketTicketMock.mockReset();
+    ensureParadexConnectedMock.mockReset().mockResolvedValue(true);
+    getRuntimeMock.mockClear();
   });
 
   it('closes an already authenticated socket when the user signs out', async () => {
@@ -78,6 +84,16 @@ describe('WS /ws/portfolio auth gate', () => {
     revokePrivateWebSockets('logout-portfolio');
     await closed;
     expect(ws.readyState).toBe(WS_CLOSED);
+  });
+
+  it('closes a disconnected Paradex session before publishing an empty portfolio', async () => {
+    storeMock.enabled = true;
+    consumeWebSocketTicketMock.mockReturnValue({ id: 'usr_alice', accountId: 'acct_alice' });
+    ensureParadexConnectedMock.mockResolvedValueOnce(false);
+    const ws = await app.injectWS('/ws/portfolio?ticket=alice&source=paradex');
+    expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
+    expect(ensureParadexConnectedMock).toHaveBeenCalledWith('acct_alice');
+    expect(getRuntimeMock).not.toHaveBeenCalled();
   });
 
   it('closes anonymous connections when persistence is disabled without the dev bypass', async () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 
-const { storeMock, usersStoreMock, verifyClerkTokenMock } = vi.hoisted(() => ({
+const { storeMock, usersStoreMock, verifyClerkTokenMock, ensureParadexConnectedMock } = vi.hoisted(() => ({
   storeMock: {
     enabled: false as boolean,
     ensureAccount: vi.fn().mockResolvedValue(undefined),
@@ -12,6 +12,7 @@ const { storeMock, usersStoreMock, verifyClerkTokenMock } = vi.hoisted(() => ({
     upsertByClerkId: vi.fn(),
   },
   verifyClerkTokenMock: vi.fn(),
+  ensureParadexConnectedMock: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('../../trading-services.js', async () => {
@@ -22,6 +23,11 @@ vi.mock('../../trading-services.js', async () => {
     exchangePortfolioLedgerStore: new NoopExchangePortfolioLedgerStore(),
   };
 });
+
+vi.mock('./venue-credentials.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./venue-credentials.js')>()),
+  ensureParadexConnected: ensureParadexConnectedMock,
+}));
 
 vi.mock('../../clerk-verifier.js', () => ({
   verifyClerkToken: verifyClerkTokenMock,
@@ -83,6 +89,7 @@ describe('Portfolio REST auth gate', () => {
     usersStoreMock.getByClerkId.mockReset();
     usersStoreMock.upsertByClerkId.mockReset();
     verifyClerkTokenMock.mockReset();
+    ensureParadexConnectedMock.mockReset().mockResolvedValue(true);
   });
 
   it('returns 401 on anonymous GET /portfolio/positions when persistence is enabled', async () => {
@@ -90,6 +97,42 @@ describe('Portfolio REST auth gate', () => {
     const res = await app.inject({ method: 'GET', url: '/api/portfolio/positions' });
     expect(res.statusCode).toBe(401);
     expect(res.json()).toMatchObject({ error: 'unauthorized' });
+  });
+
+  it('does not restore private connections before authentication', async () => {
+    storeMock.enabled = true;
+    const res = await app.inject({ url: '/api/portfolio/positions?source=paradex' });
+    expect(res.statusCode).toBe(401);
+    expect(ensureParadexConnectedMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/api/portfolio/positions?source=paradex',
+    '/api/portfolio/paradex/account',
+    '/api/portfolio/equity-history?venue=paradex',
+  ])('restores the authenticated account before reading %s', async (url) => {
+    storeMock.enabled = true;
+    verifyClerkTokenMock.mockResolvedValue({ clerkUserId: 'user_carol' });
+    usersStoreMock.getByClerkId.mockResolvedValue({ id: 'usr_carol', defaultAccountId: 'acct_carol' });
+    ensureParadexConnectedMock.mockRejectedValueOnce(new Error('private upstream detail'));
+    const res = await app.inject({ url, headers: { authorization: 'Bearer carol-token' } });
+    expect(ensureParadexConnectedMock).toHaveBeenCalledWith('acct_carol');
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toEqual({ error: 'venue_connection_unavailable' });
+    expect(res.body).not.toContain('private upstream detail');
+  });
+
+  it('reports a disconnected Paradex account instead of returning cached positions', async () => {
+    storeMock.enabled = true;
+    verifyClerkTokenMock.mockResolvedValue({ clerkUserId: 'user_carol' });
+    usersStoreMock.getByClerkId.mockResolvedValue({ id: 'usr_carol', defaultAccountId: 'acct_carol' });
+    ensureParadexConnectedMock.mockResolvedValueOnce(false);
+    const res = await app.inject({
+      url: '/api/portfolio/positions?source=paradex',
+      headers: { authorization: 'Bearer carol-token' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('venue_not_connected');
   });
 
   it('returns 401 on anonymous POST /portfolio/venue-credentials/derive/session-key when persistence is enabled', async () => {

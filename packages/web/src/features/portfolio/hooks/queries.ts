@@ -63,6 +63,7 @@ export function useEquityHistory(venue: EquityHistoryVenue, range: EquityHistory
     queryFn: () => fetchEquityHistory(venue, range),
     enabled: session.status === 'ready',
     staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
     retry: false,
   });
 }

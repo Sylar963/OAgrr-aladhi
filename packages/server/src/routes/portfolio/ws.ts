@@ -15,6 +15,7 @@ import { authDevBypassActive } from '../../user-service.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
 import { protectWebSocket, registerPrivateWebSocket } from '../../websocket-security.js';
 import { portfolioEvents } from './events.js';
+import { ensureParadexConnected } from './venue-credentials.js';
 
 const WS_OPEN = 1;
 
@@ -97,6 +98,9 @@ export async function portfolioWsRoute(app: FastifyInstance) {
       });
 
       try {
+        if (source === 'paradex' && !(await ensureParadexConnected(accountId))) {
+          throw new Error('Reconnect Paradex in Portfolio to load your account.');
+        }
         await bootstrapPortfolioForAccount(accountId, source, underlying);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -105,6 +109,10 @@ export async function portfolioWsRoute(app: FastifyInstance) {
           'portfolio ws: bootstrap failed',
         );
         send(socket, { type: 'error', code: 'bootstrap_failed', message });
+        if (source === 'paradex') {
+          socket.close(1013, 'Account connection unavailable');
+          return;
+        }
       }
       if (disposed) return;
 

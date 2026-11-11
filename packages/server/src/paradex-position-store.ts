@@ -67,7 +67,7 @@ export class ParadexPositionStore implements PositionStore {
   }
 
   async connect(creds: ParadexPositionStoreCreds): Promise<void> {
-    await this.disconnect(creds.accountId);
+    await this.disconnectClient(creds.accountId);
     const client = this.createClient({ readonlyToken: creds.readonlyToken });
     const unsubscribe = client.subscribe((incoming) => {
       if (this.clients.get(creds.accountId) !== client) return;
@@ -86,17 +86,8 @@ export class ParadexPositionStore implements PositionStore {
   }
 
   async disconnect(accountId: string): Promise<void> {
-    const timer = this.disconnectTimers.get(accountId);
-    if (timer != null) clearTimeout(timer);
-    this.disconnectTimers.delete(accountId);
     this.retainCounts.delete(accountId);
-    this.unsubscribes.get(accountId)?.();
-    this.unsubscribes.delete(accountId);
-    const client = this.clients.get(accountId);
-    if (client != null) {
-      this.clients.delete(accountId);
-      await client.dispose();
-    }
+    await this.disconnectClient(accountId);
   }
 
   retain(accountId: string): void {
@@ -158,6 +149,19 @@ export class ParadexPositionStore implements PositionStore {
   async dispose(): Promise<void> {
     await Promise.allSettled([...this.clients.keys()].map((id) => this.disconnect(id)));
     this.listeners.clear();
+  }
+
+  private async disconnectClient(accountId: string): Promise<void> {
+    const timer = this.disconnectTimers.get(accountId);
+    if (timer != null) clearTimeout(timer);
+    this.disconnectTimers.delete(accountId);
+    this.unsubscribes.get(accountId)?.();
+    this.unsubscribes.delete(accountId);
+    const client = this.clients.get(accountId);
+    if (client != null) {
+      this.clients.delete(accountId);
+      await client.dispose();
+    }
   }
 
   private scheduleDisconnect(accountId: string): void {

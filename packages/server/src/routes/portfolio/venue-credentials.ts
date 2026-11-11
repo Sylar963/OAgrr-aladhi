@@ -259,6 +259,20 @@ export async function restoreStoredVenue(
   return reconnectStoredVenue(accountId, venue);
 }
 
+const paradexReconnects = new Map<string, Promise<boolean>>();
+
+export async function ensureParadexConnected(accountId: string): Promise<boolean> {
+  const pending = paradexReconnects.get(accountId);
+  if (pending != null) return pending;
+  if (paradexPositionStore.isConnected(accountId)) return true;
+  if (!privateAdaptersEnabled() || !venueCredentialsStore.enabled) return false;
+  const reconnect = reconnectStoredVenue(accountId, 'paradex')
+    .then((outcome) => outcome === 'connected')
+    .finally(() => paradexReconnects.delete(accountId));
+  paradexReconnects.set(accountId, reconnect);
+  return reconnect;
+}
+
 async function disconnectVenue(accountId: string, venue: VenueId): Promise<void> {
   if (venue === 'derive') {
     await derivePositionStore.disconnect(accountId);

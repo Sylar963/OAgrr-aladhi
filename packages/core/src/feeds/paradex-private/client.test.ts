@@ -20,6 +20,7 @@ const option = {
 
 describe('ParadexPrivateClient', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -47,6 +48,76 @@ describe('ParadexPrivateClient', () => {
       vi.fn().mockResolvedValue(jsonResponse(401, { error: 'INVALID_TOKEN' })),
     );
     await expect(client.start()).rejects.toBeInstanceOf(ParadexAuthError);
+  });
+
+  it('requests the required history resolution and keeps only the requested window', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        data: [1000, 1100],
+        timestamps: [1_790_000_000_000, 1_791_000_000_000],
+      }),
+    );
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
+    expect(await client.fetchEquityHistory(1_790_500_000_000)).toEqual([
+      { ts: 1_791_000_000_000, equityUsd: 1100 },
+    ]);
+    const url = new URL(fetchImpl.mock.calls[0]![0]);
+    expect(url.searchParams.get('type')).toBe('value');
+    expect(url.searchParams.get('resolution')).toBe('alltime');
+    expect(fetchImpl.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+    await client.dispose();
+  });
+
+  it('recovers polling after a hung positions request times out', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), ms);
+      return controller.signal;
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { results: [] }))
+      .mockImplementationOnce(
+        (_url: string, options: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            options.signal!.addEventListener('abort', () => reject(options.signal!.reason), {
+              once: true,
+            });
+          }),
+      )
+      .mockResolvedValue(jsonResponse(200, { results: [option] }));
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
+    await client.start();
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(client.getLatestLegs()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(client.getLatestLegs()).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    await client.dispose();
+  });
+
+  it('does not restart polling when disposed during the initial positions read', async () => {
+    vi.useFakeTimers();
+    let resolve!: (response: Response) => void;
+    const fetchImpl = vi.fn().mockImplementation(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    );
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
+    const listener = vi.fn();
+    client.subscribe(listener);
+    const starting = client.start();
+    await client.dispose();
+    resolve(jsonResponse(200, { results: [option] }));
+    await starting;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]![1].signal.aborted).toBe(true);
+    expect(listener).not.toHaveBeenCalled();
+    expect(client.getLatestLegs()).toEqual([]);
   });
 
   it('stops polling once the token is revoked', async () => {

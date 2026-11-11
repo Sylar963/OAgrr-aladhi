@@ -38,6 +38,8 @@ export class ParadexPrivateClient {
   private latestLegs: PositionLeg[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private refreshInFlight: Promise<void> | null = null;
+  private disposed = false;
+  private readonly abortController = new AbortController();
   private readonly log = feedLogger('paradex-private');
 
   constructor(
@@ -47,6 +49,7 @@ export class ParadexPrivateClient {
 
   async start(): Promise<void> {
     await this.fetchPositions();
+    if (this.disposed) return;
     this.timer = setInterval(() => void this.refresh(), POSITIONS_REFRESH_MS);
     this.timer.unref?.();
   }
@@ -146,7 +149,7 @@ export class ParadexPrivateClient {
   private async read(path: string): Promise<unknown> {
     const res = await this.fetchImpl(`${PARADEX_REST_BASE_URL}${path}`, {
       headers: { Authorization: `Bearer ${this.creds.readonlyToken}` },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([this.abortController.signal, AbortSignal.timeout(10_000)]),
     });
     if (res.status === 401 || res.status === 403) throw new ParadexAuthError(res.status);
     if (!res.ok) throw new Error(`Paradex read HTTP ${res.status}`);
@@ -154,19 +157,18 @@ export class ParadexPrivateClient {
   }
 
   async fetchEquityHistory(fromMs: number): Promise<EquityHistoryPoint[]> {
-    const res = await this.fetchImpl(`${PARADEX_REST_BASE_URL}/account/history?type=value`, {
-      headers: { Authorization: `Bearer ${this.creds.readonlyToken}` },
-    });
-    if (res.status === 401 || res.status === 403) throw new ParadexAuthError(res.status);
-    if (!res.ok) throw new Error(`Paradex account history HTTP ${res.status}`);
-    const parsed = ParadexAccountHistorySchema.safeParse(await res.json());
-    if (!parsed.success)
-      throw new Error(`Paradex account history parse failed: ${parsed.error.message}`);
-    return paradexAccountHistoryToPoints(parsed.data).filter((point) => point.ts >= fromMs);
+    // Paradex requires a resolution even though its OpenAPI spec omits it.
+    // Its portfolio uses alltime for windows longer than 800 hours.
+    const parsed = ParadexAccountHistorySchema.parse(
+      await this.read('/account/history?type=value&resolution=alltime'),
+    );
+    return paradexAccountHistoryToPoints(parsed).filter((point) => point.ts >= fromMs);
   }
 
   async dispose(): Promise<void> {
+    this.disposed = true;
     this.stopPolling();
+    this.abortController.abort();
     this.listeners.clear();
   }
 
@@ -178,9 +180,11 @@ export class ParadexPrivateClient {
   }
 
   private refresh(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
     if (this.refreshInFlight != null) return this.refreshInFlight;
     this.refreshInFlight = this.fetchPositions()
       .catch((err: unknown) => {
+        if (this.disposed) return;
         if (err instanceof ParadexAuthError) {
           this.log.warn({ err: err.message }, 'paradex read-only token rejected; polling stopped');
           this.stopPolling();
@@ -195,12 +199,8 @@ export class ParadexPrivateClient {
   }
 
   private async fetchPositions(): Promise<void> {
-    const res = await this.fetchImpl(`${PARADEX_REST_BASE_URL}/positions`, {
-      headers: { Authorization: `Bearer ${this.creds.readonlyToken}` },
-    });
-    if (res.status === 401 || res.status === 403) throw new ParadexAuthError(res.status);
-    if (!res.ok) throw new Error(`Paradex positions HTTP ${res.status}`);
-    const parsed = ParadexPositionsResponseSchema.safeParse(await res.json());
+    const parsed = ParadexPositionsResponseSchema.safeParse(await this.read('/positions'));
+    if (this.disposed) return;
     if (!parsed.success) throw new Error(`Paradex positions parse failed: ${parsed.error.message}`);
     const legs = paradexPositionsToLegs(parsed.data.results);
     this.latestLegs = legs;

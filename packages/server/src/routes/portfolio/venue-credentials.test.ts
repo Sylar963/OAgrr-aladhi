@@ -93,6 +93,7 @@ vi.mock('../../portfolio-services.js', () => ({ getOrCreatePortfolioRuntime: vi.
 
 import { getVenueCredentialCipher, venueCredentialContext } from '../../venue-credential-cipher.js';
 import {
+  ensureParadexConnected,
   isMainnetVenueConnected,
   portfolioVenueCredentialsRoute,
   restoreStoredVenue,
@@ -261,6 +262,7 @@ describe('Paradex read-only key routes', () => {
   beforeEach(() => {
     credentialsStoreMock.rows.clear();
     paradexStoreMock.connect.mockReset().mockResolvedValue(undefined);
+    paradexStoreMock.isConnected.mockReset().mockReturnValue(false);
   });
 
   it('serves the token settings the browser should request', async () => {
@@ -296,6 +298,76 @@ describe('Paradex read-only key routes', () => {
       account: ACCOUNT,
       expiresAtMs: exp * 1000,
     });
+  });
+
+  it('restores an idle Paradex connection once for concurrent account reads', async () => {
+    const cipher = getVenueCredentialCipher()!;
+    credentialsStoreMock.put(
+      'paper-default',
+      'paradex',
+      'prod',
+      cipher.encrypt(
+        {
+          readonlyToken: 'saved-token',
+          account: ACCOUNT,
+          expiresAtMs: Date.now() + 60_000,
+        },
+        venueCredentialContext('paper-default', 'paradex'),
+      ),
+    );
+    expect(
+      await Promise.all([
+        ensureParadexConnected('paper-default'),
+        ensureParadexConnected('paper-default'),
+      ]),
+    ).toEqual([true, true]);
+    expect(paradexStoreMock.connect).toHaveBeenCalledTimes(1);
+    expect(paradexStoreMock.connect).toHaveBeenCalledWith({
+      accountId: 'paper-default',
+      readonlyToken: 'saved-token',
+    });
+  });
+
+  it('keeps a live connection and does not reconnect an expired token', async () => {
+    paradexStoreMock.isConnected.mockReturnValueOnce(true);
+    expect(await ensureParadexConnected('paper-default')).toBe(true);
+    const cipher = getVenueCredentialCipher()!;
+    credentialsStoreMock.put(
+      'paper-default',
+      'paradex',
+      'prod',
+      cipher.encrypt(
+        {
+          readonlyToken: 'expired-token',
+          account: ACCOUNT,
+          expiresAtMs: Date.now() - 1000,
+        },
+        venueCredentialContext('paper-default', 'paradex'),
+      ),
+    );
+    expect(await ensureParadexConnected('paper-default')).toBe(false);
+    expect(paradexStoreMock.connect).not.toHaveBeenCalled();
+  });
+
+  it('allows an idle connection to retry after a transient restore failure', async () => {
+    const cipher = getVenueCredentialCipher()!;
+    credentialsStoreMock.put(
+      'paper-default',
+      'paradex',
+      'prod',
+      cipher.encrypt(
+        {
+          readonlyToken: 'saved-token',
+          account: ACCOUNT,
+          expiresAtMs: Date.now() + 60_000,
+        },
+        venueCredentialContext('paper-default', 'paradex'),
+      ),
+    );
+    paradexStoreMock.connect.mockRejectedValueOnce(new Error('Timed out'));
+    await expect(ensureParadexConnected('paper-default')).rejects.toThrow('Timed out');
+    expect(await ensureParadexConnected('paper-default')).toBe(true);
+    expect(paradexStoreMock.connect).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an expired or malformed key without contacting Paradex', async () => {

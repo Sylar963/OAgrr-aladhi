@@ -20,6 +20,11 @@ const messages = defineMessages(
     loading: 'Loading @{handle}…',
     equity: 'Equity · {date}',
     pnlSince: 'Equity change since {date}',
+    venuePnl: 'Venue P&L',
+    capitalReturn: 'P&L / net capital',
+    pnlBasisNote:
+      'P&L is reported by the venue. Net capital is account equity minus period P&L; this percentage is not a time-weighted return.',
+    pnlHistory: 'Venue P&L history',
     return: 'Equity change %',
     equityBasisNote:
       'Equity is venue account value. Equity change includes deposits and withdrawals.',
@@ -37,7 +42,7 @@ const messages = defineMessages(
     shortDelta: 'Short delta',
     deltaUnknown: 'Delta unavailable',
     closedTrades: 'Closed trades · {n}',
-    noFillHistory: 'does not report fill history.',
+    noFillHistory: 'fill history is not connected in this app.',
     noClosingFills: 'No closing fills yet.',
     instrument: 'Instrument',
     side: 'Side',
@@ -58,6 +63,11 @@ const messages = defineMessages(
     loading: 'Cargando @{handle}…',
     equity: 'Equity · {date}',
     pnlSince: 'Cambio de equity desde {date}',
+    venuePnl: 'PnL del exchange',
+    capitalReturn: 'PnL / capital neto',
+    pnlBasisNote:
+      'El PnL lo informa el exchange. El capital neto es el equity menos el PnL del período; este porcentaje no es un retorno ponderado por tiempo.',
+    pnlHistory: 'Historial de PnL del exchange',
     return: 'Cambio de equity %',
     equityBasisNote:
       'Equity es el valor de la cuenta en el exchange. El cambio incluye depósitos y retiros.',
@@ -75,7 +85,7 @@ const messages = defineMessages(
     shortDelta: 'Delta corto',
     deltaUnknown: 'Delta no disponible',
     closedTrades: 'Trades cerrados · {n}',
-    noFillHistory: 'no reporta historial de ejecuciones.',
+    noFillHistory: 'no tiene historial de ejecuciones conectado en esta app.',
     noClosingFills: 'Aún no hay ejecuciones de cierre.',
     instrument: 'Instrumento',
     side: 'Lado',
@@ -160,25 +170,45 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
               value={fmtUsd(trader.equityUsd)}
             />
             <Stat
-              label={t('pnlSince', { date: fmtDate(trader.startedAt, locale) })}
+              label={
+                trader.performanceBasis === 'venue_pnl'
+                  ? t('venuePnl')
+                  : t('pnlSince', { date: fmtDate(trader.startedAt, locale) })
+              }
               value={signedUsd(trader.pnlUsd)}
               tone={tone(trader.pnlUsd)}
             />
             <Stat
-              label={t('return')}
-              value={`${trader.returnPct > 0 ? '+' : ''}${(trader.returnPct * 100).toFixed(2)}%`}
+              label={t(trader.performanceBasis === 'venue_pnl' ? 'capitalReturn' : 'return')}
+              value={
+                trader.returnPct == null
+                  ? '—'
+                  : `${trader.returnPct > 0 ? '+' : ''}${(trader.returnPct * 100).toFixed(2)}%`
+              }
               tone={tone(trader.returnPct)}
             />
             <Stat label={t('sharingSince')} value={fmtDate(trader.sharingSince, locale)} />
           </div>
 
-          <p className={styles.empty}>{t('equityBasisNote')}</p>
+          <p className={styles.empty}>
+            {t(trader.performanceBasis === 'venue_pnl' ? 'pnlBasisNote' : 'equityBasisNote')}
+          </p>
 
           <EquityChart
-            points={trader.equityHistory}
+            {...(trader.performanceBasis === 'venue_pnl' && { label: t('pnlHistory') })}
+            points={
+              trader.performanceBasis === 'venue_pnl'
+                ? (trader.pnlHistory ?? []).map((point) => ({
+                    ts: point.ts,
+                    equityUsd: point.pnlUsd,
+                  }))
+                : trader.equityHistory
+            }
             baselineUsd={
-              trader.equityHistory.find((point) => point.equityUsd > 0)?.equityUsd ??
-              trader.equityUsd
+              trader.performanceBasis === 'venue_pnl'
+                ? 0
+                : (trader.equityHistory.find((point) => point.equityUsd > 0)?.equityUsd ??
+                  trader.equityUsd)
             }
           />
 

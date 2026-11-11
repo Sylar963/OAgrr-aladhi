@@ -10,7 +10,8 @@ import type {
 import {
   type Broadcaster,
   type BroadcastRegistry,
-  summarizeEquity,
+  summarizePerformance,
+  type VenueEquity,
   type VenueEquityCache,
 } from './social-broadcast.js';
 
@@ -28,6 +29,7 @@ export interface MemberSnapshot {
   broadcaster: Broadcaster;
   points: EquityHistoryPoint[];
   openPositions: number;
+  pnlPoints?: VenueEquity['pnlPoints'];
 }
 
 interface RankedEntry extends Omit<LeaderboardEntryDto, 'isMe'> {
@@ -41,7 +43,15 @@ export function rankEntries(
 ): RankedEntry[] {
   const rows: Array<Omit<RankedEntry, 'rank'>> = [];
   for (const member of members) {
-    const summary = summarizeEquity(member.points, period, nowMs);
+    const summary = summarizePerformance(
+      {
+        fetchedAt: nowMs,
+        points: member.points,
+        ...(member.pnlPoints != null && { pnlPoints: member.pnlPoints }),
+      },
+      period,
+      nowMs,
+    );
     if (!summary) continue;
     rows.push({
       userId: member.broadcaster.userId,
@@ -49,6 +59,7 @@ export function rankEntries(
       venue: member.broadcaster.venue,
       equityUsd: summary.equityUsd,
       equityAsOf: new Date(summary.equityAsOf).toISOString(),
+      performanceBasis: summary.performanceBasis ?? 'equity_change',
       pnlUsd: summary.pnlUsd,
       returnPct: summary.returnPct,
       since: new Date(summary.since).toISOString(),
@@ -56,7 +67,9 @@ export function rankEntries(
       openPositions: member.openPositions,
     });
   }
-  rows.sort((a, b) => b.returnPct - a.returnPct || b.pnlUsd - a.pnlUsd);
+  rows.sort(
+    (a, b) => (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity) || b.pnlUsd - a.pnlUsd,
+  );
   return rows.slice(0, LEADERBOARD_MAX_ENTRIES).map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
@@ -127,6 +140,7 @@ export class LeaderboardService {
         members.push({
           broadcaster,
           points: result.value.points,
+          ...(result.value.pnlPoints != null && { pnlPoints: result.value.pnlPoints }),
           openPositions:
             this.listLegs(broadcaster.accountId, broadcaster.venue).length +
             this.listLinear(broadcaster.accountId, broadcaster.venue).length,

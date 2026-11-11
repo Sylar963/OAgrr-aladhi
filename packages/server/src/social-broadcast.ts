@@ -33,6 +33,11 @@ export interface VenueAccountAccess {
     venue: SocialVenue,
     fromMs: number,
   ): Promise<EquityHistoryPoint[] | null>;
+  fetchPnlHistory?(
+    accountId: string,
+    venue: SocialVenue,
+    fromMs: number,
+  ): Promise<PnlHistoryPoint[] | null>;
   /** Newest first; null when the venue keeps no fill ledger. */
   loadTrades(
     accountId: string,
@@ -177,7 +182,13 @@ export class BroadcastRegistry {
   }
 }
 
+export interface PnlHistoryPoint {
+  ts: number;
+  pnlUsd: number;
+}
+
 export interface VenueEquity {
+  pnlPoints?: PnlHistoryPoint[];
   fetchedAt: number;
   /** Daily closes, oldest first. */
   points: EquityHistoryPoint[];
@@ -189,7 +200,7 @@ export class VenueEquityCache {
   private readonly inflight = new Map<string, Promise<VenueEquity | null>>();
 
   constructor(
-    private readonly access: Pick<VenueAccountAccess, 'fetchEquityHistory'>,
+    private readonly access: Pick<VenueAccountAccess, 'fetchEquityHistory' | 'fetchPnlHistory'>,
     private readonly now: () => number = Date.now,
     private readonly ttlMs = HISTORY_TTL_MS,
   ) {}
@@ -205,14 +216,23 @@ export class VenueEquityCache {
     const pending = this.inflight.get(key);
     if (pending) return pending;
     const nowMs = this.now();
-    const request = this.access
-      .fetchEquityHistory(accountId, venue, nowMs - HISTORY_DAYS * DAY_MS)
-      .then((points) => {
-        if (points == null) {
+    const fromMs = nowMs - HISTORY_DAYS * DAY_MS;
+    const needsPnl = venue === 'paradex' && this.access.fetchPnlHistory != null;
+    const request = Promise.all([
+      this.access.fetchEquityHistory(accountId, venue, fromMs),
+      needsPnl ? this.access.fetchPnlHistory!(accountId, venue, fromMs) : undefined,
+    ])
+      .then(([points, pnlPoints]) => {
+        if (points == null || (needsPnl && (pnlPoints == null || pnlPoints.length === 0))) {
           this.cache.delete(key);
           return null;
         }
-        const entry = { fetchedAt: nowMs, points: toDailyCloses(points) };
+        const entry: VenueEquity = { fetchedAt: nowMs, points: toDailyCloses(points) };
+        if (pnlPoints != null) {
+          entry.pnlPoints = toDailyCloses(
+            pnlPoints.map((point) => ({ ts: point.ts, equityUsd: point.pnlUsd })),
+          ).map((point) => ({ ts: point.ts, pnlUsd: point.equityUsd }));
+        }
         this.cache.set(key, entry);
         return entry;
       })
@@ -228,7 +248,8 @@ export interface EquitySummary {
   baselineUsd: number;
   since: number;
   pnlUsd: number;
-  returnPct: number;
+  returnPct: number | null;
+  performanceBasis?: 'equity_change' | 'venue_pnl';
 }
 
 /**
@@ -258,5 +279,36 @@ export function summarizeEquity(
     since: baseline.ts,
     pnlUsd,
     returnPct: pnlUsd / baseline.equityUsd,
+  };
+}
+
+export function summarizePerformance(
+  equity: VenueEquity,
+  period: LeaderboardPeriod,
+  nowMs: number,
+): EquitySummary | null {
+  if (equity.pnlPoints == null) return summarizeEquity(equity.points, period, nowMs);
+  const pnlByTs = new Map(equity.pnlPoints.map((point) => [point.ts, point.pnlUsd]));
+  const aligned = equity.points.flatMap((point) => {
+    const pnlUsd = pnlByTs.get(point.ts);
+    return pnlUsd == null ? [] : [{ ...point, pnlUsd }];
+  });
+  const firstFunded = aligned.findIndex((point) => point.equityUsd > 0);
+  if (firstFunded < 0) return null;
+  const first = aligned[firstFunded]!;
+  const latest = aligned.at(-1)!;
+  const fromMs = nowMs - (period === '7d' ? 7 : 30) * DAY_MS;
+  const baseline =
+    period === 'all' ? undefined : aligned.filter((point) => point.ts <= fromMs).at(-1);
+  const pnlUsd = latest.pnlUsd - (baseline?.pnlUsd ?? 0);
+  const capitalBaseUsd = latest.equityUsd - pnlUsd;
+  return {
+    equityUsd: latest.equityUsd,
+    equityAsOf: latest.ts,
+    baselineUsd: capitalBaseUsd,
+    since: baseline?.ts ?? first.ts,
+    pnlUsd,
+    returnPct: capitalBaseUsd > 0 ? pnlUsd / capitalBaseUsd : null,
+    performanceBasis: 'venue_pnl',
   };
 }

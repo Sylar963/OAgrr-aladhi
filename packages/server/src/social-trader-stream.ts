@@ -8,7 +8,7 @@ import type {
   TraderLiveDto,
 } from '@oggregator/protocol';
 
-import { type Broadcaster, summarizeEquity, type VenueEquity } from './social-broadcast.js';
+import { type Broadcaster, summarizePerformance, type VenueEquity } from './social-broadcast.js';
 import type { MarkLookup } from './social-leaderboard.js';
 
 export type TraderTarget = Broadcaster;
@@ -210,7 +210,8 @@ export class TraderStreamService {
         this.deps.loadEquity(entry.target),
         this.deps.loadClosedTrades(entry.target),
       ]);
-      if (equity) entry.data = { equity, closedTrades };
+      if (equity && summarizePerformance(equity, 'all', this.now()) != null)
+        entry.data = { equity, closedTrades };
     })().finally(() => {
       entry.loading = null;
     });
@@ -223,7 +224,13 @@ export class TraderStreamService {
     void this.deps
       .loadEquity(entry.target)
       .then(async (equity) => {
-        if (!equity || !entry.data || equity.fetchedAt === entry.data.equity.fetchedAt) return;
+        if (
+          !equity ||
+          !entry.data ||
+          equity.fetchedAt === entry.data.equity.fetchedAt ||
+          summarizePerformance(equity, 'all', this.now()) == null
+        )
+          return;
         entry.data = { ...entry.data, equity };
         await this.sendFull(entry, [...entry.watchers]);
       })
@@ -254,6 +261,11 @@ export class TraderStreamService {
           startedAt,
           sharingSince,
           equityHistory,
+          ...(equity.pnlPoints != null && {
+            pnlHistory: equity.pnlPoints
+              .filter((point) => point.ts >= (funded[0]?.ts ?? equity.fetchedAt))
+              .map((point) => ({ ts: new Date(point.ts).toISOString(), pnlUsd: point.pnlUsd })),
+          }),
           closedTrades: closedTrades ?? [],
           closedTradesAvailable: closedTrades != null,
         },
@@ -318,13 +330,25 @@ export class TraderStreamService {
     if (deltaStatusByUnderlying.length === 0) {
       deltaStatusByUnderlying = unknownDeltaRows(legs, linear);
     }
-    const summary = summarizeEquity(data.equity.points, 'all', nowMs);
-    const liveEquity = this.deps.getCurrentEquity?.(target) ?? null;
+    const summary = summarizePerformance(data.equity, 'all', nowMs);
+    const liveEquity =
+      summary?.performanceBasis === 'venue_pnl'
+        ? null
+        : (this.deps.getCurrentEquity?.(target) ?? null);
     const baselineUsd = summary?.baselineUsd ?? null;
     const equityUsd = liveEquity?.equityUsd ?? summary?.equityUsd ?? 0;
-    const pnlUsd = baselineUsd == null ? (summary?.pnlUsd ?? 0) : equityUsd - baselineUsd;
+    const pnlUsd =
+      summary?.performanceBasis === 'venue_pnl'
+        ? summary.pnlUsd
+        : baselineUsd == null
+          ? (summary?.pnlUsd ?? 0)
+          : equityUsd - baselineUsd;
     const returnPct =
-      baselineUsd == null || baselineUsd === 0 ? (summary?.returnPct ?? 0) : pnlUsd / baselineUsd;
+      summary?.performanceBasis === 'venue_pnl'
+        ? summary.returnPct
+        : baselineUsd == null || baselineUsd === 0
+          ? (summary?.returnPct ?? 0)
+          : pnlUsd / baselineUsd;
     const positionsHaveMarks = openPositions.every((position) => position.unrealizedPnlUsd != null);
     const linearHaveMarks = linear.every((position) => position.markPriceUsd != null);
     const totalUnrealizedPnlUsd =
@@ -343,6 +367,7 @@ export class TraderStreamService {
       equityAsOf: new Date(
         liveEquity?.updatedAt ?? summary?.equityAsOf ?? data.equity.fetchedAt,
       ).toISOString(),
+      performanceBasis: summary?.performanceBasis ?? 'equity_change',
       pnlUsd,
       returnPct,
       openPositions,

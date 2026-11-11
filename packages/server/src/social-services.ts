@@ -62,6 +62,8 @@ const venueAccess: VenueAccountAccess = {
       : [],
   fetchEquityHistory: async (accountId, venue, fromMs) =>
     onTestnet(accountId, venue) ? null : VENUE_STORES[venue].fetchEquityHistory(accountId, fromMs),
+  fetchPnlHistory: async (accountId, venue, fromMs) =>
+    venue === 'paradex' ? paradexPositionStore.fetchPnlHistory(accountId, fromMs) : null,
   loadTrades: async (accountId, venue, limit) => {
     if (venue === 'paradex' || !exchangePortfolioLedgerStore.enabled) return null;
     return exchangePortfolioLedgerStore.loadTrades(accountId, venue, limit);

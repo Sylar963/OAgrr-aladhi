@@ -23,8 +23,12 @@ const messages = defineMessages(
       'Members appear once their chosen venue account is connected and reports equity history.',
     trader: 'Trader',
     venue: 'Venue',
-    return: 'Equity change %',
-    pnl: 'Equity change',
+    return: 'Return / equity change %',
+    pnl: 'P&L / equity change',
+    basis: 'Basis',
+    venuePnl: 'Venue P&L',
+    equityChange: 'Equity incl. cash flows',
+    netCapitalNote: 'P&L / net capital (equity minus period P&L); not time-weighted.',
     equity: 'Equity',
     open: 'Open',
     sharingSince: 'Sharing since {date}',
@@ -44,8 +48,12 @@ const messages = defineMessages(
       'Los miembros aparecen cuando la cuenta del exchange elegida está conectada y reporta historial de equity.',
     trader: 'Trader',
     venue: 'Exchange',
-    return: 'Cambio de equity %',
-    pnl: 'Cambio de equity',
+    return: 'Retorno / cambio de equity %',
+    pnl: 'PnL / cambio de equity',
+    basis: 'Base',
+    venuePnl: 'PnL del exchange',
+    equityChange: 'Equity incl. flujos de capital',
+    netCapitalNote: 'PnL / capital neto (equity menos PnL del período); no ponderado por tiempo.',
     equity: 'Equity',
     open: 'Abiertas',
     sharingSince: 'Comparte desde {date}',
@@ -60,7 +68,8 @@ const PERIODS: ReadonlyArray<{ id: LeaderboardPeriod; label: keyof typeof messag
   { id: '7d', label: 'period7d' },
 ];
 
-function fmtReturn(fraction: number): string {
+function fmtReturn(fraction: number | null): string {
+  if (fraction == null) return '—';
   const pct = fraction * 100;
   return `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`;
 }
@@ -70,7 +79,8 @@ function fmtSignedUsd(value: number): string {
   return `${value > 0 ? '+' : ''}${fmtUsd(value)}`;
 }
 
-function tone(value: number): 'up' | 'down' | 'flat' {
+function tone(value: number | null): 'up' | 'down' | 'flat' {
+  if (value == null) return 'flat';
   if (value > 0) return 'up';
   if (value < 0) return 'down';
   return 'flat';
@@ -122,10 +132,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
         ) : isError ? (
           <EmptyState title={t('unavailable')} detail={ts('tryAgain')} />
         ) : !data || data.entries.length === 0 ? (
-          <EmptyState
-            title={t('emptyTitle')}
-            detail={t('emptyDetail')}
-          />
+          <EmptyState title={t('emptyTitle')} detail={t('emptyDetail')} />
         ) : (
           <table className={styles.table}>
             <thead>
@@ -133,6 +140,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                 <th className={styles.rank}>#</th>
                 <th>{t('trader')}</th>
                 <th>{t('venue')}</th>
+                <th>{t('basis')}</th>
                 <th className={styles.num}>{t('return')}</th>
                 <th className={styles.num}>{t('pnl')}</th>
                 <th className={styles.num}>{t('equity')}</th>
@@ -174,10 +182,15 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                   <td>
                     <VenueTag venue={entry.venue} />
                   </td>
+                  <td>{t(entry.performanceBasis === 'venue_pnl' ? 'venuePnl' : 'equityChange')}</td>
                   <td
                     className={styles.num}
                     data-tone={tone(entry.returnPct)}
-                    title={t('measuredFrom', { date: new Date(entry.since).toLocaleDateString() })}
+                    title={
+                      entry.performanceBasis === 'venue_pnl'
+                        ? t('netCapitalNote')
+                        : t('measuredFrom', { date: new Date(entry.since).toLocaleDateString() })
+                    }
                   >
                     {fmtReturn(entry.returnPct)}
                   </td>

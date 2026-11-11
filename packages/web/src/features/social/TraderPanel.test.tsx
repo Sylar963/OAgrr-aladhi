@@ -2,7 +2,8 @@ import type { PublicTraderDto } from '@oggregator/protocol';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./EquityChart', () => ({ default: () => null }));
+vi.mock('./EquityChart', () => ({ default: vi.fn(() => null) }));
+import EquityChart from './EquityChart';
 vi.mock('@hooks/useSpots', () => ({ useSpots: () => ({ data: [] }) }));
 
 import TraderPanel from './TraderPanel';
@@ -59,5 +60,37 @@ describe('TraderPanel', () => {
     render(<TraderPanel handle="theta" trader={TRADER} unavailable={null} onClose={() => {}} />);
     expect(screen.getByRole('heading', { name: 'Open positions · 0' })).toBeDefined();
     expect(screen.getByText('No open positions.')).toBeDefined();
+  });
+  it('shows negative venue P&L after deposits and charts P&L around zero', () => {
+    render(
+      <TraderPanel
+        handle="theta"
+        unavailable={null}
+        onClose={() => {}}
+        trader={{
+          ...TRADER,
+          venue: 'paradex',
+          equityUsd: 1181.66,
+          pnlUsd: -18.72,
+          returnPct: -18.72 / 1200.38,
+          performanceBasis: 'venue_pnl',
+          pnlHistory: [
+            { ts: '2026-11-07T12:00:00.000Z', pnlUsd: 0.63 },
+            { ts: '2026-11-11T12:00:00.000Z', pnlUsd: -18.72 },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText('Venue P&L')).toBeDefined();
+    expect(screen.getByText('-$18.72')).toBeDefined();
+    expect(screen.getByText('-1.56%')).toBeDefined();
+    expect(vi.mocked(EquityChart).mock.calls.at(-1)?.[0]).toMatchObject({
+      baselineUsd: 0,
+      label: 'Venue P&L history',
+      points: [
+        { ts: '2026-11-07T12:00:00.000Z', equityUsd: 0.63 },
+        { ts: '2026-11-11T12:00:00.000Z', equityUsd: -18.72 },
+      ],
+    });
   });
 });

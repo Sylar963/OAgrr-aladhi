@@ -68,6 +68,20 @@ describe('ParadexPrivateClient', () => {
     await client.dispose();
   });
 
+  it('reads venue cumulative P&L separately from equity and preserves losses', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, {
+      data: [0, -18.72], timestamps: [1_790_000_000_000, 1_791_000_000_000],
+    }));
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
+    expect(await client.fetchPnlHistory(1_790_500_000_000)).toEqual([
+      { ts: 1_791_000_000_000, pnlUsd: -18.72 },
+    ]);
+    const url = new URL(fetchImpl.mock.calls[0]![0]);
+    expect(url.searchParams.get('type')).toBe('pnl');
+    expect(url.searchParams.get('resolution')).toBe('alltime');
+    await client.dispose();
+  });
+
   it('recovers polling after a hung positions request times out', async () => {
     vi.useFakeTimers();
     vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {

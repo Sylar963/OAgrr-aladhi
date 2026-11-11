@@ -54,13 +54,14 @@ export const LeaderboardEntryDtoSchema = z.object({
   /** Latest account equity the venue reported; cash flows can affect equity change. */
   equityUsd: z.number(),
   equityAsOf: z.string().datetime(),
-  /** Change in account equity, not flow-adjusted trading P&L. */
+  /** Venue-reported P&L when performanceBasis is venue_pnl; otherwise change in equity. */
   pnlUsd: z.number(),
-  /** Fractional equity change over the period (0.12 = +12%); deposits and withdrawals count. */
-  returnPct: z.number(),
+  /** Fractional return on net capital for venue_pnl, or equity change including cash flows. */
+  returnPct: z.number().nullable(),
+  performanceBasis: z.enum(['equity_change', 'venue_pnl']).optional(),
   /** Start of the equity history the period was measured from. */
   since: z.string().datetime(),
-  /** When the trader first joined the leaderboard. */
+  /** When the current venue broadcast started. */
   sharingSince: z.string().datetime(),
   openPositions: z.number().int().nonnegative(),
   isMe: z.boolean(),
@@ -131,10 +132,11 @@ export const TraderLiveDtoSchema = z.object({
   /** Latest account equity the venue reported; cash flows can affect equity change. */
   equityUsd: z.number(),
   equityAsOf: z.string().datetime(),
-  /** Change in account equity, not flow-adjusted trading P&L. */
+  /** Venue-reported P&L when performanceBasis is venue_pnl; otherwise change in equity. */
   pnlUsd: z.number(),
-  /** Fractional equity change from the first funded close; deposits and withdrawals count. */
-  returnPct: z.number(),
+  /** Fractional return on net capital for venue_pnl, or equity change including cash flows. */
+  returnPct: z.number().nullable(),
+  performanceBasis: z.enum(['equity_change', 'venue_pnl']).optional(),
   openPositions: z.array(PublicPositionDtoSchema),
   linearPositions: z.array(LinearPositionSchema).optional(),
   /** Combined marked P&L for open options and linear hedges; null if any held mark is missing. */
@@ -149,10 +151,11 @@ export const PublicTraderDtoSchema = TraderLiveDtoSchema.extend({
   isMe: z.boolean(),
   /** First funded equity close in the venue history. */
   startedAt: z.string().datetime(),
-  /** When the trader first joined the leaderboard. */
+  /** When the current venue broadcast started. */
   sharingSince: z.string().datetime(),
   /** Daily account equity closes from the venue, oldest first. */
   equityHistory: z.array(EquityPointDtoSchema),
+  pnlHistory: z.array(z.object({ ts: z.string().datetime(), pnlUsd: z.number().finite() })).optional(),
   closedTrades: z.array(PublicClosedTradeDtoSchema),
   /** False when the venue does not report fill history (Paradex). */
   closedTradesAvailable: z.boolean(),

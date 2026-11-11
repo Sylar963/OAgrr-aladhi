@@ -13,10 +13,10 @@ const messages = defineMessages(
     sharedUsername: 'Your account username',
     sharedPositions: 'Your {venue} open positions, streamed live with marks and unrealized PnL',
     sharedDelta: 'Your live net delta and hedge status by underlying',
-    sharedNoFills: 'Closing fills are not shown: Paradex does not report fill history',
+    sharedNoFills: 'Closing fills are not shown: Paradex fill history is not connected in this app',
     sharedFills: 'Your {venue} closing fills with realized PnL',
     sharedEquity:
-      'Your {venue} account equity history and return, as the venue reports it (deposits and withdrawals included)',
+      'Your {venue} equity history and performance, with its calculation basis shown',
     username: 'Username',
     loading: 'Loading…',
     noUsername: 'No username on your account',
@@ -50,10 +50,10 @@ const messages = defineMessages(
     sharedPositions:
       'Tus posiciones abiertas en {venue}, transmitidas en vivo con mark y PnL no realizado',
     sharedDelta: 'Tu delta neto y estado de cobertura en vivo por subyacente',
-    sharedNoFills: 'No se muestran ejecuciones de cierre: Paradex no reporta historial de ejecuciones',
+    sharedNoFills: 'No se muestran ejecuciones de cierre: el historial de Paradex no está conectado en esta app',
     sharedFills: 'Tus ejecuciones de cierre en {venue} con PnL realizado',
     sharedEquity:
-      'Tu historial de equity y retorno de la cuenta de {venue}, tal como lo reporta el exchange (incluye depósitos y retiros)',
+      'Tu historial de equity y desempeño de {venue}, con su base de cálculo indicada',
     username: 'Usuario',
     loading: 'Cargando…',
     noUsername: 'Tu cuenta no tiene nombre de usuario',

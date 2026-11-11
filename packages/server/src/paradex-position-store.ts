@@ -137,6 +137,11 @@ export class ParadexPositionStore implements PositionStore {
     return client == null ? null : client.fetchEquityHistory(fromMs);
   }
 
+  async fetchPnlHistory(accountId: string, fromMs: number) {
+    const client = this.clients.get(accountId);
+    return client == null ? null : client.fetchPnlHistory(fromMs);
+  }
+
   isConnected(accountId: string): boolean {
     return this.clients.has(accountId);
   }

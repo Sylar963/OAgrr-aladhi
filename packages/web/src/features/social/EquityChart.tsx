@@ -15,9 +15,10 @@ const HEIGHT = 140;
 interface EquityChartProps {
   points: EquityPointDto[];
   baselineUsd: number;
+  label?: string;
 }
 
-export default function EquityChart({ points, baselineUsd }: EquityChartProps) {
+export default function EquityChart({ points, baselineUsd, label }: EquityChartProps) {
   const t = useT(messages);
   const gradientId = useId();
   if (points.length < 2) return null;
@@ -43,7 +44,7 @@ export default function EquityChart({ points, baselineUsd }: EquityChartProps) {
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       preserveAspectRatio="none"
       role="img"
-      aria-label={t('equitySinceStart')}
+      aria-label={label ?? t('equitySinceStart')}
       data-tone={up ? 'up' : 'down'}
     >
       <defs>

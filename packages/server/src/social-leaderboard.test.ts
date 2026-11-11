@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Broadcaster } from './social-broadcast.js';
-import { LeaderboardService } from './social-leaderboard.js';
+import { LeaderboardService, rankEntries } from './social-leaderboard.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z');
 const DAY_MS = 86_400_000;
@@ -119,4 +119,27 @@ describe('LeaderboardService', () => {
     await service.get('all', null);
     expect(registry.live).toHaveBeenCalledTimes(2);
   });
+});
+
+it('ranks deposit-adjusted Paradex losses instead of deposited capital', () => {
+  const result = rankEntries(
+    [
+      {
+        broadcaster: { ...BETA, venue: 'paradex' },
+        openPositions: 0,
+        points: [
+          { ts: NOW - DAY_MS, equityUsd: 200.63 },
+          { ts: NOW, equityUsd: 1181.66 },
+        ],
+        pnlPoints: [
+          { ts: NOW - DAY_MS, pnlUsd: 0.63 },
+          { ts: NOW, pnlUsd: -18.72 },
+        ],
+      },
+    ],
+    'all',
+    NOW,
+  );
+  expect(result[0]).toMatchObject({ pnlUsd: -18.72, performanceBasis: 'venue_pnl' });
+  expect(result[0]!.returnPct).toBeCloseTo(-18.72 / 1200.38);
 });

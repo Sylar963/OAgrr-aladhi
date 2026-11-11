@@ -257,4 +257,39 @@ describe('TraderStreamService', () => {
     await service.tick();
     expect(service.watchedCount).toBe(0);
   });
+  it('streams venue P&L and a zero-baseline history instead of treating deposits as profit', async () => {
+    const { service } = create(
+      deps({
+        loadEquity: async () => ({
+          fetchedAt: NOW,
+          points: [
+            { ts: NOW - DAY_MS, equityUsd: 200.63 },
+            { ts: NOW, equityUsd: 1181.66 },
+          ],
+          pnlPoints: [
+            { ts: NOW - DAY_MS, pnlUsd: 0.63 },
+            { ts: NOW, pnlUsd: -18.72 },
+          ],
+        }),
+      }),
+    );
+    const { watcher, messages } = viewer('usr_v');
+    await service.watch(watcher, { ...TARGET, venue: 'paradex' });
+    const full = ChatServerMessageSchema.parse(messages[0]);
+    if (full.type !== 'trader') throw new Error('expected trader frame');
+    expect(full.trader).toMatchObject({
+      pnlUsd: -18.72,
+      performanceBasis: 'venue_pnl',
+      pnlHistory: [
+        { ts: new Date(NOW - DAY_MS).toISOString(), pnlUsd: 0.63 },
+        { ts: new Date(NOW).toISOString(), pnlUsd: -18.72 },
+      ],
+    });
+    await service.tick();
+    const live = ChatServerMessageSchema.parse(messages.at(-1));
+    if (live.type !== 'trader_live') throw new Error('expected live frame');
+    expect(live.live.pnlUsd).toBe(-18.72);
+    expect(live.live.returnPct).toBeCloseTo(-18.72 / 1200.38);
+    service.dispose();
+  });
 });

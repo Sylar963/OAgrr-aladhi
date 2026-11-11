@@ -9,7 +9,7 @@ export interface UserProfileRow {
   leaderboardVisible: boolean;
   broadcastVenue: SocialBroadcastVenue | null;
   consentedAt: Date | null;
-  /** First time the user joined the leaderboard; kept when they leave and rejoin. */
+  /** Start of the current venue broadcast; reset when joining again or switching venues. */
   sharingSince: Date | null;
   updatedAt: Date;
 }
@@ -226,14 +226,17 @@ export class PostgresSocialStore implements SocialStore {
                leaderboard_visible = EXCLUDED.leaderboard_visible,
                broadcast_venue = EXCLUDED.broadcast_venue,
                leaderboard_consented_at = CASE
-                 WHEN EXCLUDED.leaderboard_visible AND NOT user_profiles.leaderboard_visible
+                 WHEN EXCLUDED.leaderboard_visible AND (NOT user_profiles.leaderboard_visible
+                   OR user_profiles.broadcast_venue IS DISTINCT FROM EXCLUDED.broadcast_venue)
                    THEN now()
                  ELSE user_profiles.leaderboard_consented_at
                END,
-               leaderboard_since = COALESCE(
-                 user_profiles.leaderboard_since,
-                 CASE WHEN EXCLUDED.leaderboard_visible THEN now() END
-               ),
+               leaderboard_since = CASE
+                 WHEN EXCLUDED.leaderboard_visible AND (NOT user_profiles.leaderboard_visible
+                   OR user_profiles.broadcast_venue IS DISTINCT FROM EXCLUDED.broadcast_venue
+                   OR user_profiles.leaderboard_since IS NULL) THEN now()
+                 ELSE user_profiles.leaderboard_since
+               END,
                updated_at = now()
          RETURNING ${PROFILE_COLUMNS}`,
         [input.userId, input.handle, input.leaderboardVisible, input.broadcastVenue],

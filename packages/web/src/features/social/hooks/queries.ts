@@ -26,7 +26,8 @@ export function useSocialProfile() {
     queryKey: SOCIAL_QKEY.profile(session.userId),
     queryFn: getSocialProfile,
     enabled: session.enabled,
-    staleTime: Infinity,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 }
 

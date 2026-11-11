@@ -166,6 +166,15 @@ export class ParadexPrivateClient {
     return paradexAccountHistoryToPoints(parsed).filter((point) => point.ts >= fromMs);
   }
 
+  async fetchPnlHistory(fromMs: number): Promise<Array<{ ts: number; pnlUsd: number }>> {
+    const history = ParadexAccountHistorySchema.parse(
+      await this.read('/account/history?type=pnl&resolution=alltime'),
+    );
+    return paradexAccountHistoryToPoints(history)
+      .filter((point) => point.ts >= fromMs)
+      .map((point) => ({ ts: point.ts, pnlUsd: point.equityUsd }));
+  }
+
   async dispose(): Promise<void> {
     this.disposed = true;
     this.stopPolling();

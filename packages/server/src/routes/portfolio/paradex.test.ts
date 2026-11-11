@@ -18,6 +18,7 @@ vi.mock('../../user-service.js', () => ({
 import { portfolioParadexRoutes } from './paradex.js';
 
 const summary = {
+  venueAccount: '0x123456789abcdef',
   equityUsd: 2000,
   freeCollateralUsd: 1500,
   initialMarginUsd: 500,

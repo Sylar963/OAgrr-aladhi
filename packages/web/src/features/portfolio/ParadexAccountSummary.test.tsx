@@ -31,6 +31,14 @@ describe('Paradex current equity', () => {
     expect(useEquity).toHaveBeenCalledWith(2000);
   });
 
+  it('shows the full exchange account address so users can identify a different saved account', () => {
+    const venueAccount = '0x' + 'a'.repeat(64);
+    mocks.account.mockReturnValue({ data: { ...summary(), venueAccount }, isError: false });
+    render(<ParadexAccountSummary />);
+    expect(screen.getByText(venueAccount)).toBeTruthy();
+    expect(screen.getByText(/Connected account/)).toBeTruthy();
+  });
+
   it('disables adopting cached equity when refresh fails', () => {
     mocks.account.mockReturnValue({ data: summary(), isError: true });
     const useEquity = vi.fn();

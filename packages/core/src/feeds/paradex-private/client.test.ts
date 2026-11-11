@@ -151,6 +151,7 @@ describe('Paradex account and RFQ reads', () => {
   it('reads current equity including P&L, not total collateral or historical closes', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse(200, {
+        account: '0x123456789abcdef',
         account_value: '136285.06918911',
         free_collateral: '73276.47229774',
         initial_margin_requirement: '63008.59689218',
@@ -162,6 +163,7 @@ describe('Paradex account and RFQ reads', () => {
     );
     const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
     expect(await client.fetchAccountSummary()).toMatchObject({
+      venueAccount: '0x123456789abcdef',
       equityUsd: 136285.06918911,
       freeCollateralUsd: 73276.47229774,
       initialMarginUsd: 63008.59689218,

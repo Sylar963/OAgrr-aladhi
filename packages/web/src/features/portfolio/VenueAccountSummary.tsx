@@ -14,6 +14,7 @@ const messages = defineMessages(
   {
     title: '{venue} account · all assets',
     equity: 'Equity',
+    accountAddress: 'Connected account',
     free: 'Free collateral',
     freeMargin: 'Free margin',
     mainnet: 'Mainnet',
@@ -33,6 +34,7 @@ const messages = defineMessages(
   {
     title: 'Cuenta {venue} · todos los activos',
     equity: 'Capital',
+    accountAddress: 'Cuenta conectada',
     free: 'Colateral libre',
     freeMargin: 'Margen libre',
     mainnet: 'Mainnet',
@@ -54,6 +56,7 @@ const messages = defineMessages(
 export interface VenueAccountSummaryProps {
   venue: 'Paradex' | 'Thalex';
   data?: {
+    venueAccount?: string | undefined;
     equityUsd: number;
     freeCollateralUsd: number | null;
     initialMarginUsd: number | null;
@@ -103,6 +106,11 @@ export default function VenueAccountSummary({
           </small>
         )}
       </header>
+      {data?.venueAccount && (
+        <p className={styles.accountAddress}>
+          {t('accountAddress')}: <code>{data.venueAccount}</code>
+        </p>
+      )}
       {data ? (
         <>
           <dl>

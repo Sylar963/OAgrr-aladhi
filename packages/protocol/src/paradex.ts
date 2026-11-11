@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const ParadexAccountSummarySchema = z.object({
+  venueAccount: z.string().min(1).optional(),
   equityUsd: z.number().finite(),
   freeCollateralUsd: z.number().finite().nullable(),
   initialMarginUsd: z.number().finite().nullable(),

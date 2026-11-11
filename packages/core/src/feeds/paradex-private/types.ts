@@ -54,6 +54,7 @@ const timestamp = z
   .transform((value) => value ?? null);
 
 export const ParadexAccountSchema = z.object({
+  account: z.string().min(1).optional(),
   account_value: decimal,
   free_collateral: optionalDecimal,
   initial_margin_requirement: optionalDecimal,

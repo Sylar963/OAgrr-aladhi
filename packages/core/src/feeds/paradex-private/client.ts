@@ -73,6 +73,7 @@ export class ParadexPrivateClient {
   async fetchAccountSummary(): Promise<ParadexAccountSummary> {
     const account = ParadexAccountSchema.parse(await this.read('/account'));
     return {
+      ...(account.account != null && { venueAccount: account.account }),
       equityUsd: account.account_value,
       freeCollateralUsd: account.free_collateral,
       initialMarginUsd: account.initial_margin_requirement,

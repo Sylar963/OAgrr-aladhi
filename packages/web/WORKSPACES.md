@@ -164,7 +164,10 @@ per layout in `ogg.expectedMovePanels.v1`; layout placement uses the existing Do
   are separate; neither is labeled as realized volatility. Alerts compare absolute return
   with the full-day opening benchmark, not with an elapsed-time volatility forecast.
 - Expand **ATM straddle** to select venue and expiry. It uses one venue and matching
-  settlement timestamps, fresh two-sided quotes and displayed sizes. USD premiums are
+  settlement timestamps, fresh two-sided quotes and displayed sizes. Expiry choices exclude
+  settled contracts using the selected venue's timestamps; retained dates in an overnight
+  catalog cannot become the default.
+  Catalogs without timestamps fall back to the asset's calendar date. USD premiums are
   per base unit (SPX points). The index-vol Black-76 model uses actual calendar time to
   expiry, not a one-day premium for every expiry. The surface reference excludes the ATM
   strike and interpolates implied variance in log strike between the nearest fresh OTM

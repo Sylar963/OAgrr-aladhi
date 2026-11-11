@@ -7,7 +7,7 @@ import {
 import { fetchJson } from '@lib/http';
 import { tradfiFetchJson } from '@lib/tradfi-http';
 import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
+import { ExpectedMoveExpiriesSchema, selectExpectedMoveExpiries } from './expiry-selection';
 
 function read(asset: ExpectedMoveAsset, path: string): Promise<unknown> {
   return asset === 'SPX' ? tradfiFetchJson<unknown>(path) : fetchJson<unknown>(path);
@@ -35,13 +35,6 @@ export function useExpectedMove(
   });
 }
 
-const ExpiriesSchema = z.object({
-  expiries: z.array(z.string().date()),
-  byVenue: z
-    .array(z.object({ venue: z.string(), expiries: z.array(z.string().date()) }))
-    .optional(),
-});
-
 export function useExpectedMoveExpiries(
   asset: ExpectedMoveAsset | null,
   venue: string,
@@ -51,13 +44,9 @@ export function useExpectedMoveExpiries(
     queryKey: ['expected-move-expiries', asset, venue],
     queryFn: async () => {
       if (asset == null) throw new Error('Unsupported expected-move asset');
-      const data = ExpiriesSchema.parse(await read(asset, `/expiries?underlying=${asset}`));
-      return [
-        ...(asset === 'SPX'
-          ? data.expiries
-          : (data.byVenue?.find((v) => v.venue === venue)?.expiries ?? [])),
-      ].sort();
+      return ExpectedMoveExpiriesSchema.parse(await read(asset, `/expiries?underlying=${asset}`));
     },
+    select: (data) => (asset == null ? [] : selectExpectedMoveExpiries(data, asset, venue)),
     enabled: asset != null && enabled,
     staleTime: 30_000,
     refetchInterval: 60_000,

@@ -1,232 +1,625 @@
 .panel {
-  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   height: 100%;
+  min-width: 0;
+  padding: 16px;
   overflow: auto;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font: 12px var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-.header,
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: end;
-}
 .header {
-  margin-bottom: var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .header h2 {
-  font-size: var(--text-sm);
+  margin: 5px 0 0;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
   color: var(--text-primary);
-  margin: 0 auto 4px 0;
+}
+.eyebrow {
+  color: var(--accent-primary);
+  font-size: 9px;
+  letter-spacing: 0.16em;
 }
 .panel label {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  font-size: 10px;
   color: var(--text-tertiary);
 }
-.panel select,
-.panel input,
-.panel button {
+.compactControl {
+  min-width: 100px;
+}
+.panel :is(button, select, input) {
+  font: inherit;
+}
+.panel :is(select, input[type="number"]) {
+  min-height: 31px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   background: var(--bg-input);
   color: var(--text-primary);
-  padding: 7px 8px;
-  font: inherit;
-  min-height: 34px;
+  padding: 5px 8px;
   max-width: 100%;
 }
-.panel input {
-  width: 100px;
+.panel button {
+  min-height: 30px;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 5px 9px;
 }
-.panel :is(select, input, button, summary):focus-visible {
+.panel button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.panel button[aria-pressed="true"] {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+.panel :is(button, select, input, summary, svg):focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 3px;
 }
-.source {
+.toolbar,
+.overlayBar,
+.controls {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  text-transform: uppercase;
-  color: var(--accent-primary);
-  letter-spacing: 0.06em;
-  margin: 14px 0;
 }
-.source span {
+.toolbar {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.segmented {
+  display: flex;
+}
+.segmented button {
+  border-radius: 0;
+}
+.segmented button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+.segmented button:last-child {
+  border-radius: 0 4px 4px 0;
+  margin-left: -1px;
+}
+.unitSelect {
+  margin-left: auto;
+}
+.state {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 10px;
+  margin-left: auto;
 }
-.metrics {
+.state i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+.state[data-stress="true"] {
+  color: var(--color-warning);
+}
+.state[data-stress="true"] i {
+  background: var(--color-warning);
+}
+.readouts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 5px 0 10px;
 }
-.metric {
+.readouts > div {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  align-items: start;
+  gap: 6px;
   min-width: 0;
+  padding: 0 16px;
+  border-left: 1px solid var(--border-subtle);
 }
-.metric > span {
+.readouts > div:first-child {
+  padding-left: 0;
+  border: 0;
+}
+.readouts :where(div) > span {
+  font-size: 10px;
   color: var(--text-tertiary);
 }
-.metric > strong {
+.readouts strong {
   color: var(--text-primary);
-  font-size: clamp(21px, 3cqi, 34px);
+  font-size: clamp(24px, 3.6cqi, 40px);
+  letter-spacing: -0.06em;
+  line-height: 1.15;
   font-weight: 500;
-  line-height: 1.2;
 }
-.metric > small {
-  color: var(--text-secondary);
-  font-size: 11px;
+.readouts [data-stress="true"] strong {
+  color: var(--color-warning);
 }
-.band {
-  margin: 30px 0 22px;
+.readouts small {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
 }
-.rail {
-  height: 7px;
-  position: relative;
-  background: var(--accent-primary-dim);
-  border: 1px solid var(--accent-primary);
-  border-radius: 2px;
-  margin: 0 6px;
+.panel .textButton {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-height: 20px;
+  color: var(--accent-primary);
+  text-align: left;
+  font-size: inherit;
 }
-.center {
-  position: absolute;
-  top: -5px;
-  bottom: -5px;
-  left: 50%;
-  border-left: 1px dashed var(--text-dim);
+.overlayBar {
+  font-size: 10px;
+  gap: 7px;
 }
-.marker {
-  position: absolute;
-  width: 3px;
-  height: 21px;
-  top: -8px;
+.overlayBar button {
+  min-height: 25px;
+  font-size: 10px;
+  padding: 4px 7px;
+  border-style: dashed;
+}
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+.tealSwatch,
+.whiteSwatch {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  background: var(--accent-primary);
+}
+.whiteSwatch {
   background: var(--text-primary);
-  transform: translateX(-50%);
-  box-shadow: 0 0 0 3px var(--bg-panel);
 }
-.boundaries,
-.foot {
+.chartSummary {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 5px;
+  font-size: 9px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.foot {
-  margin: 18px 0;
+.chart {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  flex: 1 0 320px;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.chart svg {
+  display: block;
+  font-family: var(--font-mono);
+  max-width: 100%;
+}
+.gridLine {
+  stroke: var(--border-subtle);
+  stroke-width: 0.7;
+  stroke-dasharray: 2 5;
+}
+.axisText {
+  fill: var(--text-tertiary);
+  font-size: 9px;
+}
+.chartTag {
+  fill: var(--text-secondary);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.future {
+  fill: var(--bg-elevated);
+  opacity: 0.2;
+}
+.outerCone {
+  fill: var(--accent-primary);
+  opacity: 0.035;
+}
+.innerCone {
+  fill: var(--accent-primary);
+  opacity: 0.12;
+}
+.coneEdge {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1.1;
+  opacity: 0.8;
+}
+.liveEdge {
+  fill: none;
+  stroke: var(--color-info);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 5;
+}
+.openLine {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+.spotPath {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.nowLine {
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.currentDot {
+  fill: var(--text-primary);
+  stroke: var(--bg-panel);
+  stroke-width: 2;
+}
+.gapDot {
+  fill: var(--text-primary);
+}
+.inspectLine {
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+}
+.eventCross {
+  fill: var(--bg-panel);
+  stroke: var(--color-warning);
+  stroke-width: 1.5;
+}
+.eventReturn {
+  fill: var(--accent-primary);
+  stroke: var(--bg-panel);
+  stroke-width: 1;
+}
+.buyLine {
+  stroke: var(--color-iv);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+}
+.sellLine {
+  stroke: var(--color-warning);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 4;
+}
+.strikeLine {
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+  stroke-dasharray: 9 4;
+}
+.buyDot {
+  fill: var(--color-iv);
+}
+.sellDot {
+  fill: var(--color-warning);
+}
+.coneLabel {
+  fill: var(--accent-primary);
+  color: var(--accent-primary);
+  font-size: 10px;
+}
+.spotLabel {
+  fill: var(--text-primary);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+.openLabel {
+  fill: var(--text-tertiary);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.labelCaption {
+  font-size: 8px;
+  opacity: 0.7;
+}
+.labelLeader {
+  stroke: currentColor;
+  stroke-width: 0.8;
+  fill: none;
+  opacity: 0.5;
+}
+.inspection {
+  position: absolute;
+  left: 15px;
+  top: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  box-shadow: 0 6px 22px #0005;
+}
+.inspection span {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+.inspection strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 500;
+}
+.events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.panel .eventChip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 25px;
+  font-size: 9px;
+  border-color: var(--border-subtle);
+}
+.eventChip small {
+  color: var(--text-tertiary);
+  font-size: 8px;
+}
+.amber {
+  color: var(--color-warning);
+}
+.teal {
+  color: var(--accent-primary);
+}
+.replayBar {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.replayBar input {
+  flex: 1;
+  min-width: 40px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+.replayBar span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.replayBar button {
+  min-height: 27px;
+  font-size: 10px;
+}
+.chartFoot {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+.chartFoot span:last-child {
+  white-space: nowrap;
+}
+.replayNote {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--color-info);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.alert {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 2px solid var(--color-warning);
+  color: var(--color-warning);
+  background: var(--bg-elevated);
+  font-size: 10px;
+  line-height: 1.6;
 }
 .warning {
   color: var(--color-warning);
-}
-.alert {
-  color: var(--color-warning);
-  background: var(--bg-elevated);
-  border-left: 2px solid var(--color-warning);
-  padding: 12px;
+  margin: 0;
+  font-size: 11px;
   line-height: 1.6;
 }
 .note {
   color: var(--text-tertiary);
+  margin: 0;
+  font-size: 10px;
   line-height: 1.7;
-  margin: 12px 0;
 }
 .note a {
   color: var(--accent-primary);
 }
-.panel details {
-  border-top: 1px solid var(--border-subtle);
-  padding: 14px 0;
-}
-.panel summary {
-  cursor: pointer;
-  color: var(--text-primary);
-  min-height: 24px;
-}
-.panel details[open] > summary {
-  margin-bottom: 14px;
-}
-.comparison {
-  display: grid;
-  grid-template-columns: 0.7fr 1fr 1fr;
-  margin-top: 18px;
-  border: 1px solid var(--border-default);
-}
-.comparison > div {
+.quotePanel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
-  min-width: 0;
 }
-.comparison > div + div {
-  border-left: 1px solid var(--border-default);
+.quotePanel .controls {
+  gap: 10px;
 }
-.comparison span {
+.quoteSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 10px;
+  line-height: 1.7;
   color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.6;
 }
-.comparison strong {
+.quoteSummary b {
   color: var(--text-primary);
   font-weight: 500;
 }
-.comparison small {
-  display: block;
-  margin-top: 6px;
-  font-weight: 400;
-  line-height: 1.6;
+.breakEvens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 9px;
+}
+.breakEvens > span:first-child {
+  color: var(--text-tertiary);
+}
+.buyLegend {
+  color: var(--color-iv);
+}
+.sellLegend {
+  color: var(--color-warning);
+}
+.sessionStrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  padding: 4px 0;
+}
+.sessionStrip button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 66px;
+  min-height: 53px;
+  border-color: var(--border-subtle);
+  text-align: left;
+}
+.sessionStrip span {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.sessionStrip strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.sessionStrip [data-stress="true"] strong {
+  color: var(--color-warning);
+}
+.drawer {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+.panel summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  min-height: 24px;
+}
+.panel details[open] > summary {
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.drawer > .note {
+  margin-top: 10px;
+}
+.drawer > .controls {
+  margin-bottom: 12px;
+}
+.drawer input[type="number"] {
+  width: 100px;
+}
+.dataGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+  margin: 12px 0 20px;
+}
+.dataGrid dt {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  margin-bottom: 5px;
+}
+.dataGrid dd {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.7;
 }
 .tableWrap {
   overflow-x: auto;
 }
-.panel table {
+.tableWrap table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 10px;
   white-space: nowrap;
-  font-size: 11px;
 }
-.panel th,
-.panel td {
-  padding: 10px 8px;
+.tableWrap :is(td, th) {
   border-bottom: 1px solid var(--border-subtle);
   text-align: right;
+  padding: 8px;
 }
-.panel th {
-  font-weight: 400;
+.tableWrap th {
   color: var(--text-tertiary);
+  font-weight: 400;
 }
-.panel th:first-child,
-.panel td:first-child {
+.tableWrap :is(td, th):first-child {
   text-align: left;
 }
-.panel td[data-outcome="large"] {
-  color: var(--color-warning);
-}
-@container widget (max-width: 430px) {
+@container widget (max-width: 460px) {
   .panel {
-    padding: var(--space-3);
+    padding: 12px;
+    gap: 10px;
   }
-  .comparison {
+  .header h2 {
+    font-size: 15px;
+  }
+  .readouts > div {
+    padding: 0 10px;
+  }
+  .readouts strong {
+    font-size: 25px;
+  }
+  .readouts small {
+    font-size: 8px;
+  }
+  .readouts :where(div) > span {
+    font-size: 9px;
+  }
+  .state {
+    width: 100%;
+    margin: 2px 0 0;
+  }
+  .unitSelect {
+    margin-left: auto;
+  }
+  .chart {
+    min-height: 270px;
+    flex-basis: 290px;
+  }
+  .chartSummary {
+    font-size: 8px;
+  }
+  .dataGrid {
     grid-template-columns: 1fr;
   }
-  .comparison > div + div {
-    border-left: 0;
-    border-top: 1px solid var(--border-default);
-  }
-  .metrics {
-    gap: var(--space-2);
-  }
-  .metric > strong {
-    font-size: 24px;
+  .controls label {
+    max-width: 100%;
   }
 }

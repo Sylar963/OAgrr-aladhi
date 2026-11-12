@@ -1,145 +1,168 @@
-import type { ExpectedMoveResponse } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExpectedMovePanel from './ExpectedMovePanel';
 import { DEFAULT_SETTINGS, useExpectedMoveSettings } from './settings';
+import { radarCandles, radarQuote, radarReport, TEST_NOW, TEST_START } from './test-fixtures';
 
-const hooks = vi.hoisted(() => ({ daily: vi.fn(), expiries: vi.fn(), straddle: vi.fn() }));
+const hooks = vi.hoisted(() => ({
+  daily: vi.fn(),
+  expiries: vi.fn(),
+  straddle: vi.fn(),
+  path: vi.fn(),
+}));
 vi.mock('./queries', () => ({
   useExpectedMove: hooks.daily,
   useExpectedMoveExpiries: hooks.expiries,
   useExpectedStraddle: hooks.straddle,
+  useRadarPath: hooks.path,
 }));
 
-function report(): ExpectedMoveResponse {
-  const start = Math.floor(Date.now() / 86_400_000) * 86_400_000;
-  return {
-    underlying: 'BTC',
-    anchor: 'utc0',
-    generatedAt: Date.now(),
-    periodsPerYear: 365,
-    index: 'DVOL',
-    priceSource: 'aggregated-spot',
-    liveIv: 0.7,
-    liveIvAsOfMs: Date.now(),
-    current: {
-      startMs: start,
-      endMs: start + 86_400_000,
-      open: 100_000,
-      last: 103_000,
-      high: 104_000,
-      low: 99_000,
-      priceAsOfMs: Date.now(),
-      openingIv: 0.5,
-      ivAsOfMs: start,
-      expectedFraction: 0.02617,
-      expectedUsd: 2617,
-      approximateStraddleUsd: 2088,
-      lower: 97383,
-      upper: 102617,
-      returnFraction: 0.03,
-      absoluteReturnFraction: 0.03,
-      rangeFraction: 0.05,
-      moveRatio: 1.15,
-      complete: false,
-      coverage: 'complete',
-      classification: 'in-progress',
-    },
-    history: [],
-  };
-}
-
 beforeEach(() => {
+  vi.spyOn(Date, 'now').mockReturnValue(TEST_NOW);
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   useExpectedMoveSettings.setState({ panels: {} });
-  useAppStore.setState({ activeMarketId: 'main', activeTab: 'chain' });
   useAppStore.setState((s) => ({
+    activeMarketId: 'main',
+    activeTab: 'chain',
     markets: { ...s.markets, main: { ...s.markets.main, underlying: 'BTC' } },
   }));
   hooks.daily.mockReturnValue({
-    data: report(),
+    data: radarReport(),
     isError: false,
     isPending: false,
     refetch: vi.fn(),
   });
   hooks.expiries.mockReturnValue({ data: ['2026-11-12'], isError: false, isPending: false });
-  hooks.straddle.mockReturnValue({ data: undefined, isError: false, isPending: false });
+  hooks.straddle.mockReturnValue({ data: radarQuote(), isError: false, isPending: false });
+  hooks.path.mockReturnValue({
+    data: { candles: radarCandles(), resolutionMs: 300000 },
+    isError: false,
+    isPending: false,
+  });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
-describe('Expected Move panel', () => {
-  it('shows opening and live benchmarks separately and alerts against the opening value', () => {
+describe('Expected Move Radar', () => {
+  it('replaces the metric rail with an interactive cone, daily ratio and elapsed-time pace', () => {
     render(<ExpectedMovePanel />);
-    expect(screen.getByText('±2.62%')).toBeDefined();
-    expect(screen.getByText('±3.66%')).toBeDefined();
+    expect(
+      screen.getByRole('img', { name: 'Expected move cone and observed spot path' }),
+    ).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Expected Move Radar' })).toBeDefined();
+    expect(screen.getByText('Movement pace')).toBeDefined();
+    expect(screen.getByText('1.62×')).toBeDefined();
     expect(screen.getByRole('status').textContent).toContain('1×');
-    expect(screen.getByText('High–low range: 5.00%')).toBeDefined();
+    expect(hooks.straddle).toHaveBeenLastCalledWith('BTC', 'deribit', '2026-11-12', false);
   });
 
-  it('suppresses move alerts for failed refreshes and partial observations', () => {
-    hooks.daily.mockReturnValue({
-      data: report(),
-      isError: true,
-      isPending: false,
-      refetch: vi.fn(),
-    });
-    const view = render(<ExpectedMovePanel />);
-    expect(screen.queryByText(/Absolute return has crossed/)).toBeNull();
-    const partial = report();
-    partial.current!.coverage = 'partial';
-    hooks.daily.mockReturnValue({
-      data: partial,
-      isError: false,
-      isPending: false,
-      refetch: vi.fn(),
-    });
-    view.rerender(<ExpectedMovePanel />);
-    expect(screen.queryByText(/Absolute return has crossed/)).toBeNull();
-    expect(screen.getByText(/Partial or stale price coverage/)).toBeDefined();
-  });
-
-  it('persists panel settings per workspace and does not silently use BTC for unsupported assets', async () => {
+  it('persists chart toggles and units per workspace without changing old defaults', () => {
     render(<ExpectedMovePanel />);
-    fireEvent.change(screen.getByLabelText('Asset'), { target: { value: 'SPX' } });
-    expect(useExpectedMoveSettings.getState().panels['builtin-chain']?.asset).toBe('SPX');
-    expect(hooks.daily).toHaveBeenLastCalledWith('SPX', 'cash', 14);
-    fireEvent.click(screen.getByText('ATM straddle'));
-    await waitFor(() =>
-      expect(useExpectedMoveSettings.getState().panels['builtin-chain']?.showStraddle).toBe(true),
-    );
-    expect(localStorage.getItem('ogg.expectedMovePanels.v1')).toContain('SPX');
+    fireEvent.click(screen.getByRole('button', { name: '2σ band' }));
+    fireEvent.change(screen.getByLabelText('Chart unit'), { target: { value: 'sigma' } });
+    expect(useExpectedMoveSettings.getState().panels['builtin-chain']?.showTwoSigma).toBe(true);
+    expect(useExpectedMoveSettings.getState().panels['builtin-chain']?.chartUnit).toBe('sigma');
     expect(DEFAULT_SETTINGS.showStraddle).toBe(false);
+    expect(localStorage.getItem('ogg.expectedMovePanels.v1')).toContain('sigma');
   });
 
-  it('gates ATM pricing on fresh quotes even when a cached response says available', () => {
+  it('keeps expiry breakevens separate from the daily cone', () => {
+    render(<ExpectedMovePanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'ATM straddle' }));
+    expect(screen.getByText('+8.30%')).toBeDefined();
+    expect(screen.queryByText(/^Buy breakeven/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show expiry levels →' }));
+    expect(screen.getByText(/^Buy breakeven/)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'To expiry' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('hides current quotes and live IV when rewinding, then restores the latest view', () => {
+    render(<ExpectedMovePanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'ATM straddle' }));
+    fireEvent.click(screen.getByRole('button', { name: 'To expiry' }));
+    fireEvent.change(screen.getByLabelText('Replay position'), { target: { value: '10' } });
+    expect(screen.queryByText('+8.30%')).toBeNull();
+    expect(screen.getByText(/Historical option books are not recorded/)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Today' }).getAttribute('aria-pressed')).toBe('true');
+    expect(
+      (screen.getByRole('button', { name: 'Live reforecast' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(hooks.straddle).toHaveBeenLastCalledWith('BTC', 'deribit', '2026-11-12', false);
+    fireEvent.click(screen.getByRole('button', { name: 'Latest' }));
+    expect(screen.getByText('+8.30%')).toBeDefined();
+  });
+
+  it('replays selected completed sessions without applying today’s quote', () => {
+    const report = radarReport();
+    report.history = [
+      {
+        ...report.current!,
+        startMs: TEST_START - 86400000,
+        endMs: TEST_START,
+        priceAsOfMs: TEST_START,
+        complete: true,
+        classification: 'large',
+      },
+    ];
+    hooks.daily.mockReturnValue({
+      data: report,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    render(<ExpectedMovePanel />);
+    fireEvent.click(screen.getByRole('button', { name: /11-10/ }));
+    expect(screen.getByText(/Historical option books are not recorded/)).toBeDefined();
+    expect(hooks.straddle).toHaveBeenLastCalledWith('BTC', 'deribit', '2026-11-12', false);
+  });
+
+  it('suppresses alerts for partial coverage and stale cached quotes', () => {
+    const report = radarReport();
+    report.current!.coverage = 'partial';
+    hooks.daily.mockReturnValue({
+      data: report,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
     hooks.straddle.mockReturnValue({
-      data: { status: 'available', quoteAsOfMs: Date.now() - 100_000 },
+      data: { ...radarQuote(), quoteAsOfMs: TEST_NOW - 100000 },
       isError: false,
       isPending: false,
     });
     render(<ExpectedMovePanel />);
-    expect(screen.queryByText('Buy at asks')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'ATM straddle' }));
+    expect(screen.queryByText(/Absolute return has crossed/)).toBeNull();
     expect(screen.getByText(/No fresh two-sided ATM pair/)).toBeDefined();
+    expect(screen.queryByText('+8.30%')).toBeNull();
   });
 
-  it('does not silently substitute BTC for an unsupported workspace asset', () => {
-    useAppStore.setState((s) => ({
-      markets: { ...s.markets, main: { ...s.markets.main, underlying: 'SOL' } },
-    }));
-    render(<ExpectedMovePanel />);
-    expect(hooks.daily).toHaveBeenLastCalledWith(null, 'utc0', 14);
-    expect(screen.getByText(/No volatility-index benchmark is available/)).toBeDefined();
-  });
-
-  it('allows decimal threshold editing and discards invalid drafts on blur', () => {
-    render(<ExpectedMovePanel />);
+  it('keeps unsupported assets explicit and validates numeric settings on blur', () => {
+    const view = render(<ExpectedMovePanel />);
     const input = screen.getByLabelText('Move alert (×)');
-    fireEvent.change(input, { target: { value: '0' } });
     fireEvent.change(input, { target: { value: '0.5' } });
     fireEvent.blur(input);
     expect(useExpectedMoveSettings.getState().panels['builtin-chain']?.moveAlertRatio).toBe(0.5);
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
     expect((input as HTMLInputElement).value).toBe('0.5');
+    useAppStore.setState((s) => ({
+      markets: { ...s.markets, main: { ...s.markets.main, underlying: 'SOL' } },
+    }));
+    view.rerender(<ExpectedMovePanel />);
+    expect(hooks.daily).toHaveBeenLastCalledWith(null, 'utc0', 14);
+    expect(screen.getByText(/No volatility-index benchmark is available/)).toBeDefined();
   });
 });

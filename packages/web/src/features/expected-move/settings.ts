@@ -13,6 +13,11 @@ const SettingsSchema = z.object({
   showStraddle: z.boolean().default(false),
   moveAlertRatio: z.number().finite().min(0.25).max(10).default(1),
   premiumAlertPercent: z.number().finite().min(1).max(1000).default(10),
+  horizon: z.enum(['day', 'expiry']).default('day'),
+  chartUnit: z.enum(['price', 'percent', 'sigma']).default('price'),
+  showTwoSigma: z.boolean().default(false),
+  showLiveCone: z.boolean().default(false),
+  reference: z.enum(['surface', 'index']).default('surface'),
 });
 
 export type ExpectedMoveSettings = z.infer<typeof SettingsSchema>;

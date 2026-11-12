@@ -144,6 +144,37 @@ mobile single-view renderer. Keep the existing ten-socket budget when extending 
 
 ## Expected Move panel
 
+The panel opens as **Expected Move Radar**: a spot trail inside the opening 1σ cone,
+three compact readouts (daily move, elapsed-time pace, and optional straddle premium),
+and an optional 2σ band and live reforecast. Price, percent, and sigma chart units are
+saved per workspace alongside the existing controls. Old saved settings receive chart
+defaults without losing asset, anchor, venue, expiry, thresholds, or expanded sections.
+
+**Today** uses the fixed daily expectation and square-root elapsed session time; SPX cash
+hours are a uniform-variance heuristic, not a calibrated intraday seasonal model. The live
+cone starts at the latest fresh spot observation and uses remaining session time. **To expiry**
+uses the fresh selected reference IV and venue forward, with lognormal bands and calendar
+time to the contract's actual settlement. Percent/sigma units in that view refer to the
+forward and the expiry horizon. Buy/sell breakevens use the asks/bids respectively, before
+fees; they appear only when settlement is within the displayed chart horizon. A daily view
+offers a switch to expiry when those levels belong to a later date. Cone bands describe
+dispersion at each horizon, not the probability that the entire path remains inside.
+
+The session strip selects previous days. The slider and play control replay recorded
+observations; current option quotes and live IV overlays are hidden during replay. The
+data drawer withholds final high–low range while scrubbing an incomplete path. Milestones
+record observed-close crossings/reentries, not interpolated touch times or option P&L.
+Historical option books and past premium-threshold events are not fabricated. Chart gaps
+remain open, and hovering, tapping or using arrow keys inspects an observation.
+
+Price paths reuse aggregated spot candles for crypto and cash candles for SPX. Recent
+sessions use five-minute bars; older crypto sessions use hourly bars, and SPX sessions
+beyond thirty calendar days request hourly history to cover the thirty-trading-day strip
+without loading a year of five-minute bars. Candle closes plot at interval end, not at
+interval open. The current reported snapshot remains separately identified by its source
+timestamp. Historical and delayed-data limitations below continue to apply. The redesign
+adds no WebSocket subscriptions or package dependencies.
+
 Use **+ Widget → Expected move** in a desktop workspace. The panel follows its workspace's
 asset or can be pinned to BTC, ETH, or SPX. Unsupported workspace assets show an explicit
 unavailable state. SPX reads the existing separate TradFi service through `/tradfi-api`.

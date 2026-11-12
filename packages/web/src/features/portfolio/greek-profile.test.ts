@@ -152,7 +152,64 @@ describe('buildSpotProfile', () => {
     const short = straddle.map((profileLeg) => ({ ...profileLeg, size: -1 }));
     const longVega = buildSpotProfile(straddle, 'vega', 80_000, NOW).series[0]!.values;
     const shortVega = buildSpotProfile(short, 'vega', 80_000, NOW).series[0]!.values;
-    shortVega.forEach((value, index) => expect(value).toBeCloseTo(-longVega[index]!, 9));
+    shortVega.forEach((value, index) => {
+      expect(value).toBeCloseTo(-longVega[index]!, 9);
+    });
+  });
+});
+
+describe('mixed-expiry book profiles', () => {
+  const book: ProfileLeg[] = [
+    { strike: 90_000, expiry: '2026-12-25', optionRight: 'call', size: -0.5, iv: 0.6 },
+    { strike: 80_000, expiry: EXPIRY, optionRight: 'put', size: 1, iv: 0.45 },
+  ];
+
+  it('includes every expiry in book scope and preserves the expiry filter', () => {
+    const positions = [
+      leg({ legId: 'near', entryIv: 0.45 }),
+      leg({ legId: 'far', expiry: '2026-12-25', entryIv: 0.6 }),
+    ];
+    expect(buildProfileLegs(positions, [], null).legs).toHaveLength(2);
+    expect(buildProfileLegs(positions, [], EXPIRY).legs).toHaveLength(1);
+  });
+
+  it('anchors horizons to the nearest expiry regardless of position order and reprices each tenor', () => {
+    const spot = 82_000;
+    const profile = buildSpotProfile(book, 'delta', spot, NOW);
+    const reverse = buildSpotProfile([...book].reverse(), 'delta', spot, NOW);
+    expect(profile.series.map((line) => line.days)).toEqual([0, 15, 29]);
+    expect(reverse.series.map((line) => line.days)).toEqual([0, 15, 29]);
+
+    const atSpot = profile.prices.indexOf(spot);
+    for (const [index, horizon] of profile.series.entries()) {
+      const horizonMs = NOW + horizon.days * 86_400_000;
+      const expected = book.reduce((sum, position) => {
+        const years =
+          (Date.parse(`${position.expiry}T08:00:00.000Z`) - horizonMs) / (365 * 86_400_000);
+        return (
+          sum +
+          greeks76(spot, position.strike, position.iv, years, position.optionRight).delta *
+            position.size
+        );
+      }, 0);
+      expect(horizon.values[atSpot]).toBeCloseTo(expected, 10);
+      expect(reverse.series[index]!.values[atSpot]).toBeCloseTo(expected, 10);
+    }
+  });
+
+  it('sums vol repricing across expiries using each leg’s remaining life', () => {
+    const combined = buildVolShockProfile(book, 82_000, NOW);
+    const parts = book.map((position) => buildVolShockProfile([position], 82_000, NOW));
+    combined.fullPnlUsd.forEach((value, index) => {
+      expect(value).toBeCloseTo(
+        parts.reduce((sum, part) => sum + part.fullPnlUsd[index]!, 0),
+        8,
+      );
+      expect(combined.vegaOnlyPnlUsd[index]).toBeCloseTo(
+        parts.reduce((sum, part) => sum + part.vegaOnlyPnlUsd[index]!, 0),
+        8,
+      );
+    });
   });
 });
 

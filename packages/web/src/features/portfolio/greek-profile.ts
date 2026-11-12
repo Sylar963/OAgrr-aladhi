@@ -193,7 +193,10 @@ export function buildSpotProfile(
     .sort((left, right) => left - right)
     .filter((price, index, sorted) => index === 0 || price - sorted[index - 1]! > 1e-6);
 
-  const expiry = legs[0]!.expiry;
+  const expiry = legs.reduce(
+    (nearest, leg) => (leg.expiry < nearest ? leg.expiry : nearest),
+    legs[0]!.expiry,
+  );
   const series = profileHorizons(expiry, nowMs, locale).map((horizon) => {
     const horizonMs = nowMs + horizon.days * DAY_MS;
     const values = prices.map((priceUsd) =>

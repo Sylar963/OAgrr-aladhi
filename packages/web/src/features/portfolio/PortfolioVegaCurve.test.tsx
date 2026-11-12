@@ -67,6 +67,7 @@ describe('PortfolioVegaCurve', () => {
   it('opens on the spot profile with one line per horizon and keeps the strike bars', () => {
     render(
       <PortfolioVegaCurve
+        sourceLabel="Manual"
         positions={positions}
         byStrike={byStrike}
         breakEven={breakEven}
@@ -87,6 +88,7 @@ describe('PortfolioVegaCurve', () => {
   it('draws vol convexity against IV shocks instead of spot', () => {
     render(
       <PortfolioVegaCurve
+        sourceLabel="Manual"
         positions={positions}
         byStrike={byStrike}
         breakEven={breakEven}
@@ -104,6 +106,7 @@ describe('PortfolioVegaCurve', () => {
   it('falls back to strike bars when live spot is missing', () => {
     render(
       <PortfolioVegaCurve
+        sourceLabel="Manual"
         positions={positions}
         byStrike={byStrike}
         breakEven={breakEven}

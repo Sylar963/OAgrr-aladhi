@@ -49,8 +49,10 @@ interface ModeMeta {
 }
 
 type ChartView = 'curve' | 'strikes';
+type RiskScope = 'book' | 'expiry';
 
 interface Props {
+  sourceLabel: string;
   positions: PositionLeg[];
   byStrike: VegaByStrikeRow[];
   breakEven: BreakEvenIvRow[];
@@ -119,7 +121,8 @@ const messages = defineMessages(
     volga_axis: 'second-order P&L for a ±5 vol-point IV move',
     volga_profileAxis:
       'P&L for a parallel IV shift: full repricing against the vega-only line. The gap is volga.',
-    volga_lesson: 'Volga is to volatility what gamma is to spot: the second-order effect after vega.',
+    volga_lesson:
+      'Volga is to volatility what gamma is to spot: the second-order effect after vega.',
     perVolPt: '{v} / vol pt',
     perDay: '{v} / day',
     deltaPerVolPt: '{v} Δ / vol pt',
@@ -154,13 +157,19 @@ const messages = defineMessages(
     underlyingFallback: 'underlying',
     noLiveSpot: 'Live spot is missing, so the curve cannot be drawn.',
     selectOne: 'Select one underlying to draw its curve.',
-    noLegIv: 'No leg in this expiry has a live IV to reprice with.',
+    noLegIv: 'No leg in this scope has usable IV to reprice with.',
     fullReprice: 'Full reprice',
     vegaOnly: 'Vega only',
     kicker: 'Options → perp translator',
     title: 'Where does my risk live?',
     riskLens: 'Risk lens',
     expiry: 'Expiry',
+    riskScope: 'Risk scope',
+    globalBook: 'Global book',
+    singleExpiry: 'Single expiry',
+    bookScope: '{source} · {asset} options · all strikes · all expiries',
+    expiryScope: '{source} · {asset} options · all strikes · {expiry}',
+    nearestExpiry: 'Projection horizons use the nearest expiry.',
     emptyTitle: 'No strike risk to translate yet',
     emptyBody:
       'Add an option position or wait for live marks. This panel will convert its Greeks into scenario P&L and hedge actions.',
@@ -168,7 +177,7 @@ const messages = defineMessages(
     rawSpotMissing: 'Raw exposure · live spot missing',
     ifScenario: 'If {scenario}',
     greekEstimate: 'Greek estimate, holding other inputs fixed',
-    deltaFoot: 'Equivalent opposite delta, before fees and slippage',
+    deltaFoot: 'Options delta only; excludes existing perp/futures hedges, fees and slippage',
     thetaFoot: 'Decay accelerates into expiry; this is today’s rate',
     otherFoot: 'Use the scenario grid above for combined shocks',
     spotMissingWarning: 'Live spot missing, so the chart is showing the raw Greek.',
@@ -217,7 +226,8 @@ const messages = defineMessages(
     vega_scenario: 'IV +1 punto',
     vega_axis: 'P&L estimado para un movimiento de IV de +1 punto de vol',
     vega_profileAxis: 'Dólares ganados por cada +1 punto de vol de IV, a cada precio spot',
-    vega_lesson: 'Un punto de vol significa que la IV pasa de 60% a 61%, no un cambio relativo de 1%.',
+    vega_lesson:
+      'Un punto de vol significa que la IV pasa de 60% a 61%, no un cambio relativo de 1%.',
     gamma_tab: 'Grandes movimientos',
     gamma_question: '¿Un movimiento grande del spot ayuda o perjudica?',
     gamma_scenario: 'Spot ±5%',
@@ -281,13 +291,19 @@ const messages = defineMessages(
     underlyingFallback: 'subyacente',
     noLiveSpot: 'Falta el spot en vivo, así que no se puede dibujar la curva.',
     selectOne: 'Selecciona un subyacente para dibujar su curva.',
-    noLegIv: 'Ningún leg de este vencimiento tiene IV en vivo para revalorar.',
+    noLegIv: 'Ningún leg de este alcance tiene IV utilizable para revalorar.',
     fullReprice: 'Revaloración completa',
     vegaOnly: 'Solo vega',
     kicker: 'Traductor opciones → perp',
     title: '¿Dónde está mi riesgo?',
     riskLens: 'Lente de riesgo',
     expiry: 'Vencimiento',
+    riskScope: 'Alcance del riesgo',
+    globalBook: 'Libro global',
+    singleExpiry: 'Un vencimiento',
+    bookScope: '{source} · opciones de {asset} · todos los strikes · todos los vencimientos',
+    expiryScope: '{source} · opciones de {asset} · todos los strikes · {expiry}',
+    nearestExpiry: 'Los horizontes de proyección usan el vencimiento más cercano.',
     emptyTitle: 'Aún no hay riesgo por strike para traducir',
     emptyBody:
       'Agrega una posición de opciones o espera los marks en vivo. Este panel convertirá sus griegas en P&L por escenario y acciones de cobertura.',
@@ -295,7 +311,8 @@ const messages = defineMessages(
     rawSpotMissing: 'Exposición bruta · falta el spot en vivo',
     ifScenario: 'Si {scenario}',
     greekEstimate: 'Estimación por griegas, con los demás factores fijos',
-    deltaFoot: 'Delta opuesta equivalente, antes de comisiones y slippage',
+    deltaFoot:
+      'Solo delta de opciones; excluye coberturas existentes en perp/futuros, comisiones y slippage',
     thetaFoot: 'El decaimiento se acelera hacia el vencimiento; esta es la tasa de hoy',
     otherFoot: 'Usa la matriz de escenarios de arriba para shocks combinados',
     spotMissingWarning: 'Falta el spot en vivo, así que el gráfico muestra la griega bruta.',
@@ -525,6 +542,7 @@ function actionLabel(mode: StrikeRiskMode, t: T): string {
 }
 
 export default function PortfolioVegaCurve({
+  sourceLabel,
   positions,
   byStrike,
   breakEven,
@@ -535,6 +553,7 @@ export default function PortfolioVegaCurve({
   const locale = useLocale();
   const [mode, setMode] = useState<StrikeRiskMode>('delta');
   const [view, setView] = useState<ChartView>('curve');
+  const [scope, setScope] = useState<RiskScope>('book');
   const [expiry, setExpiry] = useState<string | null>(null);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [stickyByStrike, setStickyByStrike] = useState<VegaByStrikeRow[] | null>(null);
@@ -577,7 +596,14 @@ export default function PortfolioVegaCurve({
     () => Array.from(new Set(displayByStrike.map((row) => row.expiry))).sort(),
     [displayByStrike],
   );
-  const activeExpiry = expiry != null && expiries.includes(expiry) ? expiry : (expiries[0] ?? null);
+  const selectedExpiry =
+    expiry != null && expiries.includes(expiry) ? expiry : (expiries[0] ?? null);
+  const activeExpiry = scope === 'book' ? null : selectedExpiry;
+  const scopeLabel = t(scope === 'book' ? 'bookScope' : 'expiryScope', {
+    source: sourceLabel,
+    asset,
+    expiry: activeExpiry ?? '',
+  });
   const buckets = useMemo(
     () => buildStrikeRiskBuckets(displayByStrike, activeExpiry, mode, spotUsd),
     [activeExpiry, displayByStrike, mode, spotUsd],
@@ -658,7 +684,9 @@ export default function PortfolioVegaCurve({
   );
   const mixedUnderlyings =
     new Set(
-      positions.filter((leg) => leg.expiry === activeExpiry).map((leg) => leg.underlying),
+      positions
+        .filter((leg) => activeExpiry == null || leg.expiry === activeExpiry)
+        .map((leg) => leg.underlying),
     ).size > 1;
   const curveUnavailableReason =
     spotUsd == null || !(spotUsd > 0)
@@ -692,10 +720,17 @@ export default function PortfolioVegaCurve({
   }, [curveUnavailableReason, locale, mode, profileLegs, spotUsd, t]);
 
   const activeBreakEvenRows = useMemo(() => {
-    if (activeExpiry == null || activeStrike == null) return [];
+    if (activeStrike == null) return [];
     return displayBreakEven
-      .filter((row) => row.expiry === activeExpiry && row.strike === activeStrike)
-      .sort((left, right) => left.optionRight.localeCompare(right.optionRight));
+      .filter(
+        (row) =>
+          (activeExpiry == null || row.expiry === activeExpiry) && row.strike === activeStrike,
+      )
+      .sort(
+        (left, right) =>
+          left.expiry.localeCompare(right.expiry) ||
+          left.optionRight.localeCompare(right.optionRight),
+      );
   }, [activeExpiry, activeStrike, displayBreakEven]);
 
   return (
@@ -721,9 +756,26 @@ export default function PortfolioVegaCurve({
               </button>
             ))}
           </div>
-          {expiries.length > 0 && (
+        </div>
+      </div>
+
+      <div className={styles.scopeBar}>
+        <div className={styles.scopeControls}>
+          <div className={styles.viewToggle} role="group" aria-label={t('riskScope')}>
+            <button type="button" aria-pressed={scope === 'book'} onClick={() => setScope('book')}>
+              {t('globalBook')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={scope === 'expiry'}
+              onClick={() => setScope('expiry')}
+            >
+              {t('singleExpiry')}
+            </button>
+          </div>
+          {scope === 'expiry' && expiries.length > 0 && (
             <select
-              value={activeExpiry ?? ''}
+              value={selectedExpiry ?? ''}
               onChange={(event) => setExpiry(event.target.value)}
               className={styles.select}
               aria-label={t('expiry')}
@@ -736,9 +788,14 @@ export default function PortfolioVegaCurve({
             </select>
           )}
         </div>
+        <span className={styles.scopeNote}>{scopeLabel}</span>
       </div>
 
-      {buckets.length === 0 ? (
+      {mixedUnderlyings ? (
+        <div className={styles.empty}>
+          <strong>{t('selectOne')}</strong>
+        </div>
+      ) : buckets.length === 0 ? (
         <div className={styles.empty}>
           <strong>{t('emptyTitle')}</strong>
           <span>{t('emptyBody')}</span>
@@ -752,7 +809,12 @@ export default function PortfolioVegaCurve({
             >
               <span className={styles.readoutLabel}>{posture(mode, totalRaw, t)}</span>
               <strong>{rawDisplay(mode, totalRaw, asset, spotUsd, t)}</strong>
-              <small>{t('rawAcross', { greek: meta.greek, expiry: activeExpiry ?? '' })}</small>
+              <small>
+                {t('rawAcross', {
+                  greek: meta.greek,
+                  expiry: activeExpiry ?? t('globalBook'),
+                })}
+              </small>
             </div>
             <div className={styles.readoutCell}>
               <span className={styles.readoutLabel}>
@@ -786,9 +848,7 @@ export default function PortfolioVegaCurve({
             {spotUsd == null && (mode === 'delta' || mode === 'gamma') && (
               <span className={styles.warning}>{t('spotMissingWarning')}</span>
             )}
-            {isStale && (
-              <span className={styles.warning}>{t('staleWarning')}</span>
-            )}
+            {isStale && <span className={styles.warning}>{t('staleWarning')}</span>}
           </div>
 
           <div className={styles.chartHeader}>
@@ -800,6 +860,7 @@ export default function PortfolioVegaCurve({
                 <span className={styles.chartAxis}>{meta.profileAxis}</span>
                 <span className={styles.chartAxis}>
                   {t('modelNote')}
+                  {scope === 'book' && expiries.length > 1 && ` · ${t('nearestExpiry')}`}
                   {profileLegs.excluded > 0 &&
                     t(profileLegs.excluded === 1 ? 'excluded_one' : 'excluded_other', {
                       n: profileLegs.excluded,
@@ -1083,7 +1144,10 @@ export default function PortfolioVegaCurve({
               ) : (
                 activeBreakEvenRows.map((row) => (
                   <span key={row.legId} className={styles.breakEvenChip}>
-                    <strong>{row.optionRight === 'call' ? 'CALL' : 'PUT'}</strong>
+                    <strong>
+                      {scope === 'book' && `${row.expiry} · `}
+                      {row.optionRight === 'call' ? 'CALL' : 'PUT'}
+                    </strong>
                     <span>{t('live', { v: fmtIv(row.currentIv) })}</span>
                     <span>{t('entryBe', { v: fmtIv(row.breakEvenIv) })}</span>
                     <span data-sign={(row.ivCushionPct ?? 0) >= 0 ? 'positive' : 'negative'}>

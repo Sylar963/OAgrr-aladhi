@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-11-10. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-11-12. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -32,6 +32,7 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 
 | Source | Reviewed material | Status / limits |
 | --- | --- | --- |
+| Translator scope (2026-11-12, client date) | [OIC net Greek exposure](https://prd-web.optionseducation.org/news/may-office-hours-faqs), credit-spread net Greeks and aggregate gamma across strikes | Scope implementation, not a trading edge. Global options book and single expiry share the same strike breakdown; existing perp/futures positions are excluded explicitly. BTC and ETH cannot be added as one hedge quantity. |
 | Expected Move Radar (2026-11-11, client date) | Re-read [Deribit expected-move calculations](https://insights.deribit.com/education/expected-move-calculations-and-visual/), horizon-specific IV, forward reference, symmetric short-horizon approximation and lognormal ranges | Presentation and engineering derivation. Daily cone uses fixed opening 1σ × √(elapsed/session); SPX cash-hour scaling assumes uniform variance. Expiry cone uses selected reference IV, venue forward and calendar time. Neither is a path-containment probability, a calibrated physical forecast or a demonstrated edge. Replay uses recorded closes and withholds current option quotes; no historical option books or touch times are inferred. |
 | Expected Move panel (2026-11-10) | [Deribit expected move](https://insights.deribit.com/education/expected-move-calculations-and-visual/), expiry-specific ATM IV, forward/time conventions and normal versus lognormal bands; [Cboe VIX/VIX1D](https://www.cboe.com/insights/posts/what-the-vix-and-vix-1-d-indices-attempt-to-measure-and-how-they-differ/), 30-day target and distinct intraday methodology | Official educational sources reviewed. Daily index scaling and neighboring-strike comparisons are engineering benchmarks, not evidence of pricing inefficiency or a BTC edge. |
 | [Sinclair, Volatility Trading](../Volatility+Trading+-+Euan+Sinclair.pdf) | Introduction pp. 1, 3; rich-for-a-reason pp. 15–16; forecasting pp. 32–33, 39–44 (vol cone, implied premium), 47, 52–54 (events); hedging/tails pp. 78, 85, 87–99; money management pp. 101, 109, 118–126; trade evaluation pp. 128–129; psychology pp. 152–154, 156–157, 161–162; examples pp. 168–175; contents | Selective reading. In this file printed page +13 gives the 1-based PDF page. Short-vol passages were added 2026-09-26 from text extraction and spot-checked (pp. 39–43, 97). Estimator details pp. 17–31 and parts of the Kelly derivation were NOT read. |
@@ -449,18 +450,29 @@ open P&L next to a small vol part means spot and time made the P&L, not IV.
 
 ## Greek profile across spot ("Where does my risk live?" curve view)
 
-Engineering derivation, not a book formula. The curve view reprices the selected expiry's
-legs with Black-76 on a spot grid, using spot as the forward (r = 0). The grid spans the
-strikes and spot, padded by about 2.5σ√T (10–60% of spot). Each leg keeps its live IV at
+Engineering derivation, not a book formula. The translator defaults to Global book: all
+option strikes and expiries for the selected portfolio source and underlying. Single expiry
+preserves the date filter. Curve and By strike are display choices inside either scope;
+selecting a strike inspects its contribution without changing the total or hedge estimate.
+Existing perp/futures hedges are excluded from this options-only translation. Mixed BTC/ETH
+books must select an underlying before displaying a total or hedge quantity. Switching source
+or underlying resets cached marks and scope state.
+
+The curve view reprices the scoped legs with Black-76 on a spot grid, using spot as the
+forward (r = 0). The grid spans the strikes and spot, padded by about 2.5σ√T (10–60% of spot). Each leg keeps its live IV at
 every price, which is a **sticky-strike** assumption: no smile dynamics and no spot–vol
-correlation. Lines are now, halfway to expiry, and one day before expiry, all at today's
-IV. They show gamma and theta peaking at the strike as time passes, not a forecast. Units
-match the per-strike rows: delta in underlying units, gamma as delta change per 1% spot,
+correlation. Lines are now, halfway to the nearest expiry, and one day before that expiry,
+all at today's IV. Each leg uses its own remaining life at the common projection time;
+horizons stay before the first settlement. They show gamma and theta peaking at the strike
+as time passes, not a forecast. Units match the per-strike rows: delta in underlying units, gamma as delta change per 1% spot,
 vega in $ per vol point, theta in $ per day, vanna in delta per vol point. Vol convexity
 plots P&L against a parallel IV shift (±20 points). It compares full repricing with the
 vega-only line, and the gap between them is volga. At spot, the model Greeks can differ a
 little from the venue Greeks behind the strike bars, because of forward basis and venue
-models. The bars are kept as the "By strike" view, which shows each strike's share.
+models. The bars are kept as the "By strike" view, which nets each strike across the
+scoped expiries and shows its share. IV checkpoints retain expiry labels in Global book.
+Regression coverage checks full-book/expiry hedge totals, strike selection independence,
+closed-expiry fallback, mixed-asset blocking, and mixed-tenor repricing/horizon ordering.
 
 ## Short ATM straddle: model and gates (Sell Straddle tab)
 

@@ -335,6 +335,8 @@ export default function PortfolioView() {
           />
           <MarketMovement positions={positions} />
           <PortfolioVegaCurve
+            key={`${source}:${underlyingFilter}`}
+            sourceLabel={sourceLabel}
             positions={positions}
             byStrike={metrics?.byStrike ?? []}
             breakEven={metrics?.breakEven ?? []}

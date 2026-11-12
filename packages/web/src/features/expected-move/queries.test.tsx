@@ -68,4 +68,14 @@ describe('Radar observed price transport', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.data).toBeUndefined();
   });
+
+  it('records the request time so network latency cannot complete a forming candle', async () => {
+    api.spot.mockImplementation(async () => {
+      vi.mocked(Date.now).mockReturnValue(TEST_NOW + 600000);
+      return { candles: [{ timestamp: TEST_NOW, open: 100000, close: 100500 }] };
+    });
+    const { result } = renderHook(() => useRadarPath('BTC', radarReport().current), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.asOfMs).toBe(TEST_NOW);
+  });
 });

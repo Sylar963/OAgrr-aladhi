@@ -12,6 +12,7 @@ import {
   liveCone,
   openingCone,
   radarEvents,
+  radarIndexAtTime,
   radarRatios,
   straddleLevels,
 } from './radar-model';
@@ -102,7 +103,7 @@ function RadarWorkspace({
   const r = useT(radarMessages);
   const report = query.data;
   const [selectedStart, setSelectedStart] = useState<number | null>(null);
-  const [cursor, setCursor] = useState<number | null>(null);
+  const [cursorTime, setCursorTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const session =
     selectedStart == null
@@ -119,10 +120,11 @@ function RadarWorkspace({
             path.data?.candles ?? [],
             path.data?.resolutionMs ?? 300_000,
             Date.now(),
+            { pathAsOfMs: path.data?.asOfMs ?? 0, snapshotAsOfMs: report?.generatedAt ?? 0 },
           ),
-    [session, path.data],
+    [session, path.data, report?.generatedAt],
   );
-  const replay = cursor != null || session?.complete === true || selectedStart != null;
+  const replay = cursorTime != null || session?.complete === true || selectedStart != null;
   const horizon = replay ? 'day' : settings.horizon;
   const venue = asset === 'SPX' ? 'tastytrade' : settings.venue;
   const needQuotes = !replay && (settings.showStraddle || horizon === 'expiry');
@@ -146,7 +148,9 @@ function RadarWorkspace({
     candidate.expiryTs > nowMs
       ? candidate
       : null;
-  const visible = cursor == null ? points : points.slice(0, Math.min(cursor + 1, points.length));
+  const selectedIndex =
+    cursorTime == null ? Math.max(0, points.length - 1) : radarIndexAtTime(points, cursorTime);
+  const visible = cursorTime == null ? points : points.slice(0, selectedIndex + 1);
   const point = visible.at(-1) ?? null;
   const opening = session == null ? null : openingCone(session);
   const primary =
@@ -186,31 +190,41 @@ function RadarWorkspace({
     quote == null ? null : settings.reference === 'surface' ? quote.surfaceIv : quote.indexIv;
   const modelPrice =
     quote == null ? null : settings.reference === 'surface' ? quote.surfaceModel : quote.indexModel;
-  const selectedIndex = cursor ?? Math.max(0, points.length - 1);
   const choose = (start: number | null) => {
     setSelectedStart(start);
-    setCursor(null);
+    setCursorTime(null);
     setPlaying(false);
   };
   useEffect(() => {
     if (!playing) return;
     const timer = setInterval(
       () =>
-        setCursor((current) => {
-          const next = (current ?? 0) + 1;
-          return Math.min(next, Math.max(0, points.length - 1));
+        setCursorTime((current) => {
+          const next = current == null ? 0 : radarIndexAtTime(points, current) + 1;
+          return points[Math.min(next, Math.max(0, points.length - 1))]?.time ?? null;
         }),
       150,
     );
     return () => clearInterval(timer);
-  }, [playing, points.length]);
+  }, [playing, points]);
   useEffect(() => {
-    if (playing && cursor != null && cursor >= points.length - 1) setPlaying(false);
-  }, [cursor, playing, points.length]);
+    if (playing && cursorTime != null && selectedIndex >= points.length - 1) setPlaying(false);
+  }, [cursorTime, playing, selectedIndex, points.length]);
   useEffect(() => {
-    setCursor(null);
+    setCursorTime(null);
     setPlaying(false);
   }, [session?.startMs]);
+  useEffect(() => {
+    if (
+      report &&
+      selectedStart != null &&
+      !report.history.some((day) => day.startMs === selectedStart)
+    ) {
+      setSelectedStart(null);
+      setCursorTime(null);
+      setPlaying(false);
+    }
+  }, [report, selectedStart]);
   const outcome =
     ratios?.pace == null
       ? t('unavailable')
@@ -372,7 +386,9 @@ function RadarWorkspace({
               onClick={() => {
                 if (playing) setPlaying(false);
                 else {
-                  setCursor(selectedIndex >= points.length - 1 ? 0 : selectedIndex);
+                  setCursorTime(
+                    points[selectedIndex >= points.length - 1 ? 0 : selectedIndex]?.time ?? null,
+                  );
                   setPlaying(true);
                 }
               }}
@@ -386,7 +402,7 @@ function RadarWorkspace({
               max={Math.max(0, points.length - 1)}
               value={selectedIndex}
               onChange={(e) => {
-                setCursor(Number(e.target.value));
+                setCursorTime(points[Number(e.target.value)]?.time ?? null);
                 setPlaying(false);
               }}
             />
@@ -561,7 +577,7 @@ function RadarWorkspace({
             settings={settings}
             update={update}
             replay={replay}
-            scrubbing={cursor != null && cursor < points.length - 1}
+            scrubbing={cursorTime != null && selectedIndex < points.length - 1}
             observedAt={point?.time ?? null}
           />
         </>

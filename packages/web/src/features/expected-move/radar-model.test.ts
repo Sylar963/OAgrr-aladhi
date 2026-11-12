@@ -86,4 +86,60 @@ describe('Radar time and pricing model', () => {
     expect(radarEvents([points[0]!, { ...points[1]!, gap: true }], cone, true)).toEqual([]);
     expect(radarEvents(points, null, true)).toEqual([]);
   });
+
+  it('records a move directly from the upper wing to the lower wing without inventing a reentry', () => {
+    const cone = openingCone(radarReport().current!)!;
+    const events = radarEvents(
+      [
+        { time: TEST_NOW, price: 104000, gap: false },
+        { time: TEST_NOW + 300000, price: 96000, gap: false },
+      ],
+      cone,
+      false,
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ kind: 'cross', direction: 'down' });
+  });
+
+  it('does not overwrite a completed close with a later forming-minute snapshot', () => {
+    const session = radarReport().current!;
+    const receivedAt = TEST_NOW + 45_000;
+    const trail = buildRadarTrail(
+      session,
+      [{ timestamp: TEST_NOW - 300000, open: 100000, close: 100700 }],
+      300000,
+      receivedAt,
+      { pathAsOfMs: receivedAt, snapshotAsOfMs: receivedAt },
+    );
+    expect(trail.find((p) => p.time === TEST_NOW)?.price).toBe(100700);
+    expect(trail.at(-1)).toMatchObject({ time: receivedAt, price: session.last });
+  });
+
+  it('retains recorded candle closes when the session snapshot is older or unavailable', () => {
+    const session = {
+      ...radarReport().current!,
+      priceAsOfMs: TEST_START,
+      coverage: 'partial' as const,
+    };
+    const trail = buildRadarTrail(
+      session,
+      [{ timestamp: TEST_NOW - 300000, open: 100000, close: 100700 }],
+      300000,
+      TEST_NOW,
+      { pathAsOfMs: TEST_NOW, snapshotAsOfMs: TEST_NOW },
+    );
+    expect(trail.at(-1)).toMatchObject({ time: TEST_NOW, price: 100700 });
+  });
+
+  it('does not turn a cached forming candle into a completed close as the clock advances', () => {
+    const session = { ...radarReport().current!, priceAsOfMs: TEST_NOW + 480000 };
+    const trail = buildRadarTrail(
+      session,
+      [{ timestamp: TEST_NOW, open: 100000, close: 112345 }],
+      300000,
+      TEST_NOW + 600000,
+      { pathAsOfMs: TEST_NOW + 120000, snapshotAsOfMs: TEST_NOW + 600000 },
+    );
+    expect(trail.some((p) => p.price === 112345)).toBe(false);
+  });
 });

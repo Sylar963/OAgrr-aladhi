@@ -119,23 +119,35 @@ export function buildRadarTrail(
   candles: readonly RadarCandle[],
   resolutionMs: number,
   nowMs: number,
+  observations: { pathAsOfMs: number; snapshotAsOfMs: number } = {
+    pathAsOfMs: nowMs,
+    snapshotAsOfMs: nowMs,
+  },
 ): RadarPoint[] {
   const limit = Math.min(nowMs, session.endMs);
+  const pathLimit = Math.min(limit, observations.pathAsOfMs);
   const byTime = new Map<number, number>();
   byTime.set(session.startMs, session.open);
   for (const bar of candles) {
     const closeAt = bar.timestamp + resolutionMs;
     if (
       closeAt > session.startMs &&
-      closeAt <= limit &&
-      closeAt <= session.priceAsOfMs &&
+      closeAt <= pathLimit &&
       Number.isFinite(bar.close) &&
       bar.close > 0
     )
       byTime.set(closeAt, bar.close);
   }
-  if (session.priceAsOfMs >= session.startMs && session.priceAsOfMs <= limit) {
-    byTime.set(session.priceAsOfMs, session.last);
+  const snapshotAt = session.complete
+    ? session.priceAsOfMs
+    : Math.max(session.priceAsOfMs, observations.snapshotAsOfMs);
+  if (
+    session.priceAsOfMs >= session.startMs &&
+    session.priceAsOfMs <= nowMs &&
+    snapshotAt <= limit &&
+    (session.complete || nowMs - session.priceAsOfMs <= 120000)
+  ) {
+    byTime.set(snapshotAt, session.last);
   }
   const points = [...byTime].sort(([a], [b]) => a - b);
   return points.map(([time, price], i) => ({
@@ -143,6 +155,18 @@ export function buildRadarTrail(
     price,
     gap: i > 0 && time - points[i - 1]![0] > resolutionMs * 1.75,
   }));
+}
+
+export function radarIndexAtTime(points: readonly RadarPoint[], time: number): number {
+  if (!points.length) return -1;
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (points[mid]!.time <= time) low = mid + 1;
+    else high = mid;
+  }
+  return Math.max(0, low - 1);
 }
 
 export function radarEvents(
@@ -160,14 +184,14 @@ export function radarEvents(
       const a = coneBounds(cone, before.time, level);
       const b = coneBounds(cone, current.time, level);
       if (!a || !b) continue;
-      const wasOutside = before.price < a[0] || before.price > a[1];
-      const outside = current.price < b[0] || current.price > b[1];
-      if (wasOutside !== outside)
+      const beforeSide = before.price < a[0] ? -1 : before.price > a[1] ? 1 : 0;
+      const currentSide = current.price < b[0] ? -1 : current.price > b[1] ? 1 : 0;
+      if (beforeSide !== currentSide)
         events.push({
           time: current.time,
           price: current.price,
           level,
-          kind: outside ? 'cross' : 'return',
+          kind: currentSide !== 0 ? 'cross' : 'return',
           direction: current.price >= cone.center ? 'up' : 'down',
         });
     }

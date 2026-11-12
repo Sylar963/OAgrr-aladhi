@@ -102,8 +102,13 @@ const CashPathSchema = z.object({
 export function useRadarPath(asset: ExpectedMoveAsset, session: ExpectedMoveSession | null) {
   return useQuery({
     queryKey: ['expected-move-path', asset, session?.startMs],
-    queryFn: async (): Promise<{ candles: RadarCandle[]; resolutionMs: number }> => {
+    queryFn: async (): Promise<{
+      candles: RadarCandle[];
+      resolutionMs: number;
+      asOfMs: number;
+    }> => {
       if (session == null) throw new Error('No session selected');
+      const asOfMs = Date.now();
       if (asset === 'SPX') {
         const older = Date.now() - session.startMs > 29 * 86_400_000;
         const range = older ? 'max' : session.complete ? '30d' : '1d';
@@ -119,6 +124,7 @@ export function useRadarPath(asset: ExpectedMoveAsset, session: ExpectedMoveSess
             .filter((c) => !c.synthetic)
             .map((c) => ({ timestamp: c.ts, open: c.o, close: c.c })),
           resolutionMs: older ? 3_600_000 : 300_000,
+          asOfMs,
         };
       }
       const age = Date.now() - session.startMs;
@@ -130,7 +136,7 @@ export function useRadarPath(asset: ExpectedMoveAsset, session: ExpectedMoveSess
           `/spot-candles?currency=${asset}&resolution=${resolution}&buckets=${buckets}`,
         ),
       );
-      return { candles: data.candles, resolutionMs: resolution * 1000 };
+      return { candles: data.candles, resolutionMs: resolution * 1000, asOfMs };
     },
     enabled: session != null,
     staleTime: session?.complete ? 300_000 : 15_000,

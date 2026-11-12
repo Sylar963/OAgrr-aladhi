@@ -42,7 +42,7 @@ beforeEach(() => {
   hooks.expiries.mockReturnValue({ data: ['2026-11-12'], isError: false, isPending: false });
   hooks.straddle.mockReturnValue({ data: radarQuote(), isError: false, isPending: false });
   hooks.path.mockReturnValue({
-    data: { candles: radarCandles(), resolutionMs: 300000 },
+    data: { candles: radarCandles(), resolutionMs: 300000, asOfMs: TEST_NOW },
     isError: false,
     isPending: false,
   });
@@ -164,5 +164,126 @@ describe('Expected Move Radar', () => {
     view.rerender(<ExpectedMovePanel />);
     expect(hooks.daily).toHaveBeenLastCalledWith(null, 'utc0', 14);
     expect(screen.getByText(/No volatility-index benchmark is available/)).toBeDefined();
+  });
+
+  it('keeps a paused observation fixed when a refetch fills earlier candle gaps', () => {
+    hooks.path.mockReturnValue({
+      data: {
+        candles: radarCandles().filter((_, i) => i !== 20 && i !== 22),
+        resolutionMs: 300000,
+        asOfMs: TEST_NOW,
+      },
+      isError: false,
+      isPending: false,
+    });
+    const view = render(<ExpectedMovePanel />);
+    const slider = screen.getByLabelText('Replay position');
+    fireEvent.change(slider, { target: { value: '30' } });
+    const selectedTime = () => slider.parentElement?.querySelector('span')?.textContent;
+    const before = selectedTime();
+    hooks.path.mockReturnValue({
+      data: { candles: radarCandles(), resolutionMs: 300000, asOfMs: TEST_NOW },
+      isError: false,
+      isPending: false,
+    });
+    view.rerender(<ExpectedMovePanel />);
+    expect(selectedTime()).toBe(before);
+  });
+
+  it('keeps an inspected observation fixed when earlier candles arrive', () => {
+    hooks.path.mockReturnValue({
+      data: {
+        candles: radarCandles().filter((_, i) => i !== 20 && i !== 22),
+        resolutionMs: 300000,
+        asOfMs: TEST_NOW,
+      },
+      isError: false,
+      isPending: false,
+    });
+    const view = render(<ExpectedMovePanel />);
+    fireEvent.keyDown(screen.getByRole('img'), { key: 'ArrowLeft' });
+    const before = screen.getByText(/Selected observation/).textContent;
+    hooks.path.mockReturnValue({
+      data: { candles: radarCandles(), resolutionMs: 300000, asOfMs: TEST_NOW },
+      isError: false,
+      isPending: false,
+    });
+    view.rerender(<ExpectedMovePanel />);
+    expect(screen.getByText(/Selected observation/).textContent).toBe(before);
+  });
+
+  it('does not render infinite sigma labels for wide long-dated cones', () => {
+    useExpectedMoveSettings
+      .getState()
+      .update('builtin-chain', { horizon: 'expiry', chartUnit: 'sigma', showTwoSigma: true });
+    hooks.expiries.mockReturnValue({ data: ['2027-11-11'], isError: false, isPending: false });
+    hooks.straddle.mockReturnValue({
+      data: {
+        ...radarQuote(),
+        expiry: '2027-11-11',
+        expiryTs: TEST_NOW + 365 * 86400000,
+        surfaceIv: 1,
+      },
+      isError: false,
+      isPending: false,
+    });
+    render(<ExpectedMovePanel />);
+    expect(screen.getByRole('img').textContent).not.toMatch(/Infinity|NaN/);
+  });
+
+  it('distinguishes downward band crossings from upward crossings', () => {
+    const report = radarReport();
+    report.current!.last = 96000;
+    report.current!.low = 95000;
+    hooks.daily.mockReturnValue({
+      data: report,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    hooks.path.mockReturnValue({
+      data: {
+        candles: [{ timestamp: TEST_NOW - 600000, open: 100000, close: 100000 }],
+        resolutionMs: 300000,
+        asOfMs: TEST_NOW,
+      },
+      isError: false,
+      isPending: false,
+    });
+    render(<ExpectedMovePanel />);
+    expect(screen.getByRole('button', { name: /Crossed 1σ/ }).textContent).toContain('↘');
+  });
+
+  it('returns to the current session when a shorter lookback removes the replayed day', () => {
+    const report = radarReport();
+    report.history = [
+      {
+        ...report.current!,
+        startMs: TEST_START - 86400000,
+        endMs: TEST_START,
+        priceAsOfMs: TEST_START,
+        complete: true,
+        classification: 'small',
+      },
+    ];
+    hooks.daily.mockReturnValue({
+      data: report,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    const view = render(<ExpectedMovePanel />);
+    fireEvent.click(screen.getByRole('button', { name: /11-10/ }));
+    hooks.daily.mockReturnValue({
+      data: radarReport(),
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    view.rerender(<ExpectedMovePanel />);
+    expect(screen.getByRole('img')).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: /Current session/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 });

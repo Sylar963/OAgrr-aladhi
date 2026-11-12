@@ -171,8 +171,14 @@ Price paths reuse aggregated spot candles for crypto and cash candles for SPX. R
 sessions use five-minute bars; older crypto sessions use hourly bars, and SPX sessions
 beyond thirty calendar days request hourly history to cover the thirty-trading-day strip
 without loading a year of five-minute bars. Candle closes plot at interval end, not at
-interval open. The current reported snapshot remains separately identified by its source
-timestamp. Historical and delayed-data limitations below continue to apply. The redesign
+interval open, and only bars completed before their history request are eligible; cached
+forming bars do not become completed merely because the browser clock advances. Current
+snapshots plot at their report availability time, preserving a completed candle at the
+same source bucket boundary. Stale snapshots do not suppress independent candle history.
+The footer retains the snapshot's source timestamp for freshness context. Replay and
+inspection selections use timestamps, so filling earlier history gaps cannot move the
+selected observation. A shorter lookback returns to the current session if the selected
+historical day is removed. Historical and delayed-data limitations below continue to apply. The redesign
 adds no WebSocket subscriptions or package dependencies.
 
 Use **+ Widget → Expected move** in a desktop workspace. The panel follows its workspace's

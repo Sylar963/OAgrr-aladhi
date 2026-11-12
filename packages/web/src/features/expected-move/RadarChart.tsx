@@ -10,6 +10,7 @@ import type { ExpectedMoveSettings } from './settings';
 import {
   coneBounds,
   radarRatios,
+  radarIndexAtTime,
   straddleLevels,
   type RadarCone,
   type RadarEvent,
@@ -55,7 +56,7 @@ export default function RadarChart({
   const t = useT(radarMessages);
   const root = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 380 });
-  const [inspected, setInspected] = useState<number | null>(null);
+  const [inspectedTime, setInspectedTime] = useState<number | null>(null);
   const clip = useId().replaceAll(':', '');
   useEffect(() => {
     const element = root.current;
@@ -113,7 +114,9 @@ export default function RadarChart({
       ? `${((value / basePrice - 1) * 100).toFixed(2)}%`
       : settings.chartUnit === 'sigma'
         ? sigmaWidth != null && sigmaWidth > 0
-          ? `${(Math.log(value / basePrice) / sigmaWidth).toFixed(2)}σ`
+          ? value > 0
+            ? `${(Math.log(value / basePrice) / sigmaWidth).toFixed(2)}σ`
+            : '—'
           : session.expectedUsd != null && session.expectedUsd > 0
             ? `${((value - session.open) / session.expectedUsd).toFixed(2)}σ`
             : '—'
@@ -132,8 +135,8 @@ export default function RadarChart({
   const trail = points
     .map((p, i) => `${i === 0 || p.gap ? 'M' : 'L'}${x(p.time)},${y(p.price)}`)
     .join(' ');
-  const active =
-    inspected == null ? null : (points[Math.min(inspected, points.length - 1)] ?? null);
+  const inspected = inspectedTime == null ? null : radarIndexAtTime(points, inspectedTime);
+  const active = inspected == null ? null : (points[inspected] ?? null);
   const activeRatios = active ? radarRatios(session, active) : null;
   const inspectAt = (clientX: number) => {
     const rect = root.current?.getBoundingClientRect();
@@ -142,7 +145,7 @@ export default function RadarChart({
     let index = 0;
     for (let i = 1; i < points.length; i++)
       if (Math.abs(points[i]!.time - time) < Math.abs(points[index]!.time - time)) index = i;
-    setInspected(index);
+    setInspectedTime(points[index]?.time ?? null);
   };
   const terminal = primary ? coneBounds(primary, primary.end) : null;
   const labels: Array<{
@@ -182,22 +185,21 @@ export default function RadarChart({
           onPointerMove={(e) => inspectAt(e.clientX)}
           onPointerDown={(e) => inspectAt(e.clientX)}
           onPointerLeave={(e) => {
-            if (e.pointerType === 'mouse') setInspected(null);
+            if (e.pointerType === 'mouse') setInspectedTime(null);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') setInspected(null);
+            if (e.key === 'Escape') setInspectedTime(null);
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
               e.preventDefault();
               e.stopPropagation();
-              setInspected(
-                Math.max(
-                  0,
-                  Math.min(
-                    points.length - 1,
-                    (inspected ?? points.length - 1) + (e.key === 'ArrowLeft' ? -1 : 1),
-                  ),
+              const index = Math.max(
+                0,
+                Math.min(
+                  points.length - 1,
+                  (inspected ?? points.length - 1) + (e.key === 'ArrowLeft' ? -1 : 1),
                 ),
               );
+              setInspectedTime(points[index]?.time ?? null);
             }
           }}
         >
@@ -398,10 +400,10 @@ export default function RadarChart({
             <button
               key={`${event.time}-${event.level}`}
               className={styles.eventChip}
-              onClick={() => setInspected(points.findIndex((p) => p.time === event.time))}
+              onClick={() => setInspectedTime(event.time)}
             >
               <span className={event.kind === 'cross' ? styles.amber : styles.teal}>
-                {event.kind === 'cross' ? '↗' : '↘'}
+                {event.kind === 'return' ? '↩' : event.direction === 'up' ? '↗' : '↘'}
               </span>
               {t(event.kind === 'cross' ? 'cross' : 'reentry', { level: event.level })}
               <small>{radarTime(event.time)}</small>

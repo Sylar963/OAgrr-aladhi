@@ -520,6 +520,7 @@ const portfolioRuntimes = new Map<string, RuntimeEntry>();
 // close-now P&L off. Each portfolio runtime gets its own lease holder over the same books.
 let exitBookRuntime: ExitBookRuntime | null = null;
 const paradexExitBookRuntime = new ParadexBookRuntime();
+const paradexTestnetExitBookRuntime = new ParadexBookRuntime({ environment: 'test' });
 
 export function setPortfolioExitBookRuntime(runtime: ExitBookRuntime | null): void {
   exitBookRuntime = runtime;
@@ -562,7 +563,8 @@ export function getOrCreatePortfolioRuntime(
     chainSurface: portfolioChainSurface,
     ...(underlying != null ? { underlyingFilter: underlying } : {}),
     ...(source === 'paradex' && process.env['PARADEX_EXIT_BOOKS'] !== '0'
-      ? { exitBooks: new ParadexExitBooks(paradexExitBookRuntime) }
+      ? { exitBooks: new ParadexExitBooks(() => paradexPositionStore.environment(accountId) === 'test'
+          ? paradexTestnetExitBookRuntime : paradexExitBookRuntime) }
       : exitBookRuntime != null ? { exitBooks: new ThalexExitBooks(exitBookRuntime) } : {}),
   });
 
@@ -611,6 +613,7 @@ export async function disposePortfolioServices(): Promise<void> {
   await thalexPositionStore.dispose();
   await paradexPositionStore.dispose();
   await paradexExitBookRuntime.dispose();
+  await paradexTestnetExitBookRuntime.dispose();
   const refs = [...chainRefs.values()];
   chainRefs.clear();
   await Promise.allSettled(

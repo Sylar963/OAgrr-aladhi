@@ -17,6 +17,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './AccountChip.module.css';
 import ThalexKeyManager from './ThalexKeyManager';
+import ParadexKeyManager from './ParadexKeyManager';
 
 type Mode = 'home' | 'paste';
 
@@ -67,7 +68,7 @@ const messages = defineMessages(
     paradexHint:
       'Your wallet signs one Paradex sign-in, then Paradex issues a read-only key for oggregator. The key can read positions but cannot trade or withdraw.',
     waitingWallet: 'Waiting for wallet…',
-    pasteParadex: 'Or paste a Paradex read-only key:',
+    pasteParadex: 'Or manage mainnet and testnet read-only keys:',
   },
   {
     usernamesOff: 'Los nombres de usuario están desactivados en Clerk; actívalos en el panel de Clerk',
@@ -116,7 +117,7 @@ const messages = defineMessages(
     paradexHint:
       'Tu wallet firma un inicio de sesión en Paradex y luego Paradex emite una clave de solo lectura para oggregator. La clave puede leer posiciones pero no puede operar ni retirar.',
     waitingWallet: 'Esperando la wallet…',
-    pasteParadex: 'O pega una clave de solo lectura de Paradex:',
+    pasteParadex: 'O gestiona claves de solo lectura de mainnet y testnet:',
   },
 );
 
@@ -346,14 +347,13 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
 
   const onRemoveVenue = async (venue: VenueId) => {
     if (!isAccountReady) return;
-    // Thalex can hold a mainnet and a testnet key; removal is per network in the key manager.
-    if (venue === 'thalex') {
-      setPasteTarget('thalex');
+    if (venue === 'thalex' || venue === 'paradex') {
+      setPasteTarget(venue);
       setError(null);
       setMode('paste');
       return;
     }
-    if (venue === 'derive' || venue === 'paradex') {
+    if (venue === 'derive') {
       try {
         await disconnectVenue(venue);
         markVenueUnconfigured(venue);
@@ -589,12 +589,11 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   }}
                   onError={setError}
                 >
-                  <VenueCredentialForm
-                    venue={pasteTarget}
-                    values={venueFields}
-                    onChange={(key, value) => setVenueFields((prev) => ({ ...prev, [key]: value }))}
-                    onSubmit={onPasteVenue}
-                  />
+                  <ParadexKeyManager onChanged={(configured) => {
+                    if (configured) markVenueConfigured('paradex');
+                    else markVenueUnconfigured('paradex');
+                    refresh();
+                  }} onError={setError} />
                 </ParadexWalletConnect>
               ) : pasteTarget === 'thalex' ? (
                 <ThalexKeyManager
@@ -808,7 +807,7 @@ function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletC
         disabled={busy}
         onClick={() => void start()}
       >
-        {busy ? t('waitingWallet') : t('connectWallet')}
+        {busy ? t('waitingWallet') : `${t('connectWallet')} · Mainnet`}
       </button>
       <div className={styles.hint}>{t('pasteParadex')}</div>
       {children}

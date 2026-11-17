@@ -7,6 +7,7 @@ export type {
   VenueConnectRequest,
 } from './api';
 export {
+  activateParadexEnvironment,
   activateThalexEnvironment,
   confirmDeriveSessionKey,
   connectVenue,
@@ -27,6 +28,7 @@ export {
   usePortfolioMetrics,
   usePortfolioPositions,
   useThalexKeySlots,
+  useParadexKeySlots,
 } from './hooks/queries';
 export { default as ThalexNetworkBadge } from './ThalexNetworkBadge';
 export { usePortfolioWs } from './hooks/usePortfolioWs';

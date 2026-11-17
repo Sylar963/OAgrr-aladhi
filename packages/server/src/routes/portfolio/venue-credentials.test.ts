@@ -64,6 +64,7 @@ const { credentialsStoreMock, deriveStoreMock, paradexStoreMock, thalexStoreMock
       isConnected: vi.fn(() => false),
     },
     paradexStoreMock: {
+      environment: vi.fn(() => 'prod' as Env),
       connect: vi.fn().mockResolvedValue(undefined),
       disconnect: vi.fn().mockResolvedValue(undefined),
       isConnected: vi.fn(() => false),
@@ -326,6 +327,22 @@ describe('Paradex read-only key routes', () => {
       accountId: 'paper-default',
       readonlyToken: 'saved-token',
     });
+  });
+
+  it('keeps a separate encrypted testnet token and activates it without exposing either token', async () => {
+    const readonlyToken = paradexToken({ sub: ACCOUNT, exp: Math.floor(Date.now() / 1000) + 3600 });
+    await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/paradex', payload: { readonlyToken } });
+    const saved = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/paradex', payload: { readonlyToken, env: 'test' } });
+    expect(saved.statusCode).toBe(200);
+    expect(paradexStoreMock.connect).toHaveBeenLastCalledWith({ accountId: 'paper-default', readonlyToken, env: 'test' });
+    const row = credentialsStoreMock.rows.get('paper-default:paradex:test')!;
+    expect(getVenueCredentialCipher()!.decrypt(row.encryptedCredentials, venueCredentialContext('paper-default', 'paradex', 'test'))).toMatchObject({ readonlyToken });
+    const switched = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/paradex/activate', payload: { environment: 'prod' } });
+    expect(switched.statusCode).toBe(200);
+    expect(switched.json().slots).toHaveLength(2);
+    expect(switched.body).not.toContain(readonlyToken);
+    expect(credentialsStoreMock.rows.get('paper-default:paradex:prod')!.active).toBe(true);
+    expect(credentialsStoreMock.rows.get('paper-default:paradex:test')!.active).toBe(false);
   });
 
   it('keeps a live connection and does not reconnect an expired token', async () => {

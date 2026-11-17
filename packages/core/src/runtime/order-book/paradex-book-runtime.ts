@@ -34,6 +34,8 @@ export class ParadexBookRuntime {
   private readonly books = new Map<string, OrderBookSnapshot>();
   private readonly fees = new Map<string, { rate: number; cap: number }>();
   private readonly rejected = new Set<string>();
+  private readonly epochs = new Map<string, number>();
+  private nextEpoch = 0;
   private readonly abort = new AbortController();
   private timer: ReturnType<typeof setInterval> | null = null;
   private inFlight: Promise<void> | null = null;
@@ -53,6 +55,7 @@ export class ParadexBookRuntime {
     if (!this.refs.has(instrument) && this.refs.size >= this.maxInstruments) {
       throw new OrderBookCapacityError(this.maxInstruments);
     }
+    if (!this.refs.has(instrument)) this.epochs.set(instrument, ++this.nextEpoch);
     this.refs.set(instrument, (this.refs.get(instrument) ?? 0) + 1);
     if (this.timer == null) {
       this.timer = setInterval(() => void this.refresh(), this.refreshMs);
@@ -69,6 +72,7 @@ export class ParadexBookRuntime {
         this.refs.delete(instrument);
         this.books.delete(instrument);
         this.rejected.delete(instrument);
+        this.epochs.delete(instrument);
       }
       if (this.refs.size === 0 && this.timer != null) {
         clearInterval(this.timer);
@@ -128,26 +132,34 @@ export class ParadexBookRuntime {
   }
 
   private async refreshBook(symbol: string): Promise<void> {
+    const epoch = this.epochs.get(symbol);
+    if (epoch == null) return;
     try {
       const fee = this.fees.get(symbol);
-      if (fee == null) { this.rejected.add(symbol); return; }
+      if (fee == null) {
+        this.rejected.add(symbol);
+        const previous = this.books.get(symbol);
+        if (previous != null) this.books.set(symbol, { ...previous, state: 'unsynchronized' });
+        return;
+      }
       const snapshot = SnapshotSchema.parse(await this.read(`/orderbook/${encodeURIComponent(symbol)}?depth=100`));
-      if (this.disposed || !this.refs.has(symbol)) return;
+      if (this.disposed || this.epochs.get(symbol) !== epoch) return;
       if (snapshot.market !== symbol) throw new Error('Paradex book market mismatch');
       const bids = snapshot.bids.filter(([, size]) => size > 0).map(([price, amount]) => ({ price, amount, outrightAmount: amount })).sort((a, b) => b.price - a.price);
       const asks = snapshot.asks.filter(([, size]) => size > 0).map(([price, amount]) => ({ price, amount, outrightAmount: amount })).sort((a, b) => a.price - b.price);
-      const previous = this.books.get(symbol);
+      if (new Set(bids.map((l) => l.price)).size !== bids.length ||
+        new Set(asks.map((l) => l.price)).size !== asks.length) throw new Error('Duplicate Paradex book price');
       const crossed = bids[0] != null && asks[0] != null && bids[0].price >= asks[0].price;
       this.books.set(symbol, {
         venue: 'paradex', instrument: symbol, priceUnit: 'usd', quantityUnit: 'base',
         bids, asks, totalBidAmount: bids.reduce((sum, l) => sum + l.amount, 0),
         totalAskAmount: asks.reduce((sum, l) => sum + l.amount, 0),
         exchangeTs: snapshot.last_updated_at, receivedAt: this.now(),
-        generation: previous?.generation ?? 1, state: 'synced', crossed, mark: null, takerFee: fee,
+        generation: epoch, state: 'synced', crossed, mark: null, takerFee: fee,
       });
       this.rejected.delete(symbol);
     } catch (error) {
-      if (this.disposed || !this.refs.has(symbol)) return;
+      if (this.disposed || this.epochs.get(symbol) !== epoch) return;
       const previous = this.books.get(symbol);
       if (previous != null) this.books.set(symbol, { ...previous, state: 'unsynchronized' });
       log.warn({ err: String(error), symbol }, 'paradex depth snapshot unavailable');
@@ -163,5 +175,6 @@ export class ParadexBookRuntime {
     this.books.clear();
     this.fees.clear();
     this.rejected.clear();
+    this.epochs.clear();
   }
 }

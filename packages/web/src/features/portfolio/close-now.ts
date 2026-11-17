@@ -14,7 +14,7 @@ export const SPREAD_WIDENED_RATIO = 1.5;
 
 export const closeNowMessages = defineMessages(
   {
-    tooltip: "What you'd receive closing every leg now as a taker on the holding venue, after fees.",
+    tooltip: 'Estimated taker-close P&L on the holding venue. Paradex uses API depth snapshots refreshed every 5 seconds and public API fees; account discounts and RFQ execution may differ.',
     comboNote: 'Priced leg by leg; a combo or RFQ close may come in tighter.',
     reason_loading: 'book loading',
     reason_rejected: 'Venue book or fee schedule unavailable',

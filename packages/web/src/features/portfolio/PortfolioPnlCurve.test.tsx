@@ -58,6 +58,19 @@ afterEach(() => {
   localStorage.clear();
 });
 
+it('uses Paradex reported maintenance margin for the liquidation approximation', () => {
+  const { container } = render(<PortfolioPnlCurve forwardDays={0} curve={curve({
+    currentSpotUsd: 85000,
+    points: [
+      { underlyingPriceUsd: 80000, nowPnlUsd: -1000, forwardPnlUsd: null, expiryPnlUsd: -1000 },
+      { underlyingPriceUsd: 90000, nowPnlUsd: 1000, forwardPnlUsd: null, expiryPnlUsd: 1000 },
+    ],
+  })} margin={{ accountId: 'a', venue: 'paradex', initialMarginUsd: 400, marginUsd: 1000,
+    remainingMarginUsd: 600, maintenanceMarginUsd: 180, updatedAt: 1 }} />);
+  expect(container.textContent).toContain('Liquidation ≈ -$820');
+  expect(container.textContent).not.toContain('Liquidation ≈ -$720');
+});
+
 describe('PortfolioPnlCurve', () => {
   it('names the expiry after which upside loss is unbounded', () => {
     render(

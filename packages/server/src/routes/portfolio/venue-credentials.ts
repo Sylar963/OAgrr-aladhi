@@ -209,9 +209,11 @@ async function listParadexKeySlots(cipher: VenueCredentialCipher, accountId: str
     const row = rows.find((slot) => slot.environment === environment);
     let credentials: ParadexStoredCredentials | null = null;
     if (row != null) {
-      const parsed = ParadexStoredCredentialsSchema.safeParse(cipher.decrypt<unknown>(
-        row.encryptedCredentials, venueCredentialContext(accountId, 'paradex', environment)));
-      if (parsed.success) credentials = parsed.data;
+      try {
+        const parsed = ParadexStoredCredentialsSchema.safeParse(cipher.decrypt<unknown>(
+          row.encryptedCredentials, venueCredentialContext(accountId, 'paradex', environment)));
+        if (parsed.success) credentials = parsed.data;
+      } catch {}
     }
     return { environment, configured: row != null, active: row?.active ?? false,
       connected: row?.active === true && connected === environment,

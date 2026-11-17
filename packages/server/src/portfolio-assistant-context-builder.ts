@@ -181,6 +181,7 @@ export interface PortfolioAssistantAccountEquityFacts {
   venue: 'thalex' | 'paradex';
   venueAccount?: string | undefined;
   maintenanceMarginUsd?: number | null;
+  totalCollateralUsd?: number | null;
   network: 'mainnet' | 'testnet';
   asOf: string;
   basis: string;
@@ -955,9 +956,9 @@ export class PortfolioAssistantContextBuilder {
         return {
           venue: 'paradex', venueAccount: account.venueAccount,
           network: account.environment === 'test' ? 'testnet' : 'mainnet', asOf: new Date(account.fetchedAt).toISOString(),
-          basis: 'Venue-reported account_value includes unrealized P&L. Total collateral is reported separately; it is not a transaction ledger. Settlement asset is displayed at 1:1 USD.',
-          equityUsd: account.equityUsd, cashUsd: account.totalCollateralUsd ?? null,
-          unrealisedPnlUsd: account.totalCollateralUsd == null ? null : account.equityUsd - account.totalCollateralUsd,
+          basis: 'Venue-reported account_value includes unrealized P&L. Total collateral is separate from the cash ledger; no P&L decomposition is inferred. Settlement asset is displayed at 1:1 USD.',
+          equityUsd: account.equityUsd, totalCollateralUsd: account.totalCollateralUsd ?? null,
+          cashUsd: null, unrealisedPnlUsd: null,
           sessionRealisedPnlUsd: null, marginUsd: account.equityUsd,
           requiredMarginUsd: account.initialMarginUsd, remainingMarginUsd: account.freeCollateralUsd,
           maintenanceMarginUsd: account.maintenanceMarginUsd, cash: [], dailyEquity: [],

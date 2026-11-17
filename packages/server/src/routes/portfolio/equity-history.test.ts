@@ -3,8 +3,8 @@ import Fastify from 'fastify';
 
 const { deriveMock, thalexMock, paradexMock } = vi.hoisted(() => ({
   deriveMock: { fetchEquityHistory: vi.fn() },
-  thalexMock: { fetchEquityHistory: vi.fn() },
-  paradexMock: { fetchEquityHistory: vi.fn() },
+  thalexMock: { fetchEquityHistory: vi.fn(), environment: vi.fn(() => 'prod') },
+  paradexMock: { fetchEquityHistory: vi.fn(), ledgerAccountId: vi.fn((accountId: string) => accountId) },
 }));
 
 vi.mock('../../derive-position-store.js', () => ({ derivePositionStore: deriveMock }));
@@ -117,5 +117,18 @@ describe('GET /portfolio/equity-history', () => {
   it('rejects venues without equity history', async () => {
     const res = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=deribit' });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('does not reuse Paradex equity history after changing the venue account or network', async () => {
+    const headers = { 'x-account': nextAccount() };
+    const scope = `${headers['x-account']}:paradex`;
+    paradexMock.ledgerAccountId.mockReturnValueOnce(`${scope}:prod:a`);
+    paradexMock.fetchEquityHistory.mockResolvedValueOnce([{ ts: Date.now(), equityUsd: 100 }]);
+    const main = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=paradex', headers });
+    paradexMock.ledgerAccountId.mockReturnValueOnce(`${scope}:test:a`);
+    paradexMock.fetchEquityHistory.mockResolvedValueOnce([{ ts: Date.now(), equityUsd: 200 }]);
+    const test = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=paradex', headers });
+    expect(main.json().points[0].equityUsd).toBe(100);
+    expect(test.json().points[0].equityUsd).toBe(200);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  ParadexKeySlotsSchema,
   ParadexAccountResponseSchema,
   ParadexRfqsResponseSchema,
   ThalexAccountResponseSchema,
@@ -70,7 +71,7 @@ async function getJson<T>(path: string, schema: ResponseSchema<T>, token?: strin
 async function postJson<T>(
   path: string,
   body: unknown,
-  schema: z.ZodType<T>,
+  schema: ResponseSchema<T>,
   token?: string,
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -219,6 +220,14 @@ export async function activateThalexEnvironment(
     { environment },
     ThalexKeySlotsSchema,
   );
+}
+
+export function fetchParadexKeySlots() {
+  return getJson('/portfolio/venue-credentials/paradex/keys', ParadexKeySlotsSchema);
+}
+
+export function activateParadexEnvironment(environment: VenueEnvironment) {
+  return postJson('/portfolio/venue-credentials/paradex/activate', { environment }, ParadexKeySlotsSchema);
 }
 
 const LiveStatusResponseSchema: z.ZodType<LiveStatus> = z.object({

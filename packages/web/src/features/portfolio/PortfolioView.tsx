@@ -35,6 +35,7 @@ import { usePortfolioMetrics, usePortfolioPositions, useVenueMargin } from './ho
 import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
 import ThalexNetworkBadge from './ThalexNetworkBadge';
+import ParadexNetworkBadge from './ParadexNetworkBadge';
 
 const FORWARD_DAYS = 7;
 const UNDERLYING_OPTIONS = ['all', 'BTC', 'ETH'] as const;
@@ -272,6 +273,7 @@ export default function PortfolioView() {
             ))}
           </div>
           {source === 'thalex' && <ThalexNetworkBadge />}
+          {source === 'paradex' && <ParadexNetworkBadge />}
           <span
             className={styles.status}
             data-state={connectionState}

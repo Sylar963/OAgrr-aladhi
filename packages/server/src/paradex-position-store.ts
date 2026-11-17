@@ -120,8 +120,8 @@ export class ParadexPositionStore implements PositionStore {
     await this.disconnectClient(creds.accountId);
     const subject = decodeParadexJwtClaims(creds.readonlyToken)?.sub;
     const environment = creds.env ?? 'prod';
-    const identity = subject == null ? creds.accountId :
-      `${creds.accountId}:paradex:${environment}:${/^0x[0-9a-f]+$/i.test(subject) ? BigInt(subject).toString(16) : subject}`;
+    const address = subject == null ? 'unknown' : /^0x[0-9a-f]+$/i.test(subject) ? BigInt(subject).toString(16) : subject;
+    const identity = `${creds.accountId}:paradex:${environment}:${address}`;
     if (identity !== this.ledgerAccountId(creds.accountId)) {
       this.cache.delete(creds.accountId);
       this.linearCache.delete(creds.accountId);
@@ -246,12 +246,16 @@ export class ParadexPositionStore implements PositionStore {
 
   async fetchAccountSummary(accountId: string) {
     const client = this.clients.get(accountId);
-    return client == null ? null : client.fetchAccountSummary();
+    if (client == null) return null;
+    const summary = await client.fetchAccountSummary();
+    return this.clients.get(accountId) === client ? summary : null;
   }
 
   async fetchOpenRfqs(accountId: string, underlying: string, cursor?: string) {
     const client = this.clients.get(accountId);
-    return client == null ? null : client.fetchOpenRfqs(underlying, cursor);
+    if (client == null) return null;
+    const page = await client.fetchOpenRfqs(underlying, cursor);
+    return this.clients.get(accountId) === client ? page : null;
   }
 
   async fetchEquityHistory(
@@ -259,12 +263,16 @@ export class ParadexPositionStore implements PositionStore {
     fromMs: number,
   ): Promise<EquityHistoryPoint[] | null> {
     const client = this.clients.get(accountId);
-    return client == null ? null : client.fetchEquityHistory(fromMs);
+    if (client == null) return null;
+    const history = await client.fetchEquityHistory(fromMs);
+    return this.clients.get(accountId) === client ? history : null;
   }
 
   async fetchPnlHistory(accountId: string, fromMs: number) {
     const client = this.clients.get(accountId);
-    return client == null ? null : client.fetchPnlHistory(fromMs);
+    if (client == null) return null;
+    const history = await client.fetchPnlHistory(fromMs);
+    return this.clients.get(accountId) === client ? history : null;
   }
 
   isConnected(accountId: string): boolean {

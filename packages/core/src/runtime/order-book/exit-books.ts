@@ -25,10 +25,16 @@ export type ExitBookRuntime = Pick<OrderBookRuntime, 'acquire' | 'getBook' | 'is
 export class VenueExitBooks implements ExitBookSource {
   private readonly leases = new Map<string, OrderBookLease>();
   private readonly failed = new Map<string, CloseNowUnavailableReason>();
+  private activeRuntime: ExitBookRuntime | null = null;
 
-  constructor(private readonly runtime: ExitBookRuntime, private readonly venue: 'thalex' | 'paradex') {}
+  constructor(private readonly runtime: ExitBookRuntime | (() => ExitBookRuntime), private readonly venue: 'thalex' | 'paradex') {}
 
   sync(legs: readonly PositionLeg[]): void {
+    const runtime = typeof this.runtime === 'function' ? this.runtime() : this.runtime;
+    if (this.activeRuntime !== runtime) {
+      this.dispose();
+      this.activeRuntime = runtime;
+    }
     const wanted = new Set<string>();
     for (const leg of legs) {
       const instrument = this.instrumentOf(leg);
@@ -43,7 +49,7 @@ export class VenueExitBooks implements ExitBookSource {
     for (const instrument of wanted) {
       if (this.leases.has(instrument)) continue;
       try {
-        this.leases.set(instrument, this.runtime.acquire(instrument));
+        this.leases.set(instrument, runtime.acquire(instrument));
       } catch (err) {
         const reason = err instanceof OrderBookCapacityError ? 'capacity' : 'loading';
         if (reason === 'loading') log.warn({ err: String(err), instrument }, 'exit book acquire failed');
@@ -58,15 +64,16 @@ export class VenueExitBooks implements ExitBookSource {
     const failure = this.failed.get(instrument);
     if (failure != null) return { kind: 'unavailable', reason: failure };
     // A book that arrives after a refused subscribe wins: the rejected flag is not cleared on recovery.
-    const book = this.runtime.getBook(instrument);
+    const book = this.activeRuntime?.getBook(instrument);
     if (book != null) return { kind: 'book', book };
-    return { kind: 'unavailable', reason: this.runtime.isRejected(instrument) ? 'rejected' : 'loading' };
+    return { kind: 'unavailable', reason: this.activeRuntime?.isRejected(instrument) ? 'rejected' : 'loading' };
   }
 
   dispose(): void {
     for (const lease of this.leases.values()) lease.release();
     this.leases.clear();
     this.failed.clear();
+    this.activeRuntime = null;
   }
 
   private instrumentOf(leg: PositionLeg): string | null {
@@ -80,5 +87,5 @@ export class ThalexExitBooks extends VenueExitBooks {
 }
 
 export class ParadexExitBooks extends VenueExitBooks {
-  constructor(runtime: ExitBookRuntime) { super(runtime, 'paradex'); }
+  constructor(runtime: ExitBookRuntime | (() => ExitBookRuntime)) { super(runtime, 'paradex'); }
 }

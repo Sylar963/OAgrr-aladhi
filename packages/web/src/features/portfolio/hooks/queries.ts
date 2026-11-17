@@ -15,6 +15,7 @@ import {
   fetchLiveTradingAvailability,
   fetchMetrics,
   fetchThalexKeySlots,
+  fetchParadexKeySlots,
   fetchPositions,
   fetchVenueMargin,
   removePosition,
@@ -137,6 +138,16 @@ export function useThalexKeySlots(enabled = true) {
     enabled: session.status === 'ready' && enabled,
     staleTime: 30_000,
     retry: false,
+  });
+}
+
+export function useParadexKeySlots(enabled = true) {
+  const session = useAccountSession();
+  return useQuery({
+    queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'paradex-keys'],
+    queryFn: fetchParadexKeySlots,
+    enabled: session.status === 'ready' && enabled,
+    staleTime: 30_000, retry: false,
   });
 }
 

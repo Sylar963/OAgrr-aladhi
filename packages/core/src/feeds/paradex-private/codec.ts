@@ -33,7 +33,8 @@ export function parseParadexOptionSymbol(symbol: string): {
 } | null {
   const parts = symbol.split('-');
   if (parts.length !== 5) return null;
-  const [underlying, , dateRaw, strikeRaw, rightRaw] = parts;
+  const [underlying, quote, dateRaw, strikeRaw, rightRaw] = parts;
+  if (quote !== 'USD') return null;
   if (!underlying || !dateRaw || !strikeRaw || !rightRaw) return null;
   const date = /^(\d{1,2})([A-Z]{3})(\d{2})$/.exec(dateRaw);
   const month = date == null ? undefined : MONTHS[date[2]!];
@@ -42,9 +43,12 @@ export function parseParadexOptionSymbol(symbol: string): {
   if (!Number.isFinite(strike) || strike <= 0) return null;
   const optionRight = rightRaw === 'C' ? 'call' : rightRaw === 'P' ? 'put' : null;
   if (optionRight == null) return null;
+  const expiry = `20${date[3]}-${month}-${date[1]!.padStart(2, '0')}`;
+  const timestamp = Date.parse(`${expiry}T00:00:00.000Z`);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== expiry) return null;
   return {
     underlying,
-    expiry: `20${date[3]}-${month}-${date[1]!.padStart(2, '0')}`,
+    expiry,
     strike,
     optionRight,
   };

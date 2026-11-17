@@ -25,6 +25,7 @@ describe('parseHash', () => {
   });
 
   it('parses a tradfi page + ticker', () => {
+    expect(parseHash('#tradfi/analytics/SPY')).toEqual({ mode: 'tradfi', page: 'analytics', ticker: 'SPY' });
     expect(parseHash('#tradfi/gex/AAPL')).toEqual({ mode: 'tradfi', page: 'gex', ticker: 'AAPL' });
     expect(parseHash('#tradfi/alpha/SPX')).toEqual({ mode: 'tradfi', page: 'alpha', ticker: 'SPX' });
     expect(parseHash('#tradfi/vol/SPY')).toEqual({ mode: 'tradfi', page: 'vol', ticker: 'SPY' });
@@ -93,6 +94,7 @@ describe('round-trip', () => {
       { mode: 'tradfi', page: 'chain', ticker: 'AAPL' },
       { mode: 'tradfi', page: 'gex', ticker: null },
       { mode: 'tradfi', page: 'builder', ticker: 'SPY' },
+      { mode: 'tradfi', page: 'analytics', ticker: 'SPY' },
     ];
     for (const state of states) {
       expect(parseHash(buildHash(state))).toEqual(state);

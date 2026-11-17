@@ -13,6 +13,7 @@ const TRADFI_PAGES: Record<TradfiPage, true> = {
   alpha: true,
   vol: true,
   sectors: true,
+  analytics: true,
 };
 
 // Hash route state, discriminated by asset mode. `ticker` is null when no

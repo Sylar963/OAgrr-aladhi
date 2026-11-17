@@ -49,7 +49,7 @@ export function analyticsRoute(deps: TradfiDeps) {
         if (cached && now - cached.at < CACHE_MS) return cached.body;
         const body = parity
           ? TradfiParityResponseSchema.parse(buildParity(deps, underlying, expiry!, now))
-          : TradfiAnalyticsResponseSchema.parse(buildAnalytics(deps, underlying, expiries, now));
+          : TradfiAnalyticsResponseSchema.parse({ ...buildAnalytics(deps, underlying, expiries, now), expiries: available });
         for (const [k, entry] of cache) if (now - entry.at >= CACHE_MS) cache.delete(k);
         cache.set(key, { at: now, body });
         return body;

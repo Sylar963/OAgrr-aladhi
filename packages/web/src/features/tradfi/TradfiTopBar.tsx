@@ -16,6 +16,7 @@ const messages = defineMessages(
     sectors: 'Sectors',
     builder: 'Builder',
     alpha: 'Alpha',
+    analytics: 'Analytics',
     delayedTitle: 'TastyTrade market data is delayed 15 minutes',
     delayed: '15-min delayed',
     underlying: 'Underlying',
@@ -28,6 +29,7 @@ const messages = defineMessages(
     sectors: 'Sectores',
     builder: 'Constructor',
     alpha: 'Alpha',
+    analytics: 'Analítica',
     delayedTitle: 'Los datos de mercado de TastyTrade tienen 15 minutos de retraso',
     delayed: 'Retraso de 15 min',
     underlying: 'Subyacente',
@@ -42,6 +44,7 @@ const PAGES: ReadonlyArray<{ id: TradfiPage; group: TabGroup }> = [
   { id: 'sectors', group: 'market' },
   { id: 'builder', group: 'trade' },
   { id: 'alpha', group: 'research' },
+  { id: 'analytics', group: 'research' },
 ];
 
 function isTypingTarget(target: EventTarget | null): boolean {

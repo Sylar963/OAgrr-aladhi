@@ -1,5 +1,6 @@
 import {
   ParadexKeySlotsSchema,
+  PortfolioCloseNowSchema,
   ParadexAccountResponseSchema,
   ParadexRfqsResponseSchema,
   ThalexAccountResponseSchema,
@@ -460,6 +461,12 @@ const PortfolioPnlCurveSchema = z.object({
 });
 
 const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
+  closeNow: z
+    .custom<NonNullable<PortfolioMetrics['closeNow']>>(
+      (value) => PortfolioCloseNowSchema.safeParse(value).success,
+    )
+    .nullable()
+    .optional(),
   accountId: z.string(),
   generatedAt: z.number(),
   forwardDays: z.number(),

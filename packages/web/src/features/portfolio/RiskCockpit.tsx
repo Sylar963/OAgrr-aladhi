@@ -54,6 +54,7 @@ const messages = defineMessages(
     peak: 'peak {pnl} at {time}',
     peakMark: ' (mark {v})',
     takerClose: 'taker close on holding venue, after fees',
+    interactiveDepth: 'Paradex UI depth · includes retail-only liquidity',
     cockpitAria: 'Portfolio risk cockpit',
     bookPosture: 'Book posture / {eyebrow}',
     unrealizedPnl: 'Unrealized P&L',
@@ -154,6 +155,7 @@ const messages = defineMessages(
     peak: 'pico {pnl} a las {time}',
     peakMark: ' (mark {v})',
     takerClose: 'cierre taker en el exchange donde está, después de comisiones',
+    interactiveDepth: 'Profundidad de la UI de Paradex · incluye liquidez exclusiva para retail',
     cockpitAria: 'Cabina de riesgo del portafolio',
     bookPosture: 'Postura del libro / {eyebrow}',
     unrealizedPnl: 'P&L no realizado',
@@ -325,6 +327,9 @@ function CloseNowMetric({ closeNow }: { closeNow: PortfolioCloseNow | null | und
     ? Math.max(0, ...closeNow.legs.filter((l) => l.stale).map((l) => l.bookAgeMs ?? 0))
     : null;
   const foot = [
+    closeNow.legs.some((leg) => leg.liquidityAccess === 'interactive')
+      ? t('interactiveDepth')
+      : null,
     staleAge != null ? t('staleBook', { age: fmtAge(staleAge) }) : null,
     coverage,
     total.feesUsd > 0 ? t('fees', { v: fmtUsdSigned(-total.feesUsd) }) : null,

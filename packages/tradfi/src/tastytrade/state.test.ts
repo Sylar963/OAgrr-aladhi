@@ -47,6 +47,20 @@ describe('applyEvent', () => {
     expect(q.delta).toBe(0.55);
   });
 
+  it('keeps quote timestamps separate from newer Greeks and preserves a newer volume day', () => {
+    const store = new TradfiStore();
+    store.setInstruments([inst]);
+    applyEvent(store, { eventType: 'Quote', eventSymbol: inst.streamerSymbol, bidPrice: 5, askPrice: 6, bidTime: 100, askTime: 101 }, 200);
+    applyEvent(store, { eventType: 'Greeks', eventSymbol: inst.streamerSymbol, volatility: 0.4 }, 300);
+    expect(store.getQuote(inst.streamerSymbol)?.quoteReceivedAt).toBe(200);
+    expect(store.getQuote(inst.streamerSymbol)?.bidTime).toBe(100);
+    applyEvent(store, { eventType: 'Trade', eventSymbol: inst.streamerSymbol, dayVolume: 2, dayId: 20774 }, 400);
+    applyEvent(store, { eventType: 'Trade', eventSymbol: inst.streamerSymbol, dayVolume: 999, dayId: 20773 }, 500);
+    expect(store.getTradingDay('AAPL')).toBe(20774);
+    expect(store.getQuote(inst.streamerSymbol)?.volume).toBe(2);
+    expect(store.getQuote(inst.streamerSymbol)?.volumeTs).toBe(400);
+  });
+
   it('sets spot when the event is for an underlying symbol', () => {
     const s = new TradfiStore();
     s.setInstruments([inst]);

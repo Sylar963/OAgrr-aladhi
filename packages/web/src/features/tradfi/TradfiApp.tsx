@@ -17,17 +17,20 @@ const AlphaView = lazy(() =>
 const TradfiSurfaceView = lazy(() =>
   import('@features/surface').then((module) => ({ default: module.TradfiSurfaceView })),
 );
+const TradfiAnalyticsView = lazy(() => import('./TradfiAnalyticsView'));
 
 const messages = defineMessages(
   {
     loadingBuilder: 'Loading TradFi Builder…',
     loadingVol: 'Loading TradFi Volatility…',
     loadingAlpha: 'Loading TradFi Alpha…',
+    loadingAnalytics: 'Loading TradFi Analytics…',
   },
   {
     loadingBuilder: 'Cargando constructor TradFi…',
     loadingVol: 'Cargando volatilidad TradFi…',
     loadingAlpha: 'Cargando Alpha TradFi…',
+    loadingAnalytics: 'Cargando analítica TradFi…',
   },
 );
 
@@ -50,6 +53,10 @@ export default function TradfiApp() {
         ) : page === 'vol' ? (
           <Suspense fallback={<Spinner size="lg" label={t('loadingVol')} />}>
             <TradfiSurfaceView />
+          </Suspense>
+        ) : page === 'analytics' ? (
+          <Suspense fallback={<Spinner size="lg" label={t('loadingAnalytics')} />}>
+            <TradfiAnalyticsView />
           </Suspense>
         ) : page === 'alpha' ? (
           <Suspense fallback={<Spinner size="lg" label={t('loadingAlpha')} />}>

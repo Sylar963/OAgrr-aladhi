@@ -68,4 +68,16 @@ describe('planner', () => {
     expect(both).toEqual(full);
     expect(new Set(both.map((s) => `${s.type}|${s.symbol}`)).size).toBe(both.length);
   });
+
+  it('keeps every strike for analytics and requests only quotes for parity', () => {
+    const insts = chain(range(5000, 8000, 5));
+    const analytics = planChainSubscriptions(insts, ['analytics'], 6500, NOW);
+    expect(analytics).toHaveLength(insts.length * 2);
+    expect(new Set(analytics.map((s) => s.type))).toEqual(new Set(['Trade', 'Summary']));
+    const parity = planChainSubscriptions(insts, ['parity'], 6500, NOW);
+    expect(parity).toHaveLength(insts.length);
+    expect(new Set(parity.map((s) => s.type))).toEqual(new Set(['Quote']));
+    const all = planChainSubscriptions(insts, ['full', 'analytics', 'parity', 'surface'], 6500, NOW);
+    expect(all).toEqual(planChainSubscriptions(insts, ['full'], 6500, NOW));
+  });
 });

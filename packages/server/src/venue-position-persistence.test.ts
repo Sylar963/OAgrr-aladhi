@@ -136,7 +136,16 @@ describe('VenuePositionPersistence', () => {
 describe('carryEntryIvs', () => {
   it('keeps the fill entry time and spot when the venue restamps entryTs', () => {
     const prior = new Map([
-      ['a', { ...leg('a'), entryIv: 0.5, entryIvSource: 'fill' as const, entryTs: 7, entryUnderlyingUsd: 90_000 }],
+      [
+        'a',
+        {
+          ...leg('a'),
+          entryIv: 0.5,
+          entryIvSource: 'fill' as const,
+          entryTs: 7,
+          entryUnderlyingUsd: 90_000,
+        },
+      ],
     ]);
     const [carried] = carryEntryIvs(prior, [{ ...leg('a'), entryTs: 999 }]);
     expect(carried).toMatchObject({ entryIv: 0.5, entryTs: 7, entryUnderlyingUsd: 90_000 });
@@ -150,11 +159,22 @@ describe('carryEntryIvs', () => {
     expect(carryEntryIvs(prior, [leg('b')])[0]?.entryIv).toBeNull();
     expect(carryEntryIvs(undefined, [leg('a')])[0]?.entryIv).toBeNull();
   });
+
+  it('withholds a stale fill anchor when opening size or average entry changes', () => {
+    const position = { ...leg('a'), source: 'paradex' as const };
+    const prior = new Map([['a', { ...position, entryIv: 0.5, entryIvSource: 'fill' as const }]]);
+    expect(carryEntryIvs(prior, [{ ...position, size: 2 }])[0]?.entryIv).toBeNull();
+    expect(carryEntryIvs(prior, [{ ...position, entryPriceUsd: 1200 }])[0]?.entryIv).toBeNull();
+    expect(carryEntryIvs(prior, [{ ...position, size: 0.5 }])[0]?.entryIv).toBe(0.5);
+  });
 });
 
 describe('mergePersistedEntryIvs', () => {
   it('restores the stored anchor over a fresh first-seen IV but never over a fill IV', () => {
-    const stored = [{ ...leg('a'), entryIv: 0.4 }, { ...leg('b'), entryIv: 0.41 }];
+    const stored = [
+      { ...leg('a'), entryIv: 0.4 },
+      { ...leg('b'), entryIv: 0.41 },
+    ];
     const merged = mergePersistedEntryIvs(
       [
         { ...leg('a'), entryIv: 0.55, entryIvSource: 'first_seen' },

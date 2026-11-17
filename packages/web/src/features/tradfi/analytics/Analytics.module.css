@@ -257,7 +257,7 @@
   z-index: 1;
 }
 
-.table td[data-usable='false'] {
+.table td[data-usable="false"] {
   color: var(--text-tertiary);
 }
 
@@ -286,6 +286,10 @@
 
 .heatmap button:hover {
   border-color: var(--accent-primary);
+}
+
+.heatmap button[data-intense="true"] {
+  color: var(--bg-base);
 }
 
 .note {

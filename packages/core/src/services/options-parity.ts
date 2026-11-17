@@ -61,8 +61,9 @@ function pairRow(
   const times = [call.bidTime, call.askTime, put.bidTime, put.askTime];
   if (
     times.some((t) => t == null || !Number.isFinite(t) || t <= 0 || t > now + 1_000) ||
-    call.receivedAt == null ||
-    put.receivedAt == null
+    [call.receivedAt, put.receivedAt].some(
+      (t) => t == null || !Number.isFinite(t) || t <= 0 || t > now + 1_000,
+    )
   )
     return { ...row, status: 'missing_time' };
   const sourceTimes = times as number[];
@@ -70,7 +71,7 @@ function pairRow(
   row.quoteSkewMs = Math.max(...sourceTimes) - Math.min(...sourceTimes);
   if (
     row.quoteAgeMs > PARITY_MAX_QUOTE_AGE_MS ||
-    now - Math.min(call.receivedAt, put.receivedAt) > PARITY_MAX_RECEIPT_AGE_MS
+    now - Math.min(call.receivedAt!, put.receivedAt!) > PARITY_MAX_RECEIPT_AGE_MS
   ) {
     return { ...row, status: 'stale' };
   }

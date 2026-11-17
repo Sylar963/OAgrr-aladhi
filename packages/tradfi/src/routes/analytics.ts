@@ -19,7 +19,7 @@ const Query = z.object({
 const CACHE_MS = 1_000;
 
 export function analyticsRoute(deps: TradfiDeps) {
-  return async function (app: FastifyInstance) {
+  return async (app: FastifyInstance) => {
     const activityCache = new Map<string, { at: number; body: unknown }>();
     const parityCache = new Map<string, { at: number; body: unknown }>();
 
@@ -49,7 +49,10 @@ export function analyticsRoute(deps: TradfiDeps) {
         if (cached && now - cached.at < CACHE_MS) return cached.body;
         const body = parity
           ? TradfiParityResponseSchema.parse(buildParity(deps, underlying, expiry!, now))
-          : TradfiAnalyticsResponseSchema.parse({ ...buildAnalytics(deps, underlying, expiries, now), expiries: available });
+          : TradfiAnalyticsResponseSchema.parse({
+              ...buildAnalytics(deps, underlying, expiries, now),
+              expiries: available,
+            });
         for (const [k, entry] of cache) if (now - entry.at >= CACHE_MS) cache.delete(k);
         cache.set(key, { at: now, body });
         return body;

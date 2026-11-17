@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const TRADFI_ANALYTICS_HEATMAP_STRIKES = 20;
+
 const Value = z.number().finite().nonnegative().nullable();
 const Count = z.number().int().nonnegative();
 

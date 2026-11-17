@@ -28,6 +28,10 @@ Logs "tradfi service listening" then "markets loaded + streaming" once bootstrap
 
 ## Routes
 
+TradFi Analytics provides session volume/OI by tenor and strike, put/call ratios, and
+non-circular call/put pricing consistency. See [ANALYTICS.md](./ANALYTICS.md) for contracts,
+subscription tiers, calculation invariants and pricing limitations.
+
 | Method | Path | Description |
 |---|---|---|
 | GET | `/venues` | Venue capabilities list |

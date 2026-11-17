@@ -5,6 +5,7 @@ import {
   PARITY_MAX_QUOTE_SKEW_MS,
 } from '@oggregator/core';
 import type { TradfiAnalyticsResponse, TradfiParityResponse } from '@oggregator/protocol';
+import { TRADFI_ANALYTICS_HEATMAP_STRIKES } from '@oggregator/protocol';
 import type { TradfiDeps } from '../app.js';
 
 export function liveExpiries(deps: TradfiDeps, underlying: string, now: number): string[] {
@@ -47,6 +48,20 @@ export function buildAnalytics(
     }),
   );
   const aggregate = aggregateOptionsActivity(inputs, deps.store.getSpot(underlying));
+  const heatmapStrikes = new Set(
+    (['volume', 'openInterest', 'volumeNotionalUsd', 'oiNotionalUsd'] as const).flatMap((field) =>
+      [...aggregate.byStrike]
+        .sort((a, b) => {
+          const total = (row: typeof a) =>
+            row.call[field] == null && row.put[field] == null
+              ? -1
+              : (row.call[field] ?? 0) + (row.put[field] ?? 0);
+          return total(b) - total(a);
+        })
+        .slice(0, TRADFI_ANALYTICS_HEATMAP_STRIKES)
+        .map((r) => r.strike),
+    ),
+  );
   return {
     underlying,
     asOf: now,
@@ -58,6 +73,7 @@ export function buildAnalytics(
     expiries,
     deferredExpiries,
     ...aggregate,
+    cells: aggregate.cells.filter((cell) => heatmapStrikes.has(cell.strike)),
     byExpiry: aggregate.byExpiry.map((row) => ({
       ...row,
       dte: Math.max(

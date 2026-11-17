@@ -204,7 +204,7 @@ describe('estimateClose', () => {
     const rejected = { ...loading, unavailableReason: 'rejected' as const };
     expect(estimateClose(group(), closeNow(rejected, short))).toEqual({
       status: 'unavailable',
-      reason: 'Thalex refused the book',
+      reason: 'Venue book or fee schedule unavailable',
     });
 
     const deribit = { ...loading, status: 'unsupported_venue' as const, venue: 'deribit' as const };

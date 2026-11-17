@@ -34,7 +34,14 @@ function add(side: OptionsActivitySide, input: OptionsActivityInput, spot: numbe
   side.contracts++;
   const volume = quantity(input.volume);
   const oi = quantity(input.openInterest);
-  const scale = spot != null && spot > 0 && input.multiplier > 0 ? spot * input.multiplier : null;
+  const scale =
+    spot != null &&
+    Number.isFinite(spot) &&
+    spot > 0 &&
+    Number.isFinite(input.multiplier) &&
+    input.multiplier > 0
+      ? spot * input.multiplier
+      : null;
   if (volume != null) {
     side.volumeObserved++;
     side.volume = (side.volume ?? 0) + volume;

@@ -36,6 +36,8 @@ export class ParadexPositionStore implements PositionStore {
   private readonly historyTimers = new Map<string, ReturnType<typeof setInterval>>();
   private readonly historyReads = new Map<string, Promise<void>>();
   private readonly historyFrom = new Map<string, number>();
+  private readonly seenTrades = new WeakMap<ParadexPrivateClient, Map<string, string>>();
+  private readonly historyInitialized = new WeakSet<ParadexPrivateClient>();
   private readonly persistence: VenuePositionPersistence;
   private readonly testnetPersistence = new VenuePositionPersistence(
     'paradex',
@@ -225,7 +227,15 @@ export class ParadexPositionStore implements PositionStore {
       const startedAt = Date.now();
       const trades = await client.fetchOptionTrades(fromMs);
       if (!isCurrent()) return;
-      await this.persistence.persistTrades(identity, trades);
+      const seen = this.seenTrades.get(client) ?? new Map<string, string>();
+      this.seenTrades.set(client, seen);
+      const changed = trades.filter((trade) => seen.get(trade.tradeId) !== JSON.stringify(trade));
+      // Overlapping REST reads must not keep database compute awake when no fill changed.
+      if (changed.length === 0 && this.historyInitialized.has(client)) {
+        this.historyFrom.set(identity, startedAt - 5 * 60_000);
+        return;
+      }
+      await this.persistence.persistTrades(identity, changed);
       if (!isCurrent()) return;
       this.historyFrom.set(identity, startedAt - 5 * 60_000);
       const anchors = await this.persistence.resolveFillEntryAnchors(
@@ -233,6 +243,15 @@ export class ParadexPositionStore implements PositionStore {
         this.list(accountId),
       );
       if (!isCurrent()) return;
+      for (const trade of [...trades].sort((a, b) => a.timestampMs - b.timestampMs)) {
+        seen.set(trade.tradeId, JSON.stringify(trade));
+      }
+      while (seen.size > 20_000) {
+        const oldest = seen.keys().next().value;
+        if (oldest == null) break;
+        seen.delete(oldest);
+      }
+      this.historyInitialized.add(client);
       const legs = this.cache.get(accountId);
       for (const [legId, anchor] of anchors) {
         const leg = legs?.get(legId);

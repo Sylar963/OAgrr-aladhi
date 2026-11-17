@@ -54,6 +54,12 @@ export function carryEntryIvs(
     if (leg.entryIv != null) return leg;
     const previous = prior.get(leg.legId);
     if (previous?.entryIv == null || Math.sign(previous.size) !== Math.sign(leg.size)) return leg;
+    if (
+      leg.source === 'paradex' &&
+      previous.entryIvSource === 'fill' &&
+      (Math.abs(leg.size) > Math.abs(previous.size) || leg.entryPriceUsd !== previous.entryPriceUsd)
+    )
+      return leg;
     return {
       ...leg,
       entryIv: previous.entryIv,

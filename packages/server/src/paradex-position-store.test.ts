@@ -124,6 +124,42 @@ describe('Paradex durable account scope', () => {
     }
   });
 
+  it('does not rewrite unchanged overlap fills or requery their anchors every minute', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(at);
+    const ledger = memoryLedger();
+    const store = new ParadexPositionStore(
+      (creds) =>
+        new ParadexPrivateClient(
+          creds,
+          vi
+            .fn()
+            .mockImplementation((url: string) =>
+              Promise.resolve(
+                new Response(
+                  JSON.stringify(
+                    url.includes('/fills?') ? { results: [fill] } : { results: [option] },
+                  ),
+                ),
+              ),
+            ),
+        ),
+      ledger,
+    );
+    try {
+      await store.connect({ accountId: 'alice', readonlyToken: token('0xabc') });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(ledger.upsertTrades).toHaveBeenCalledTimes(1);
+      const anchorReads = vi.mocked(ledger.loadTrades).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(ledger.upsertTrades).toHaveBeenCalledTimes(1);
+      expect(ledger.loadTrades).toHaveBeenCalledTimes(anchorReads);
+    } finally {
+      await store.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps venue-account histories separate when a token changes accounts', async () => {
     const ledger = memoryLedger();
     const store = new ParadexPositionStore(

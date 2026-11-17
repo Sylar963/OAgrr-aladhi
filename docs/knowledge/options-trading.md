@@ -18,6 +18,26 @@ read, a trained model, a validated trading system, or personalized investment ad
 
 ## Source and reading ledger
 
+2026-11-17 TradFi activity and pricing consistency: reviewed
+[dxFeed Trade](https://docs.dxfeed.com/dxfeed/api/com/dxfeed/event/market/Trade.html),
+[dxFeed Quote](https://docs.dxfeed.com/dxfeed/api/com/dxfeed/event/market/Quote.html),
+[OIC put/call parity](https://www.optionseducation.org/advancedconcepts/put-call-parity), and
+[Cboe SPX specifications](https://www.cboe.com/tradable-products/sp-500/spx-options/spx-specifications).
+Volume is the provider trading-day cumulative count; missing day IDs are excluded from session
+aggregates, reported zero is preserved, and P/C ratios require complete coverage. OI is a reported
+snapshot, not inferred opening flow. USD underlying notional is contracts × multiplier × spot,
+not option premium turnover. For matching European contracts, C − P is affine in strike at a
+fixed expiry. Engineering diagnostic: interpolate neighboring strikes' call-minus-put quotes,
+excluding the target, and report the target-minus-reference midpoint and bid/ask residual range.
+Only verified SPXW roots enable this check initially; American/unknown styles have no consistency
+residual. K + C − P is explicitly a zero-rate indication, not an independent forward valuation.
+The diagnostic requires positive displayed sizes, uncrossed markets, source timestamps within
+30 seconds across all compared legs, source ages at most 20 minutes (to accommodate delayed data),
+and receipt ages at most two minutes. These are engineering gates, not calibrated trading thresholds.
+No independent-reference parity valuation, financing/borrow/fee model, execution guarantee, or
+proven edge is claimed. Tests cover target exclusion, unequal strike spacing, incompatible roots,
+staleness, temporal mismatch, missing coverage and day rollover. No new book chapters reviewed.
+
 2026-11-17 quote-toll display: reviewed [OIC bid/ask and limit-order execution](https://prd-web.optionseducation.org/news/understanding-the-bid-and-ask-prices-for-options)
 and [OIC trade entry and execution](https://prd-web.optionseducation.org/referencelibrary/faq/trade-entry-execution).
 Marketable buys generally cross to ask and sells to bid; limit orders can improve price but

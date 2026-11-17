@@ -1,11 +1,15 @@
-import type { OptionsActivity, OptionsActivitySide } from '@oggregator/protocol';
 import { fmtUsdCompact } from '@lib/format';
+import type { OptionsActivity, OptionsActivitySide } from '@oggregator/protocol';
 
 export type ActivityMetric = 'volume' | 'oi';
 export type ActivityUnit = 'contracts' | 'usd';
 const NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
-export function activityValue(side: OptionsActivitySide, metric: ActivityMetric, unit: ActivityUnit): number | null {
+export function activityValue(
+  side: OptionsActivitySide,
+  metric: ActivityMetric,
+  unit: ActivityUnit,
+): number | null {
   if (unit === 'usd') return metric === 'volume' ? side.volumeNotionalUsd : side.oiNotionalUsd;
   return metric === 'volume' ? side.volume : side.openInterest;
 }
@@ -14,8 +18,15 @@ export function sumValues(a: number | null, b: number | null): number | null {
   return a == null && b == null ? null : (a ?? 0) + (b ?? 0);
 }
 
-export function totalActivity(activity: OptionsActivity, metric: ActivityMetric, unit: ActivityUnit): number | null {
-  return sumValues(activityValue(activity.call, metric, unit), activityValue(activity.put, metric, unit));
+export function totalActivity(
+  activity: OptionsActivity,
+  metric: ActivityMetric,
+  unit: ActivityUnit,
+): number | null {
+  return sumValues(
+    activityValue(activity.call, metric, unit),
+    activityValue(activity.put, metric, unit),
+  );
 }
 
 export function formatActivity(value: number | null, unit: ActivityUnit): string {

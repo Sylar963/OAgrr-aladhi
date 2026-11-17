@@ -81,13 +81,7 @@ function mount(gexProfile?: GexProfilePoint[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <GexBandsChart
-        currency="BTC"
-        gex={[]}
-        gexProfile={gexProfile}
-        spotPrice={100}
-        showHistory={false}
-      />
+      <GexBandsChart currency="BTC" gex={[]} gexProfile={gexProfile} spotPrice={100} />
     </QueryClientProvider>,
   );
 }
@@ -95,6 +89,8 @@ function mount(gexProfile?: GexProfilePoint[]) {
 describe('GexBandsChart ATR controls', () => {
   it('renders 60/3 without gamma history and switches to 130/4', async () => {
     mount();
+    expect(screen.queryByRole('button', { name: 'Gamma history' })).toBeNull();
+    expect(screen.getByText('ATR channel')).toBeTruthy();
     await waitFor(() =>
       expect(series[1]?.setData).toHaveBeenLastCalledWith(
         expect.arrayContaining([{ time: 18_000, value: 106 }]),
@@ -174,8 +170,35 @@ describe('GEX heatmap controls', () => {
         points: [],
         maxMagnitude: 0,
         opacity: 0.65,
+        profileOutline: true,
       }),
     );
+  });
+
+  it('toggles the profile outline while retaining heatmap magnitudes and opacity', async () => {
+    mount(profile);
+    const checkbox = screen.getByRole('checkbox', { name: 'Profile outline' }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    await waitFor(() =>
+      expect(heatmapUpdate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          maxMagnitude: 10,
+          opacity: 0.65,
+          profileOutline: true,
+        }),
+      ),
+    );
+    fireEvent.click(checkbox);
+    expect(heatmapUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        maxMagnitude: 10,
+        opacity: 0.65,
+        profileOutline: false,
+      }),
+    );
+    expect(screen.queryByText(/Outline: farther left/)).toBeNull();
+    fireEvent.click(checkbox);
+    expect(screen.getByText(/Outline: farther left/)).toBeTruthy();
   });
 
   it('reports gamma only inside the live heatmap and its modeled price range', async () => {

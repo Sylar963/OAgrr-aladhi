@@ -9,6 +9,46 @@ export interface GammaHeatmap {
   points: readonly GammaHeatmapPoint[];
   maxMagnitude: number;
   opacity: number;
+  profileOutline?: boolean;
+}
+
+export interface GammaProfileVertex {
+  y: number;
+  gexUsdMillions: number;
+}
+
+export function visibleGammaProfile(
+  points: readonly GammaHeatmapPoint[],
+  priceToY: (price: number) => number | null,
+  height: number,
+): GammaProfileVertex[] {
+  const vertices: GammaProfileVertex[] = [];
+  const append = (vertex: GammaProfileVertex) => {
+    if (vertices.at(-1)?.y !== vertex.y) vertices.push(vertex);
+  };
+  for (let i = 1; i < points.length; i++) {
+    const lo = points[i - 1]!;
+    const hi = points[i]!;
+    const y0 = priceToY(lo.price);
+    const y1 = priceToY(hi.price);
+    if (y0 == null || y1 == null || !Number.isFinite(y0) || !Number.isFinite(y1) || y0 === y1)
+      continue;
+    const start = Math.max(0, Math.min((0 - y0) / (y1 - y0), (height - y0) / (y1 - y0)));
+    const end = Math.min(1, Math.max((0 - y0) / (y1 - y0), (height - y0) / (y1 - y0)));
+    if (start > end) continue;
+    const at = (weight: number): GammaProfileVertex => ({
+      y: Math.max(0, Math.min(height, y0 + weight * (y1 - y0))),
+      gexUsdMillions: lo.gexUsdMillions + weight * (hi.gexUsdMillions - lo.gexUsdMillions),
+    });
+    append(at(start));
+    if (lo.gexUsdMillions * hi.gexUsdMillions < 0) {
+      const zero =
+        Math.abs(lo.gexUsdMillions) / (Math.abs(lo.gexUsdMillions) + Math.abs(hi.gexUsdMillions));
+      if (zero > start && zero < end) append({ ...at(zero), gexUsdMillions: 0 });
+    }
+    append(at(end));
+  }
+  return vertices;
 }
 
 export function gammaHeatmap(

@@ -121,7 +121,7 @@ export default function TradfiGexBandsChart({ underlying, gex, gexProfile, spotP
   }, []);
 
   const pushBands = useCallback(() => {
-    bandsRef.current?.update([], wallsRef.current, anchorRef.current);
+    bandsRef.current?.update(wallsRef.current, anchorRef.current);
   }, []);
 
   useEffect(() => {

@@ -3,7 +3,6 @@ import { useAllExpiriesGex, useChainQuery, useExpiries } from '@features/chain/q
 import { useIsMobile } from '@hooks/useIsMobile';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
-import { VENUE_IDS } from '@lib/venue-meta';
 import type { SpotCandleCurrency } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
 import { useMarket } from '@stores/app-store';
@@ -141,7 +140,6 @@ export default function GexView() {
   }, [expiries, mode]);
 
   const isAll = mode === 'all';
-  const allVenues = VENUE_IDS.every((v) => activeVenues.includes(v));
 
   const isMobile = useIsMobile();
   const [showExplain, setShowExplain] = useState(false);
@@ -369,7 +367,6 @@ export default function GexView() {
               gexProfile={gexProfile}
               spotPrice={spotPrice}
               currency={underlying as SpotCandleCurrency}
-              showHistory={isAll && allVenues}
             />
           ) : (
             <div className={styles.chart}>

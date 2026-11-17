@@ -29,7 +29,7 @@ function renderHeatmap(heatmap: GammaHeatmap) {
     chart: { timeScale: () => ({ timeToCoordinate: () => 100 }) },
     requestUpdate: vi.fn(),
   } as unknown as SeriesAttachedParameter<Time>);
-  primitive.update([], { callWall: 115, putWall: 85, gammaFlip: 100 }, 123);
+  primitive.update({ callWall: 115, putWall: 85, gammaFlip: 100 }, 123);
   primitive.setHeatmap(heatmap);
   const renderer = primitive.paneViews()[0]!.renderer()!;
   renderer.draw({
@@ -93,5 +93,36 @@ describe('GammaBandsPrimitive heatmap', () => {
       [0.5, 'rgba(0, 233, 151, 0)'],
       [1, 'rgba(0, 233, 151, 0.3)'],
     ]);
+  });
+
+  it('extends the outline left with magnitude and pinches to its baseline at zero', () => {
+    const { context } = renderHeatmap({
+      points: [
+        { price: 80, gexUsdMillions: -10 },
+        { price: 100, gexUsdMillions: 0 },
+        { price: 120, gexUsdMillions: 5 },
+      ],
+      maxMagnitude: 10,
+      opacity: 0.35,
+    });
+    expect(context.moveTo).toHaveBeenCalledWith(expect.closeTo(292.16), 80);
+    expect(context.lineTo).toHaveBeenCalledWith(776, 40);
+    expect(context.lineTo).toHaveBeenCalledWith(expect.closeTo(534.08), 0);
+    expect(context.fillRect).toHaveBeenCalledExactlyOnceWith(200, 0, 600, 80);
+  });
+
+  it('can hide the outline while retaining the gradient and gamma levels', () => {
+    const { context } = renderHeatmap({
+      points: [
+        { price: 80, gexUsdMillions: -10 },
+        { price: 120, gexUsdMillions: 10 },
+      ],
+      maxMagnitude: 10,
+      opacity: 0.35,
+      profileOutline: false,
+    });
+    expect(context.lineTo).not.toHaveBeenCalledWith(776, expect.any(Number));
+    expect(context.fillRect).toHaveBeenCalledOnce();
+    expect(context.fillText).toHaveBeenCalledTimes(3);
   });
 });

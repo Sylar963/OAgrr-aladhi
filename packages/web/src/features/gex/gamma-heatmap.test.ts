@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { gammaAtPrice, gammaContours, gammaHeatColor, gammaHeatmap } from './gamma-heatmap';
+import {
+  gammaAtPrice,
+  gammaContours,
+  gammaHeatColor,
+  gammaHeatmap,
+  visibleGammaProfile,
+} from './gamma-heatmap';
 
 describe('gamma heatmap price profile', () => {
   const profile = [
@@ -65,5 +71,50 @@ describe('gamma heatmap price profile', () => {
     }
     expect(gammaAtPrice([], 100)).toBeNull();
     expect(gammaAtPrice(heatmap.points, NaN)).toBeNull();
+  });
+});
+
+describe('visible gamma profile', () => {
+  it('clips to the visible prices and interpolates at both viewport edges', () => {
+    const points = [
+      { price: 60, gexUsdMillions: -100 },
+      { price: 100, gexUsdMillions: -20 },
+      { price: 140, gexUsdMillions: 20 },
+    ];
+    expect(visibleGammaProfile(points, (price) => 120 - price, 40)).toEqual([
+      { y: 40, gexUsdMillions: -60 },
+      { y: 20, gexUsdMillions: -20 },
+      { y: 0, gexUsdMillions: 0 },
+    ]);
+  });
+
+  it('preserves each peak and inserts zero crossings before plotting absolute magnitude', () => {
+    const points = [
+      { price: 80, gexUsdMillions: -10 },
+      { price: 100, gexUsdMillions: 10 },
+      { price: 120, gexUsdMillions: -10 },
+    ];
+    expect(visibleGammaProfile(points, (price) => 120 - price, 40)).toEqual([
+      { y: 40, gexUsdMillions: -10 },
+      { y: 30, gexUsdMillions: 0 },
+      { y: 20, gexUsdMillions: 10 },
+      { y: 10, gexUsdMillions: 0 },
+      { y: 0, gexUsdMillions: -10 },
+    ]);
+  });
+
+  it('never extends beyond the profile and omits prices that cannot be projected', () => {
+    const points = [
+      { price: 100, gexUsdMillions: 1 },
+      { price: 110, gexUsdMillions: 2 },
+    ];
+    expect(visibleGammaProfile(points, (price) => 120 - price, 80)).toEqual([
+      { y: 20, gexUsdMillions: 1 },
+      { y: 10, gexUsdMillions: 2 },
+    ]);
+    expect(visibleGammaProfile(points, () => null, 80)).toEqual([]);
+    expect(visibleGammaProfile(points, () => NaN, 80)).toEqual([]);
+    expect(visibleGammaProfile(points, (price) => 200 - price, 40)).toEqual([]);
+    expect(visibleGammaProfile([], (price) => price, 80)).toEqual([]);
   });
 });

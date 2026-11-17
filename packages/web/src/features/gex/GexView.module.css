@@ -481,6 +481,17 @@
   margin-bottom: var(--space-2);
 }
 
+.bandsModeLabel {
+  padding: 3px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .bandsNote {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -555,6 +566,18 @@
 .heatmapReadout {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
+}
+
+.profileLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-tertiary);
+}
+
+.profileSwatch {
+  flex: 0 0 18px;
+  border-top: 2px dashed #f0f6fa;
 }
 
 .heatmapReadout[data-sign="positive"] {

@@ -1,7 +1,6 @@
 import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fetchJson } from '@lib/http';
 import { defineMessages, useT } from '@lib/i18n';
-import type { GexWallHistoryResponse } from '@oggregator/protocol';
 import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@shared/common';
 import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +22,6 @@ import { atrChannel } from './atr-channel';
 import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
 import styles from './GexView.module.css';
 import { gammaAtPrice, gammaHeatmap } from './gamma-heatmap';
-import { alignWallHistory, gexKeltner } from './gex-wall-history';
 import { computeGammaWalls, formatGexM } from './gex-wall-utils';
 
 type Timeframe = '1d' | '3d' | '7d' | '30d' | '90d';
@@ -73,8 +71,6 @@ const SPOT_COLOR = '#50D2C1';
 // Share of the visible window reserved right of the last candle for the live walls.
 const PROJECTION_FRACTION = 0.3;
 const MIN_PROJECTION_BARS = 8;
-// Counted in candles, like a chart-platform Keltner length.
-const KELTNER_LENGTH = 130;
 
 function useGexSpotCandles(
   currency: SpotCandleCurrency,
@@ -95,38 +91,25 @@ function useGexSpotCandles(
   });
 }
 
-// Recorded walls are all-expiry, all-venue snapshots, so callers only enable
-// this when the live walls are computed on the same basis.
-function useGexWallHistory(currency: SpotCandleCurrency, days: number, enabled: boolean) {
-  return useQuery({
-    queryKey: ['gex-wall-history', currency, days],
-    queryFn: () =>
-      fetchJson<GexWallHistoryResponse>(`/gex-wall-history?underlying=${currency}&days=${days}`),
-    enabled,
-    staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
-    retry: false,
-  });
-}
-
 const messages = defineMessages(
   {
     callWall: 'POSITIVE Γ ABOVE',
     putWall: 'NEGATIVE Γ BELOW',
     flip: 'FLIP',
-    noteHistory: 'GEX Keltner 130: EMA ± smoothed wall distance · dashed zone: live walls',
-    noteLive: 'Dashed zone: live walls · band history needs ALL expiries + all venues',
     loading: 'Loading spot history…',
     unavailable: 'Spot history unavailable',
     retry: 'Retry',
     atrChannel: 'ATR channel',
-    gammaHistory: 'Gamma history',
     length: 'EMA / ATR length',
     multiplier: 'ATR multiplier',
     gammaOverlay: 'Live gamma levels',
     heatmap: 'Heatmap',
     levels: 'Levels',
     opacity: 'Heatmap opacity',
+    profileOutline: 'Profile outline',
+    profileNote: 'Outline: farther left = larger |net Γ| · width scaled to visible prices',
+    profileTip:
+      'Outline width shows gamma magnitude, not time. Zooming the price range rescales the outline; heatmap colors keep their full-profile scale.',
     heatmapScale: 'Net GEX · $M / 1% move',
     heatmapNote:
       'Right of candles: latest net gamma across simulated spot prices · IV and positions fixed · no historical heatmap',
@@ -142,21 +125,21 @@ const messages = defineMessages(
     callWall: 'Γ POSITIVO ARRIBA',
     putWall: 'Γ NEGATIVO ABAJO',
     flip: 'FLIP',
-    noteHistory:
-      'Keltner GEX 130: EMA ± distancia suavizada a los muros · zona punteada: muros en vivo',
-    noteLive:
-      'Zona punteada: muros en vivo · el historial de bandas requiere TODOS los vencimientos + todos los exchanges',
     loading: 'Cargando historial del spot…',
     unavailable: 'Historial del spot no disponible',
     retry: 'Reintentar',
     atrChannel: 'Canal ATR',
-    gammaHistory: 'Historial gamma',
     length: 'Períodos EMA / ATR',
     multiplier: 'Multiplicador ATR',
     gammaOverlay: 'Niveles gamma en vivo',
     heatmap: 'Mapa de calor',
     levels: 'Niveles',
     opacity: 'Opacidad del mapa de calor',
+    profileOutline: 'Contorno del perfil',
+    profileNote:
+      'Contorno: más a la izquierda = mayor |Γ neto| · ancho ajustado a los precios visibles',
+    profileTip:
+      'El ancho del contorno indica magnitud gamma, no tiempo. Cambiar el rango de precios reajusta el contorno; los colores conservan la escala del perfil completo.',
     heatmapScale: 'GEX neto · $M / movimiento del 1%',
     heatmapNote:
       'A la derecha de las velas: gamma neto actual por precio spot simulado · IV y posiciones fijas · sin mapa histórico',
@@ -175,19 +158,11 @@ interface Props {
   gexProfile?: GexProfilePoint[];
   spotPrice: number | null;
   currency: SpotCandleCurrency;
-  showHistory: boolean;
 }
 
-export default function GexBandsChart({
-  gex,
-  gexProfile,
-  spotPrice,
-  currency,
-  showHistory,
-}: Props) {
+export default function GexBandsChart({ gex, gexProfile, spotPrice, currency }: Props) {
   const t = useT(messages);
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TIMEFRAME);
-  const [mode, setMode] = useState<'atr' | 'gamma'>('atr');
   const [length, setLength] = useState(60);
   const [multiplier, setMultiplier] = useState(3);
   const [draftLength, setDraftLength] = useState('60');
@@ -195,6 +170,7 @@ export default function GexBandsChart({
   const [gammaOverlay, setGammaOverlay] = useState(true);
   const [gammaDisplay, setGammaDisplay] = useState<'heatmap' | 'levels'>('heatmap');
   const [heatmapOpacity, setHeatmapOpacity] = useState(65);
+  const [profileOutline, setProfileOutline] = useState(true);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -229,12 +205,6 @@ export default function GexBandsChart({
   const hoverGamma =
     showHeatmap && hoverPrice != null ? gammaAtPrice(heatmap.points, hoverPrice) : null;
 
-  const { data: historyData } = useGexWallHistory(
-    currency,
-    Math.ceil(tfSpec.windowSec / 86_400),
-    showHistory && mode === 'gamma',
-  );
-
   const candleCloses = useMemo(
     () =>
       (candleData?.candles ?? []).map((c) => ({
@@ -251,18 +221,6 @@ export default function GexBandsChart({
     () => (candlesStale ? [] : atrChannel(candleCloses, length, multiplier, tfSpec.resolution)),
     [candlesStale, candleCloses, length, multiplier, tfSpec.resolution],
   );
-  const history = useMemo(
-    () =>
-      showHistory && historyData && !candlesStale
-        ? gexKeltner(
-            candleCloses,
-            alignWallHistory(candleTimes, historyData.points, tfSpec.resolution),
-            KELTNER_LENGTH,
-          )
-        : [],
-    [showHistory, historyData, candlesStale, candleCloses, candleTimes, tfSpec.resolution],
-  );
-
   // Chart lifecycle (mount/unmount only).
   useEffect(() => {
     const container = containerRef.current;
@@ -370,39 +328,31 @@ export default function GexBandsChart({
   useEffect(() => {
     const anchor =
       !candlesStale && candleTimes.length > 0 ? candleTimes[candleTimes.length - 1]! : null;
-    bandsRef.current?.update(
-      mode === 'gamma' ? history : [],
-      gammaOverlay ? walls : EMPTY_WALLS,
-      anchor,
-    );
+    bandsRef.current?.update(gammaOverlay ? walls : EMPTY_WALLS, anchor);
     bandsRef.current?.setHeatmap(
-      showHeatmap ? { ...heatmap, opacity: heatmapOpacity / 100 } : null,
+      showHeatmap ? { ...heatmap, opacity: heatmapOpacity / 100, profileOutline } : null,
     );
     const series = atrSeriesRef.current;
     if (!series) return;
     for (const key of ['basis', 'upper', 'lower'] as const) {
-      series[key].applyOptions({ visible: mode === 'atr' });
       series[key].setData(
-        mode === 'atr'
-          ? volatilityChannel.map((point) =>
-              point[key] == null
-                ? { time: point.time as Time }
-                : { time: point.time as Time, value: point[key] },
-            )
-          : [],
+        volatilityChannel.map((point) =>
+          point[key] == null
+            ? { time: point.time as Time }
+            : { time: point.time as Time, value: point[key] },
+        ),
       );
     }
   }, [
-    history,
     walls,
     candleTimes,
-    mode,
     gammaOverlay,
     volatilityChannel,
     candlesStale,
     showHeatmap,
     heatmap,
     heatmapOpacity,
+    profileOutline,
   ]);
 
   useEffect(() => {
@@ -457,79 +407,62 @@ export default function GexBandsChart({
   return (
     <div>
       <div className={styles.bandsControls}>
+        <span className={styles.bandsModeLabel}>{t('atrChannel')}</span>
+        <label className={styles.bandsField}>
+          {t('length')}
+          <input
+            type="number"
+            min={2}
+            max={250}
+            step={1}
+            value={draftLength}
+            onChange={(event) => {
+              setDraftLength(event.target.value);
+              const value = Number(event.target.value);
+              if (Number.isInteger(value) && value >= 2 && value <= 250) setLength(value);
+            }}
+            onBlur={() => setDraftLength(String(length))}
+          />
+        </label>
+        <label className={styles.bandsField}>
+          {t('multiplier')}
+          <input
+            type="number"
+            min={0.5}
+            max={10}
+            step={0.25}
+            value={draftMultiplier}
+            onChange={(event) => {
+              setDraftMultiplier(event.target.value);
+              const value = Number(event.target.value);
+              if (Number.isFinite(value) && value >= 0.5 && value <= 10) setMultiplier(value);
+            }}
+            onBlur={() => setDraftMultiplier(String(multiplier))}
+          />
+        </label>
         <div className={styles.bandsToggle}>
-          {(['atr', 'gamma'] as const).map((value) => (
+          {(
+            [
+              [60, 3],
+              [130, 4],
+            ] as const
+          ).map(([period, factor]) => (
             <button
-              key={value}
+              key={`${period}/${factor}`}
               type="button"
               className={styles.bandsTab}
-              data-active={mode === value || undefined}
-              aria-pressed={mode === value}
-              onClick={() => setMode(value)}
+              data-active={(length === period && multiplier === factor) || undefined}
+              onClick={() => {
+                setLength(period);
+                setDraftLength(String(period));
+                setMultiplier(factor);
+                setDraftMultiplier(String(factor));
+              }}
             >
-              {t(value === 'atr' ? 'atrChannel' : 'gammaHistory')}
+              {period} / {factor}
             </button>
           ))}
         </div>
-        {mode === 'atr' && (
-          <>
-            <label className={styles.bandsField}>
-              {t('length')}
-              <input
-                type="number"
-                min={2}
-                max={250}
-                step={1}
-                value={draftLength}
-                onChange={(event) => {
-                  setDraftLength(event.target.value);
-                  const value = Number(event.target.value);
-                  if (Number.isInteger(value) && value >= 2 && value <= 250) setLength(value);
-                }}
-                onBlur={() => setDraftLength(String(length))}
-              />
-            </label>
-            <label className={styles.bandsField}>
-              {t('multiplier')}
-              <input
-                type="number"
-                min={0.5}
-                max={10}
-                step={0.25}
-                value={draftMultiplier}
-                onChange={(event) => {
-                  setDraftMultiplier(event.target.value);
-                  const value = Number(event.target.value);
-                  if (Number.isFinite(value) && value >= 0.5 && value <= 10) setMultiplier(value);
-                }}
-                onBlur={() => setDraftMultiplier(String(multiplier))}
-              />
-            </label>
-            <div className={styles.bandsToggle}>
-              {(
-                [
-                  [60, 3],
-                  [130, 4],
-                ] as const
-              ).map(([period, factor]) => (
-                <button
-                  key={`${period}/${factor}`}
-                  type="button"
-                  className={styles.bandsTab}
-                  data-active={(length === period && multiplier === factor) || undefined}
-                  onClick={() => {
-                    setLength(period);
-                    setDraftLength(String(period));
-                    setMultiplier(factor);
-                    setDraftMultiplier(String(factor));
-                  }}
-                >
-                  {period} / {factor}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
         <label className={styles.bandsField}>
           <input
             type="checkbox"
@@ -554,6 +487,16 @@ export default function GexBandsChart({
                 </button>
               ))}
             </div>
+            {gammaDisplay === 'heatmap' && (
+              <label className={styles.bandsField}>
+                <input
+                  type="checkbox"
+                  checked={profileOutline}
+                  onChange={(event) => setProfileOutline(event.target.checked)}
+                />
+                {t('profileOutline')}
+              </label>
+            )}
             {gammaDisplay === 'heatmap' && (
               <label className={styles.bandsField}>
                 {t('opacity')}
@@ -588,18 +531,14 @@ export default function GexBandsChart({
           ))}
         </div>
         <span className={styles.bandsNote}>
-          {mode === 'atr'
-            ? t('noteAtr', {
-                length,
-                multiplier,
-                interval:
-                  tfSpec.resolution < 3600
-                    ? `${tfSpec.resolution / 60}m`
-                    : `${tfSpec.resolution / 3600}h`,
-              })
-            : showHistory
-              ? t('noteHistory')
-              : t('noteLive')}
+          {t('noteAtr', {
+            length,
+            multiplier,
+            interval:
+              tfSpec.resolution < 3600
+                ? `${tfSpec.resolution / 60}m`
+                : `${tfSpec.resolution / 3600}h`,
+          })}
         </span>
       </div>
 
@@ -627,6 +566,12 @@ export default function GexBandsChart({
                   ? `${t('heatmapValue', { price: hoverPrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) })}: ${formatGexM(hoverGamma)}`
                   : t('heatmapHover')}
               </span>
+              {profileOutline && (
+                <span className={styles.profileLegend} title={t('profileTip')}>
+                  <span className={styles.profileSwatch} aria-hidden="true" />
+                  {t('profileNote')}
+                </span>
+              )}
             </>
           ) : (
             <span>{t('heatmapUnavailable')}</span>

@@ -1,8 +1,5 @@
-// Gamma bands. Two parts:
-//   • history — GEX Keltner channel (EMA basis ± EMA wall distance) plus the
-//     EMA'd flip, drawn as moving lines with the channel filled between them;
-//   • projection — the live walls drawn only to the right of the last candle,
-//     so the current snapshot never pretends to describe past price action.
+// Live gamma stays right of the last candle so the current snapshot never
+// pretends to describe past price action.
 
 import type {
   IPrimitivePaneRenderer,
@@ -14,8 +11,12 @@ import type {
   SeriesType,
   Time,
 } from 'lightweight-charts';
-import { type GammaHeatmap, gammaContours, gammaHeatColor } from './gamma-heatmap';
-import type { GexKeltnerPoint } from './gex-wall-history';
+import {
+  type GammaHeatmap,
+  gammaContours,
+  gammaHeatColor,
+  visibleGammaProfile,
+} from './gamma-heatmap';
 import type { GammaWalls } from './gex-wall-utils';
 
 interface BitmapCoordinatesRenderingScope {
@@ -32,8 +33,6 @@ interface CanvasRenderingTarget2D {
 export const CALL_WALL_COLOR = '#00E997';
 export const PUT_WALL_COLOR = '#CB3855';
 export const FLIP_COLOR = '#F0B90B';
-const BASIS_COLOR = 'rgba(154, 160, 166, 0.6)';
-const CHANNEL_FILL = 'rgba(80, 210, 193, 0.07)';
 const PROJECTION_FILL = 'rgba(80, 210, 193, 0.12)';
 
 type WallKey = 'callWall' | 'putWall' | 'gammaFlip';
@@ -46,17 +45,7 @@ const LEVELS: ReadonlyArray<{ key: WallKey; color: string; width: number }> = [
   { key: 'gammaFlip', color: FLIP_COLOR, width: 1 },
 ];
 
-type HistoryKey = 'upper' | 'lower' | 'basis' | 'gammaFlip';
-
-const HISTORY_LINES: ReadonlyArray<{ key: HistoryKey; color: string; width: number }> = [
-  { key: 'upper', color: CALL_WALL_COLOR, width: 2 },
-  { key: 'lower', color: PUT_WALL_COLOR, width: 2 },
-  { key: 'basis', color: BASIS_COLOR, width: 1 },
-  { key: 'gammaFlip', color: FLIP_COLOR, width: 1 },
-];
-
 interface BandsContext {
-  history: readonly GexKeltnerPoint[];
   live: GammaWalls;
   heatmap: GammaHeatmap | null;
   anchorSec: number | null;
@@ -65,40 +54,13 @@ interface BandsContext {
   timeToX: (time: Time) => number | null;
 }
 
-interface XY {
-  x: number;
-  y: number;
-}
-
 class GammaBandsRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly ctx: BandsContext) {}
 
   draw(target: CanvasRenderingTarget2D): void {
     target.useBitmapCoordinateSpace((scope) => {
       const { context, bitmapSize, horizontalPixelRatio: hpr, verticalPixelRatio: vpr } = scope;
-      const { history, live, heatmap, anchorSec, labels, priceToY, timeToX } = this.ctx;
-
-      const toXY = (time: number, price: number | null): XY | null => {
-        if (price == null) return null;
-        const x = timeToX(time as Time);
-        const y = priceToY(price);
-        return x === null || y === null ? null : { x: x * hpr, y: y * vpr };
-      };
-
-      const gapAfter = gapFlags(history);
-      fillChannel(context, history, gapAfter, toXY);
-      for (const line of HISTORY_LINES) {
-        const runs = splitRuns(
-          history.map((h) => toXY(h.time, h[line.key])),
-          gapAfter,
-        );
-        context.save();
-        context.strokeStyle = line.color;
-        context.lineWidth = line.width * hpr;
-        if (line.key === 'gammaFlip') context.setLineDash([4 * hpr, 3 * hpr]);
-        for (const run of runs) strokeLine(context, run);
-        context.restore();
-      }
+      const { live, heatmap, anchorSec, labels, priceToY, timeToX } = this.ctx;
 
       if (anchorSec === null) return;
       const anchorX = timeToX(anchorSec as Time);
@@ -217,68 +179,59 @@ function drawHeatmap(
       ctx.stroke();
     }
   }
+  if (heatmap.profileOutline !== false) {
+    drawProfileOutline(ctx, heatmap, x0, x1, height, hpr, vpr, priceToY);
+  }
   ctx.restore();
 }
 
-// History skips candles inside recording gaps; flag where the spacing exceeds
-// the usual candle step so lines break there instead of bridging the gap.
-function gapFlags(history: readonly GexKeltnerPoint[]): boolean[] {
-  let step = Infinity;
-  for (let i = 1; i < history.length; i++) {
-    const d = history[i]!.time - history[i - 1]!.time;
-    if (d > 0 && d < step) step = d;
-  }
-  return history.map((h, i) => i + 1 < history.length && history[i + 1]!.time - h.time > step);
-}
-
-function splitRuns(points: ReadonlyArray<XY | null>, gapAfter: readonly boolean[]): XY[][] {
-  const runs: XY[][] = [];
-  let run: XY[] = [];
-  points.forEach((p, i) => {
-    if (p) run.push(p);
-    if ((!p || gapAfter[i]) && run.length > 0) {
-      runs.push(run);
-      run = [];
-    }
-  });
-  if (run.length > 0) runs.push(run);
-  return runs;
-}
-
-function strokeLine(ctx: CanvasRenderingContext2D, run: readonly XY[]): void {
-  ctx.beginPath();
-  ctx.moveTo(run[0]!.x, run[0]!.y);
-  for (let i = 1; i < run.length; i++) ctx.lineTo(run[i]!.x, run[i]!.y);
-  ctx.stroke();
-}
-
-function fillChannel(
+function drawProfileOutline(
   ctx: CanvasRenderingContext2D,
-  history: readonly GexKeltnerPoint[],
-  gapAfter: readonly boolean[],
-  toXY: (time: number, price: number | null) => XY | null,
+  heatmap: GammaHeatmap,
+  x0: number,
+  x1: number,
+  height: number,
+  hpr: number,
+  vpr: number,
+  priceToY: (price: number) => number | null,
 ): void {
-  ctx.fillStyle = CHANNEL_FILL;
-  let run: Array<{ upper: XY; lower: XY }> = [];
-  const flush = () => {
-    if (run.length > 1) {
-      ctx.beginPath();
-      ctx.moveTo(run[0]!.upper.x, run[0]!.upper.y);
-      for (let i = 1; i < run.length; i++) ctx.lineTo(run[i]!.upper.x, run[i]!.upper.y);
-      for (let i = run.length - 1; i >= 0; i--) ctx.lineTo(run[i]!.lower.x, run[i]!.lower.y);
-      ctx.closePath();
-      ctx.fill();
-    }
-    run = [];
-  };
-  history.forEach((h, i) => {
-    const upper = toXY(h.time, h.upper);
-    const lower = toXY(h.time, h.lower);
-    if (upper && lower) run.push({ upper, lower });
-    else flush();
-    if (gapAfter[i]) flush();
-  });
-  flush();
+  const profile = visibleGammaProfile(
+    heatmap.points,
+    (price) => {
+      const y = priceToY(price);
+      return y === null ? null : y * vpr;
+    },
+    height,
+  );
+  const maximum = Math.max(...profile.map((point) => Math.abs(point.gexUsdMillions)), 0);
+  if (profile.length < 2 || maximum === 0) return;
+  const baseline = x1 - Math.min(12 * hpr, (x1 - x0) * 0.08);
+  const width = (baseline - x0) * 0.84;
+  const toX = (value: number) => baseline - (width * Math.abs(value)) / maximum;
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(baseline, profile[0]!.y);
+  ctx.lineTo(baseline, profile[profile.length - 1]!.y);
+  ctx.strokeStyle = 'rgba(230, 237, 243, 0.25)';
+  ctx.lineWidth = hpr;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(toX(profile[0]!.gexUsdMillions), profile[0]!.y);
+  for (let i = 1; i < profile.length; i++)
+    ctx.lineTo(toX(profile[i]!.gexUsdMillions), profile[i]!.y);
+  ctx.strokeStyle = 'rgba(3, 9, 13, 0.9)';
+  ctx.lineWidth = 5 * hpr;
+  ctx.stroke();
+  ctx.setLineDash([5 * hpr, 4 * hpr]);
+  ctx.strokeStyle = 'rgba(240, 246, 250, 0.95)';
+  ctx.lineWidth = 1.5 * hpr;
+  ctx.stroke();
+  ctx.restore();
 }
 
 class GammaBandsPaneView implements IPrimitivePaneView {
@@ -322,7 +275,6 @@ class WallAxisView implements ISeriesPrimitiveAxisView {
 }
 
 export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
-  private history: GexKeltnerPoint[] = [];
   private live: GammaWalls = { callWall: null, putWall: null, gammaFlip: null };
   private heatmap: GammaHeatmap | null = null;
   // Last real candle time; timeToCoordinate only resolves series data times.
@@ -348,8 +300,7 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate = null;
   }
 
-  update(history: readonly GexKeltnerPoint[], live: GammaWalls, anchorSec: number | null): void {
-    this.history = [...history];
+  update(live: GammaWalls, anchorSec: number | null): void {
     this.live = live;
     this.anchorSec = anchorSec;
     this.requestUpdate?.();
@@ -371,7 +322,6 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
     const chart = this.chart;
     return [
       new GammaBandsPaneView({
-        history: this.history,
         live: this.live,
         heatmap: this.heatmap,
         anchorSec: this.anchorSec,

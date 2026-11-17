@@ -123,6 +123,12 @@ Saved panel parameters must match membership before restore. Legacy custom arran
 instance IDs in their parameters are hydrated from membership. Bad overrides cannot block startup.
 All data stays local to the browser; no backend or account persistence is added.
 
+Expanded option-chain tables have a **Columns** picker shared across calls, puts, strikes,
+crypto and TradFi. Select individual fields, use **MID + IV + TOLL** for MID, IV BID,
+IV MARK and TOLL %, or **Show all** to restore every field. VENUE always stays visible.
+The browser saves this table preference separately in `ogg.chainExpandedColumns.v1`;
+it does not change dock layouts or market selections. All columns are shown initially.
+
 ## Navigation and resource limits
 
 Feature navigation resolves a semantic destination to an instance in the active layout: Chain

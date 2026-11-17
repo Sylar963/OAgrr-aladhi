@@ -9,6 +9,12 @@ import { useChartPanelsStore } from './chart-panels-store.js';
 import { openChartPopout } from './chart-popout-url.js';
 import styles from './ExpandedRow.module.css';
 import { executionToll } from './execution-toll';
+import {
+  EXPANDED_COLUMN_IDS,
+  type ExpandedColumnId,
+  MID_IV_TOLL_COLUMNS,
+  useExpandedColumnsStore,
+} from './expanded-columns-store';
 import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
 import {
   isChartSupportedVenue,
@@ -24,6 +30,11 @@ const messages = defineMessages(
     noQuotes: 'No quotes',
     venue: 'VENUE',
     cost: 'COST',
+    columns: 'Columns',
+    visibleColumns: 'Visible columns',
+    showAll: 'Show all',
+    midIvToll: 'MID + IV + TOLL',
+    columnsNote: 'Saved in this browser for all expanded calls/puts tables. VENUE stays visible.',
     toll: 'TOLL %',
     maxToll: 'MAX TOLL %',
     maxTollTip:
@@ -70,6 +81,12 @@ const messages = defineMessages(
     noQuotes: 'Sin cotizaciones',
     venue: 'EXCHANGE',
     cost: 'COSTO',
+    columns: 'Columnas',
+    visibleColumns: 'Columnas visibles',
+    showAll: 'Mostrar todo',
+    midIvToll: 'MID + IV + PEAJE',
+    columnsNote:
+      'Se guarda en este navegador para todas las tablas expandidas de calls/puts. EXCHANGE siempre visible.',
     toll: 'PEAJE %',
     maxToll: 'PEAJE MÁX %',
     maxTollTip:
@@ -155,6 +172,7 @@ interface VenueRowProps {
   atmStrike: number | null;
   underlying: string;
   maxTollPct: number | null;
+  visibleColumns: ReadonlySet<string>;
 }
 
 // Strip the linear-product tail (e.g. "BTC_USDC" → "BTC") so the badge shows
@@ -174,6 +192,7 @@ function VenueRow({
   atmStrike,
   underlying,
   maxTollPct,
+  visibleColumns,
 }: VenueRowProps) {
   const t = useT(messages);
   const meta = VENUES[venueId];
@@ -282,7 +301,12 @@ function VenueRow({
     </td>,
   ];
 
-  return <tr className={styles.venueRow}>{mirror ? [...cells].reverse() : cells}</tr>;
+  const selectedCells = cells.filter(
+    (cell) => cell.key === 'venue' || visibleColumns.has(cell.key ?? ''),
+  );
+  return (
+    <tr className={styles.venueRow}>{mirror ? [...selectedCells].reverse() : selectedCells}</tr>
+  );
 }
 
 interface SideTableProps {
@@ -294,6 +318,7 @@ interface SideTableProps {
   atmStrike: number | null;
   underlying: string;
   maxTollPct: number | null;
+  visibleColumns: ReadonlySet<string>;
 }
 
 function SideTable({
@@ -305,6 +330,7 @@ function SideTable({
   atmStrike,
   underlying,
   maxTollPct,
+  visibleColumns,
 }: SideTableProps) {
   const t = useT(messages);
   const entries = Object.entries(side.venues) as [VenueId, VenueQuote][];
@@ -369,10 +395,16 @@ function SideTable({
     </th>,
   ];
 
+  const selectedHeaders = headers.filter(
+    (header) => header.key === 'venue' || visibleColumns.has(header.key ?? ''),
+  );
+
   return (
     <table className={styles.venueTable}>
       <thead>
-        <tr className={styles.thead}>{mirror ? [...headers].reverse() : headers}</tr>
+        <tr className={styles.thead}>
+          {mirror ? [...selectedHeaders].reverse() : selectedHeaders}
+        </tr>
       </thead>
       <tbody>
         {entries.map(([venueId, quote]) => (
@@ -387,10 +419,92 @@ function SideTable({
             atmStrike={atmStrike}
             underlying={underlying}
             maxTollPct={maxTollPct}
+            visibleColumns={visibleColumns}
           />
         ))}
       </tbody>
     </table>
+  );
+}
+
+function ColumnPicker({
+  columns,
+  setColumns,
+}: {
+  columns: readonly ExpandedColumnId[];
+  setColumns: (columns: readonly ExpandedColumnId[]) => void;
+}) {
+  const t = useT(messages);
+  const labels: Record<ExpandedColumnId, string> = {
+    fimplied: 'F_IMPLIED',
+    bid: 'BID',
+    ask: 'ASK',
+    mid: 'MID',
+    bidIv: 'IV BID',
+    markIv: 'IV MARK',
+    askIv: 'IV ASK',
+    spread: 'SPREAD',
+    toll: t('toll'),
+    delta: 'Δ',
+    theta: 'THETA',
+    oi: 'OI',
+    break: 'BREAK',
+    cost: t('cost'),
+    cons: 'Δ CONS',
+    edge: 'EDGE',
+  };
+
+  return (
+    <details className={styles.columnPicker}>
+      <summary>
+        {t('columns')}{' '}
+        <span>
+          {columns.length}/{EXPANDED_COLUMN_IDS.length}
+        </span>
+      </summary>
+      <fieldset className={styles.columnFields}>
+        <legend>{t('visibleColumns')}</legend>
+        <div className={styles.columnActions}>
+          <button
+            type="button"
+            className={styles.chartBtn}
+            onClick={() => setColumns(EXPANDED_COLUMN_IDS)}
+          >
+            {t('showAll')}
+          </button>
+          <button
+            type="button"
+            className={styles.chartBtn}
+            onClick={() => setColumns(MID_IV_TOLL_COLUMNS)}
+          >
+            {t('midIvToll')}
+          </button>
+        </div>
+        <div className={styles.columnOptions}>
+          <label>
+            <input type="checkbox" checked disabled />
+            {t('venue')}
+          </label>
+          {EXPANDED_COLUMN_IDS.map((id) => (
+            <label key={id}>
+              <input
+                type="checkbox"
+                checked={columns.includes(id)}
+                onChange={(event) =>
+                  setColumns(
+                    event.target.checked
+                      ? [...columns, id]
+                      : columns.filter((column) => column !== id),
+                  )
+                }
+              />
+              {labels[id]}
+            </label>
+          ))}
+        </div>
+        <p className={styles.columnsNote}>{t('columnsNote')}</p>
+      </fieldset>
+    </details>
   );
 }
 
@@ -407,6 +521,9 @@ export default function ExpandedRow({
   chartOverride,
 }: ExpandedRowProps) {
   const t = useT(messages);
+  const columns = useExpandedColumnsStore((state) => state.columns);
+  const setColumns = useExpandedColumnsStore((state) => state.setColumns);
+  const visibleColumns = useMemo(() => new Set<string>(columns), [columns]);
   const maxTollId = useId();
   const [maxTollInput, setMaxTollInput] = useState('');
   const parsedMaxToll = maxTollInput.trim() === '' ? null : Number(maxTollInput);
@@ -459,6 +576,8 @@ export default function ExpandedRow({
         </div>
       )}
 
+      <ColumnPicker columns={columns} setColumns={setColumns} />
+
       <div className={styles.tollGuide}>
         <span title={t('tollTip')}>{t('tollGuide')}</span>
         <label className={styles.tollControl} htmlFor={maxTollId} title={t('maxTollTip')}>
@@ -501,6 +620,7 @@ export default function ExpandedRow({
               atmStrike={atmStrike}
               underlying={underlying}
               maxTollPct={maxTollPct}
+              visibleColumns={visibleColumns}
             />
           </div>
         </div>
@@ -537,6 +657,7 @@ export default function ExpandedRow({
               atmStrike={atmStrike}
               underlying={underlying}
               maxTollPct={maxTollPct}
+              visibleColumns={visibleColumns}
             />
           </div>
         </div>

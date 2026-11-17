@@ -31,6 +31,76 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.columnPicker {
+  padding: 6px var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.columnPicker summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.columnPicker summary span {
+  margin-left: var(--space-2);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.columnPicker summary:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 3px;
+}
+
+.columnFields {
+  min-width: 0;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+}
+
+.columnFields legend {
+  padding: 0 var(--space-2);
+  color: var(--text-dim);
+}
+
+.columnActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.columnOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+
+.columnOptions label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.columnOptions input {
+  margin: 0;
+  accent-color: var(--accent-primary);
+}
+
+.columnsNote {
+  margin: var(--space-3) 0 0;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
 .tollGuide {
   display: flex;
   flex-wrap: wrap;

@@ -1,7 +1,8 @@
 import type { EnrichedSide, VenueQuote } from '@shared/enriched';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExpandedRow from './ExpandedRow';
+import { EXPANDED_COLUMN_IDS, useExpandedColumnsStore } from './expanded-columns-store';
 
 // jsdom has no matchMedia — useIsMobile would throw.
 vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
@@ -9,6 +10,7 @@ vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
 const emptySide = { venues: {} } as unknown as EnrichedSide;
 
 afterEach(() => cleanup());
+beforeEach(() => useExpandedColumnsStore.getState().setColumns(EXPANDED_COLUMN_IDS));
 
 describe('ExpandedRow chartOverride', () => {
   it('enables the Chart button and calls chartOverride for a non-VenueId chain', () => {
@@ -168,5 +170,63 @@ describe('ExpandedRow execution toll', () => {
     renderTolls('deribit', overrides);
     expect(screen.queryByText('4.76%')).toBeNull();
     expect(screen.getAllByTitle(/Toll unavailable/)).toHaveLength(2);
+  });
+});
+
+describe('ExpandedRow column selection', () => {
+  function openColumns() {
+    fireEvent.click(screen.getByText('Columns'));
+  }
+
+  it('shows the requested compact preset with matching cells in both mirrored tables', () => {
+    renderTolls('deribit', { mid: 2.1, bidIv: 0.48, markIv: 0.5 });
+    openColumns();
+    fireEvent.click(screen.getByRole('button', { name: 'MID + IV + TOLL' }));
+    const tables = screen.getAllByRole('table');
+    const expectedHeaders = ['VENUE', 'MID', 'IV BID', 'IV MARK', 'TOLL %'];
+    const expectedCells = ['DER', '$2.10', '48.0%', '50.0%', '4.76%'];
+    for (const [index, table] of tables.entries()) {
+      const headers = within(table)
+        .getAllByRole('columnheader')
+        .map((el) => el.textContent);
+      const row = within(table).getAllByRole('row')[1]!;
+      const cells = within(row)
+        .getAllByRole('cell')
+        .map((el) => el.textContent);
+      expect(headers).toEqual(index === 0 ? expectedHeaders : [...expectedHeaders].reverse());
+      expect(cells).toEqual(index === 0 ? expectedCells : [...expectedCells].reverse());
+    }
+    expect((screen.getByRole('checkbox', { name: 'VENUE' }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it('lets individual columns be toggled and restores all fields', () => {
+    renderTolls();
+    openColumns();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'BID' }));
+    expect(screen.queryByRole('columnheader', { name: 'BID' })).toBeNull();
+    expect(screen.getAllByRole('columnheader', { name: 'IV BID' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'BID' }));
+    expect(screen.getAllByRole('columnheader', { name: 'BID' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'MID + IV + TOLL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
+    for (const table of screen.getAllByRole('table')) {
+      expect(within(table).getAllByRole('columnheader')).toHaveLength(
+        EXPANDED_COLUMN_IDS.length + 1,
+      );
+    }
+  });
+
+  it('retains the selection when another strike or market opens', () => {
+    const view = renderTolls();
+    openColumns();
+    fireEvent.click(screen.getByRole('button', { name: 'MID + IV + TOLL' }));
+    view.unmount();
+    renderTolls('tastytrade');
+    for (const table of screen.getAllByRole('table')) {
+      expect(within(table).getAllByRole('columnheader')).toHaveLength(5);
+      expect(within(table).getByRole('columnheader', { name: 'TOLL %' })).toBeTruthy();
+    }
   });
 });

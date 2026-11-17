@@ -129,6 +129,13 @@ IV MARK and TOLL %, or **Show all** to restore every field. VENUE always stays v
 The browser saves this table preference separately in `ogg.chainExpandedColumns.v1`;
 it does not change dock layouts or market selections. All columns are shown initially.
 
+In Easy Mode, **Quote sources** selects which enabled feeds supply bid/ask prices, delta
+references, break-even previews and tolls. Click venue logos individually, **None** to start
+with an empty selection, or **All** to include every enabled feed. This selection belongs to
+the mounted chain panel; the workspace venue filter still controls subscriptions and chain
+statistics. Existing strategy entries keep their venue and premium. An empty or unavailable
+quote selection never falls back to an excluded venue.
+
 ## Navigation and resource limits
 
 Feature navigation resolves a semantic destination to an instance in the active layout: Chain

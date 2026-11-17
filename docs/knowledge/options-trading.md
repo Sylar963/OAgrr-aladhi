@@ -33,6 +33,11 @@ breakdown and amber chart band between midpoint and ask BEs. Excludes fees, extr
 size and pre-expiry repricing; fixed-USD premium is not an unhedged coin-settlement forecast.
 Regression tests reconcile both rights to zero expiry P&L, distinguish percentage denominators,
 and cover venue filters, stale/missing/crossed quotes, locked markets and pointer/keyboard preview.
+Easy Mode's local **Quote sources** logos select a subset of the workspace's enabled feeds for
+bid/ask, delta reference, break-even previews and tolls, without changing feed subscriptions or
+chain statistics. An empty or unavailable selection never falls back to excluded venues.
+Existing strategy entries retain their venue and premium; new additions at a different venue
+or price create separate legs. The quoted toll still uses the buy venue's own two-sided book.
 Status: sourced mechanics and engineering arithmetic. No new book chapters or trading edge.
 
 2026-11-17 TradFi activity and pricing consistency: reviewed

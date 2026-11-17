@@ -120,20 +120,22 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
 
   const handleAdd = useCallback(
     (draft: EasyLegDraft) => {
+      const leg = quote(draft);
+      if (!leg) {
+        setNotice(t('noLiveQuoteAdd', { side: draft.direction === 'buy' ? 'ask' : 'bid' }));
+        return;
+      }
       const existing = legs.find(
         (l) =>
           l.expiry === chain.expiry &&
           l.strike === draft.strike &&
           l.type === draft.type &&
-          l.direction === draft.direction,
+          l.direction === draft.direction &&
+          l.venue === leg.venue &&
+          l.entryPrice === leg.entryPrice,
       );
       if (existing) {
         updateLeg(existing.id, { quantity: existing.quantity + 1 });
-        return;
-      }
-      const leg = quote(draft);
-      if (!leg) {
-        setNotice(t('noLiveQuoteAdd', { side: draft.direction === 'buy' ? 'ask' : 'bid' }));
         return;
       }
       addLeg(leg, underlying);

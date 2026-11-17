@@ -1,24 +1,24 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-
-import { useAppStore, useMarket } from '@stores/app-store';
-import { useChainQuery, useExpiries, useStats, usePrefetchChain } from './queries';
 import { useOpenPalette } from '@components/layout/palette-context';
 import { EmptyState, OverlayPortal, Spinner, VenuePickerButton } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { useVolRichness } from '@hooks/useVolRichness';
 import { fmtIv, fmtUsdCompact } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
-
-import ExpiryBar from './ExpiryBar';
-import { useExpiryPositions } from './use-expiry-positions';
-import { summarizeStrikePositions } from './expiry-positions';
-import StatStrip from './StatStrip';
+import { useAppStore, useMarket } from '@stores/app-store';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ChainTable from './ChainTable';
-import VenueSidebar from './VenueSidebar';
+import styles from './ChainView.module.css';
+import ExpiryBar from './ExpiryBar';
+import EasyChainView from './easy/EasyChainView';
+import { summarizeStrikePositions } from './expiry-positions';
 import MyIvInput from './MyIvInput';
 import OptionCalculator from './OptionCalculator';
-import EasyChainView from './easy/EasyChainView';
-import styles from './ChainView.module.css';
+import QuoteSourcePicker from './QuoteSourcePicker';
+import { useChainQuery, useExpiries, usePrefetchChain, useStats } from './queries';
+import StatStrip from './StatStrip';
+import { useExpiryPositions } from './use-expiry-positions';
+import { useQuoteSources } from './use-quote-sources';
+import VenueSidebar from './VenueSidebar';
 
 const EASY_MODE_KEY = 'chain.easyMode';
 
@@ -239,6 +239,8 @@ function ChainMain({ standalone = false }: ChainMainProps) {
   const myIv = useMyIv();
   const [calcOpen, setCalcOpen] = useState(false);
   const [easyMode, setEasyMode] = useState(readEasyMode);
+  const { quoteVenues, toggleQuoteVenue, selectAllQuoteVenues, clearQuoteVenues } =
+    useQuoteSources(activeVenues);
 
   // Table props follow the rendered chain, not the selected tab, so positions,
   // ATM scroll and price-flash scope stay consistent while a placeholder shows.
@@ -272,9 +274,19 @@ function ChainMain({ standalone = false }: ChainMainProps) {
         <ChainStatArea {...data} />
 
         <div className={styles.tableControls}>
-          <span className={standalone ? undefined : styles.narrowVenues}>
-            <VenuePickerButton />
-          </span>
+          {easyMode ? (
+            <QuoteSourcePicker
+              availableVenues={activeVenues}
+              quoteVenues={quoteVenues}
+              onToggle={toggleQuoteVenue}
+              onAll={selectAllQuoteVenues}
+              onNone={clearQuoteVenues}
+            />
+          ) : (
+            <span className={standalone ? undefined : styles.narrowVenues}>
+              <VenuePickerButton />
+            </span>
+          )}
           {!easyMode && <MyIvInput />}
           <button
             type="button"
@@ -310,7 +322,7 @@ function ChainMain({ standalone = false }: ChainMainProps) {
             />
           )}
           {chain && chain.strikes.length > 0 && easyMode && (
-            <EasyChainView chain={chain} underlying={underlying} activeVenues={activeVenues} />
+            <EasyChainView chain={chain} underlying={underlying} activeVenues={quoteVenues} />
           )}
           {chain && chain.strikes.length > 0 && !easyMode && (
             <ChainTable

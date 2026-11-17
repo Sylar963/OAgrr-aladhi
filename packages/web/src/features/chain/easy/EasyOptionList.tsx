@@ -51,7 +51,11 @@ export default function EasyOptionList({
       .map((s) => {
         const side = type === 'call' ? s.call : s.put;
         const bba = bestBidAsk(side, activeSet, now);
-        const ref = side.bestVenue != null ? side.venues[side.bestVenue] : undefined;
+        const referenceVenue = bba.askVenue ?? bba.bidVenue;
+        const ref =
+          referenceVenue != null
+            ? side.venues[referenceVenue as keyof typeof side.venues]
+            : undefined;
         return {
           strike: s.strike,
           buy: bba.ask,

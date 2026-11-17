@@ -1,7 +1,10 @@
 import { useStrategyStore } from '@features/architect';
 import type { EnrichedChainResponse, VenueQuote } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import QuoteSourcePicker from '../QuoteSourcePicker';
+import { useQuoteSources } from '../use-quote-sources';
 import EasyChainView from './EasyChainView';
 import type { EasyBuyPreview } from './easy-toll';
 
@@ -146,5 +149,110 @@ describe('Easy Mode toll preview', () => {
     );
     expect(screen.getByTestId('chart-preview').textContent).toBe('none');
     expect(screen.queryByText(/extra underlying move/)).toBeNull();
+  });
+});
+
+function QuoteSourceHarness({
+  availableVenues = ['deribit', 'bybit'],
+}: {
+  availableVenues?: string[];
+}) {
+  const { quoteVenues, toggleQuoteVenue, selectAllQuoteVenues, clearQuoteVenues } =
+    useQuoteSources(availableVenues);
+  const market = chain();
+  for (const row of market.strikes) {
+    for (const side of [row.call, row.put]) {
+      side.venues.bybit = { ...side.venues.deribit!, bid: 400, ask: 600, delta: 0.8 };
+    }
+  }
+  return (
+    <>
+      <QuoteSourcePicker
+        availableVenues={availableVenues}
+        quoteVenues={quoteVenues}
+        onToggle={toggleQuoteVenue}
+        onAll={selectAllQuoteVenues}
+        onNone={clearQuoteVenues}
+      />
+      <EasyChainView chain={market} underlying="BTC" activeVenues={quoteVenues} />
+    </>
+  );
+}
+
+describe('Easy Mode quote sources', () => {
+  it('updates bid/ask, odds, break-even and toll independently of global venues', () => {
+    const globalVenues = useAppStore.getState().markets;
+    render(<QuoteSourceHarness />);
+    const sources = screen.getByRole('group', { name: 'Quote sources' });
+    fireEvent.click(within(sources).getByRole('button', { name: 'Use Deribit quotes' }));
+    expect(screen.getByTestId('chart-preview').textContent).toBe('call:64600');
+    expect(screen.getByText('TOLL $100 · 0.16% extra underlying move')).toBeTruthy();
+    expect(screen.getAllByText('80%')).toHaveLength(2);
+    const buy = screen.getAllByTitle('Buy: pay this premium, risk is limited to it')[0]!;
+    expect(buy.textContent).toBe('$600');
+    fireEvent.click(buy);
+    expect(useStrategyStore.getState().legs[0]).toMatchObject({ venue: 'bybit', entryPrice: 600 });
+    fireEvent.click(screen.getAllByTitle('Sell: collect $400 now, but you take the risk')[0]!);
+    expect(useStrategyStore.getState().legs[1]).toMatchObject({ venue: 'bybit', entryPrice: 400 });
+    expect(useAppStore.getState().markets).toBe(globalVenues);
+    expect(
+      within(sources)
+        .getByRole('button', { name: 'Use Deribit quotes' })
+        .getAttribute('aria-pressed'),
+    ).toBe('false');
+    expect(
+      within(sources)
+        .getByRole('button', { name: 'Use Bybit quotes' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('keeps existing entries and adds a separate draft when the quote venue changes', () => {
+    render(<QuoteSourceHarness />);
+    fireEvent.click(screen.getAllByTitle('Buy: pay this premium, risk is limited to it')[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Use Deribit quotes' }));
+    fireEvent.click(screen.getAllByTitle('Buy: pay this premium, risk is limited to it')[0]!);
+    expect(useStrategyStore.getState().legs).toMatchObject([
+      { venue: 'deribit', entryPrice: 300, quantity: 1 },
+      { venue: 'bybit', entryPrice: 600, quantity: 1 },
+    ]);
+  });
+
+  it('does not fall back to an excluded source when the selection becomes empty', () => {
+    render(<QuoteSourceHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear quote sources' }));
+    expect(screen.getByText('Select a quote source to price options.')).toBeTruthy();
+    expect(screen.getByTestId('chart-preview').textContent).toBe('none');
+    expect(screen.queryAllByTitle('Buy: pay this premium, risk is limited to it')).toHaveLength(0);
+    expect(screen.queryByText(/extra underlying move/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Use Bybit quotes' }));
+    expect(screen.getByTestId('chart-preview').textContent).toBe('call:64600');
+    fireEvent.click(screen.getByRole('button', { name: 'Use all available quote sources' }));
+    expect(screen.getByTestId('chart-preview').textContent).toBe('call:64300');
+  });
+
+  it('restricts quotes to enabled feeds without replacing an unavailable selection', () => {
+    const view = render(<QuoteSourceHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Use Deribit quotes' }));
+    view.rerender(<QuoteSourceHarness availableVenues={['deribit']} />);
+    expect(screen.getByTestId('chart-preview').textContent).toBe('none');
+    expect(screen.queryByRole('button', { name: 'Use Bybit quotes' })).toBeNull();
+    view.rerender(<QuoteSourceHarness availableVenues={['deribit', 'bybit']} />);
+    expect(screen.getByTestId('chart-preview').textContent).toBe('call:64600');
+  });
+
+  it('keeps quote selections local to each mounted chain', () => {
+    render(
+      <>
+        <QuoteSourceHarness />
+        <QuoteSourceHarness />
+      </>,
+    );
+    const sources = screen.getAllByRole('group', { name: 'Quote sources' });
+    fireEvent.click(within(sources[0]!).getByRole('button', { name: 'Use Deribit quotes' }));
+    expect(screen.getAllByTestId('chart-preview').map((node) => node.textContent)).toEqual([
+      'call:64600',
+      'call:64300',
+    ]);
   });
 });

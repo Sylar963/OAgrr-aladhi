@@ -1,0 +1,94 @@
+.control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+}
+
+.label,
+.basis,
+.action {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+
+.label {
+  padding: 0 6px 0 2px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.venues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.venue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 24px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.venue img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  opacity: 0.3;
+}
+
+.venue[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-subtle));
+  background: var(--accent-primary-bg);
+}
+
+.venue[aria-pressed="true"] img {
+  opacity: 1;
+}
+
+.venue:hover,
+.action:hover {
+  background: var(--bg-hover);
+}
+
+.venue:focus-visible,
+.action:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.action {
+  padding: 3px 5px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.basis {
+  color: var(--text-tertiary);
+}
+
+.basis[data-empty="true"] {
+  color: var(--color-warning);
+}

@@ -34,6 +34,7 @@ export type ExitBookLookup =
 
 /** Supplies the holding venue's L2 book per leg; holds subscriptions only for `sync`ed legs. */
 export interface ExitBookSource {
+  scopeKey?(): string | number;
   sync(legs: readonly PositionLeg[]): void;
   lookup(leg: PositionLeg): ExitBookLookup;
   dispose(): void;
@@ -160,7 +161,7 @@ export function evaluateCloseNowLeg(
   const side = long ? 'sell' : 'buy';
   const size = Math.abs(leg.size);
   const fill = costToFill(book, side, size);
-  const schedule = venue === 'paradex' ? book.takerFee ?? null : takerFeeSchedule(venue);
+  const schedule = venue === 'paradex' ? (book.takerFee ?? null) : takerFeeSchedule(venue);
   const underlying = book.mark?.indexPrice ?? mark.underlyingPriceUsd;
   const feesUsd =
     fill.vwap != null && schedule != null
@@ -286,7 +287,10 @@ const PORTFOLIO_PEAK_KEY = '__portfolio__';
  * Peaks reset whenever the legs behind them change size or entry; nothing is persisted.
  */
 export class CloseNowTracker {
-  private readonly lastGood = new Map<string, { signature: string; result: CloseNowLeg; bookReceivedAt: number }>();
+  private readonly lastGood = new Map<
+    string,
+    { signature: string; result: CloseNowLeg; bookReceivedAt: number }
+  >();
   private readonly spreads = new Map<string, SpreadHistory>();
   private readonly peaks = new Map<string, PeakEntry>();
 
@@ -305,13 +309,25 @@ export class CloseNowTracker {
         .map((id) => byId.get(id))
         .filter((l): l is CloseNowLeg => l != null);
       const aggregate = aggregateCloseNow(groupLegs);
-      const signature = group.legIds.map((id) => signatures.get(id) ?? id).sort().join('|');
-      return { groupId: group.groupId, ...aggregate, peak: this.trackAggregatePeak(group.groupId, signature, aggregate, nowMs) };
+      const signature = group.legIds
+        .map((id) => signatures.get(id) ?? id)
+        .sort()
+        .join('|');
+      return {
+        groupId: group.groupId,
+        ...aggregate,
+        peak: this.trackAggregatePeak(group.groupId, signature, aggregate, nowMs),
+      };
     });
 
     const portfolio = aggregateCloseNow(legs);
     const portfolioSignature = [...signatures.values()].sort().join('|');
-    portfolio.peak = this.trackAggregatePeak(PORTFOLIO_PEAK_KEY, portfolioSignature, portfolio, nowMs);
+    portfolio.peak = this.trackAggregatePeak(
+      PORTFOLIO_PEAK_KEY,
+      portfolioSignature,
+      portfolio,
+      nowMs,
+    );
 
     this.prune(new Set(signatures.keys()), new Set(strategies.map((g) => g.groupId)), legs);
     return { computedAt: nowMs, legs, strategies: strategyRows, portfolio };
@@ -323,8 +339,12 @@ export class CloseNowTracker {
     if (lookup.kind === 'unsupported') {
       return emptyLeg(input, venue, instrument, 'unsupported_venue', null);
     }
-    if (lookup.kind === 'book' && (lookup.book.venue !== venue ||
-      lookup.book.instrument !== instrument || (venue === 'paradex' && lookup.book.takerFee == null))) {
+    if (
+      lookup.kind === 'book' &&
+      (lookup.book.venue !== venue ||
+        lookup.book.instrument !== instrument ||
+        (venue === 'paradex' && lookup.book.takerFee == null))
+    ) {
       return this.staleOrEmpty(input, venue, instrument, 'unsynchronized', nowMs);
     }
     const problem = lookup.kind === 'book' ? bookProblem(lookup.book, nowMs) : lookup.reason;
@@ -341,7 +361,11 @@ export class CloseNowTracker {
           : this.withTypicalSpread(instrument, evaluated.spread, nowMs),
     };
     const signature = legSignature(input.leg);
-    this.lastGood.set(input.leg.legId, { signature, result, bookReceivedAt: lookup.book.receivedAt });
+    this.lastGood.set(input.leg.legId, {
+      signature,
+      result,
+      bookReceivedAt: lookup.book.receivedAt,
+    });
     return { ...result, peak: this.trackLegPeak(input.leg, signature, result, nowMs) };
   }
 
@@ -381,7 +405,10 @@ export class CloseNowTracker {
       this.spreads.set(instrument, history);
     }
     const last = history.samples.at(-1);
-    if (spread.widthPct != null && (last == null || nowMs - last.atMs >= CLOSE_NOW_SPREAD_SAMPLE_MS)) {
+    if (
+      spread.widthPct != null &&
+      (last == null || nowMs - last.atMs >= CLOSE_NOW_SPREAD_SAMPLE_MS)
+    ) {
       history.samples.push({ atMs: nowMs, widthPct: spread.widthPct });
     }
     const cutoff = nowMs - CLOSE_NOW_SPREAD_WINDOW_MS;
@@ -438,9 +465,12 @@ export class CloseNowTracker {
   private prune(legIds: Set<string>, groupIds: Set<string>, legs: readonly CloseNowLeg[]): void {
     for (const id of this.lastGood.keys()) if (!legIds.has(id)) this.lastGood.delete(id);
     for (const key of this.peaks.keys()) {
-      if (key !== PORTFOLIO_PEAK_KEY && !legIds.has(key) && !groupIds.has(key)) this.peaks.delete(key);
+      if (key !== PORTFOLIO_PEAK_KEY && !legIds.has(key) && !groupIds.has(key))
+        this.peaks.delete(key);
     }
-    const instruments = new Set(legs.map((l) => l.instrument).filter((i): i is string => i != null));
+    const instruments = new Set(
+      legs.map((l) => l.instrument).filter((i): i is string => i != null),
+    );
     for (const instrument of this.spreads.keys()) {
       if (!instruments.has(instrument)) this.spreads.delete(instrument);
     }

@@ -39,11 +39,7 @@ import {
 import { CloseNowTracker, type ExitBookSource } from '../../portfolio/close-now.js';
 import { computePnlAttribution } from '../../portfolio/pnl-attribution.js';
 import { detectStrategyGroups } from '../../portfolio/strategy-groups.js';
-import type {
-  MarkContext,
-  MarkProvider,
-  PositionStore,
-} from '../../portfolio/types.js';
+import type { MarkContext, MarkProvider, PositionStore } from '../../portfolio/types.js';
 
 const PUSH_INTERVAL_MS = 200;
 // Close-now walks real books and is deliberately unsmoothed, so it is throttled instead:
@@ -170,7 +166,8 @@ export class PortfolioRuntime {
   private readonly underlyingFilter: string | undefined;
   private readonly exitBooks: ExitBookSource | undefined;
   private readonly closeNowIntervalMs: number;
-  private readonly closeNowTracker = new CloseNowTracker();
+  private closeNowTracker = new CloseNowTracker();
+  private closeNowScope: string | number | undefined;
   private closeNow: { at: number; legsKey: string; value: PortfolioCloseNow | null } | null = null;
 
   private pushTimer: ReturnType<typeof setInterval> | null = null;
@@ -216,8 +213,8 @@ export class PortfolioRuntime {
 
     this.emitSnapshot();
     this.pushTimer = setInterval(() => {
-      const closeNowDue = this.exitBooks != null &&
-        this.now() - (this.closeNow?.at ?? 0) >= this.closeNowIntervalMs;
+      const closeNowDue =
+        this.exitBooks != null && this.now() - (this.closeNow?.at ?? 0) >= this.closeNowIntervalMs;
       if (this.disposed || (!this.dirty && !closeNowDue)) return;
       this.dirty = false;
       this.emitDelta();
@@ -288,6 +285,17 @@ export class PortfolioRuntime {
     const exitBooks = this.exitBooks;
     if (exitBooks == null) return null;
     const now = this.now();
+    try {
+      const scope = exitBooks.scopeKey?.();
+      if (scope !== this.closeNowScope) {
+        this.closeNowScope = scope;
+        this.closeNow = null;
+        this.closeNowTracker = new CloseNowTracker();
+      }
+    } catch (err: unknown) {
+      logger.error({ err, accountId: this.accountId }, 'portfolio exit book sync failed');
+      return null;
+    }
     // A changed leg set must not wait out the throttle with a result for the old legs.
     const legsKey = withMarks.map(({ leg }) => `${leg.legId}:${leg.size}`).join(',');
     const cached = this.closeNow;
@@ -296,9 +304,13 @@ export class PortfolioRuntime {
     }
     let value: PortfolioCloseNow | null;
     try {
-      const legs = withMarks.map(({ leg }) => leg);
-      exitBooks.sync(legs);
-      value = this.closeNowTracker.compute(withMarks, strategies, (leg) => exitBooks.lookup(leg), now);
+      exitBooks.sync(withMarks.map(({ leg }) => leg));
+      value = this.closeNowTracker.compute(
+        withMarks,
+        strategies,
+        (leg) => exitBooks.lookup(leg),
+        now,
+      );
     } catch (err: unknown) {
       logger.error({ err, accountId: this.accountId }, 'portfolio close-now failed');
       value = cached?.value ?? null;
@@ -348,7 +360,9 @@ export class PortfolioRuntime {
     const positions = rawPositions.map((leg) => {
       if (leg.entryIv != null) return leg;
       const cached = this.firstSeenIv.get(leg.legId);
-      return cached != null ? { ...leg, entryIv: cached, entryIvSource: 'first_seen' as const } : leg;
+      return cached != null
+        ? { ...leg, entryIv: cached, entryIvSource: 'first_seen' as const }
+        : leg;
     });
 
     const withMarks = positions.map((leg, i) => {

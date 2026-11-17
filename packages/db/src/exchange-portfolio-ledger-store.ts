@@ -160,16 +160,15 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
   constructor(private readonly poolFactory: () => Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresExchangePortfolioLedgerStore {
-    return new PostgresExchangePortfolioLedgerStore(
-      () =>
-        createPgPool({
-          connectionString,
-          max: 2,
-          connectionTimeoutMillis: 5_000,
-          statement_timeout: 15_000,
-          query_timeout: 15_000,
-          idleTimeoutMillis: 10_000,
-        }),
+    return new PostgresExchangePortfolioLedgerStore(() =>
+      createPgPool({
+        connectionString,
+        max: 2,
+        connectionTimeoutMillis: 5_000,
+        statement_timeout: 15_000,
+        query_timeout: 15_000,
+        idleTimeoutMillis: 10_000,
+      }),
     );
   }
 
@@ -300,7 +299,9 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
         );
       }
       const historyFrom =
-        trades.length === 0 ? null : new Date(Math.min(...trades.map((trade) => trade.timestampMs)));
+        trades.length === 0
+          ? null
+          : new Date(Math.min(...trades.map((trade) => trade.timestampMs)));
       await client.query(
         `INSERT INTO exchange_portfolio_sync (
            account_id, venue, trades_synced_at, history_from

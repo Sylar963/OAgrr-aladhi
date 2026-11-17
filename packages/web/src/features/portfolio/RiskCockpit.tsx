@@ -2,12 +2,7 @@ import type { PortfolioCloseNow, PortfolioMetrics, PositionLeg } from '@oggregat
 
 import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
 
-import {
-  closeNowMessages,
-  coverageNote,
-  fmtAge,
-  giveBackLevel,
-} from './close-now';
+import { closeNowMessages, coverageNote, fmtAge, giveBackLevel } from './close-now';
 import { DELTA_DIGITS, deltaHedgeState } from './delta-hedge';
 import { fmtNum, fmtUsdSigned } from './format';
 import {
@@ -77,7 +72,7 @@ const messages = defineMessages(
     net: 'Net',
     openBook: 'Open book',
     legsOpen: 'legs still open',
-    lifetime: 'Lifetime',
+    lifetime: 'Recorded history',
     noFillHistory: 'no fill history for this source',
     everyFill: 'every persisted fill, closed legs included',
     knownFees: 'Known fees',
@@ -96,9 +91,11 @@ const messages = defineMessages(
     hedgeActive: 'Hedge active',
     deltaUnknown: 'Delta unavailable',
     deltaPerUnderlying: 'Shown separately by underlying',
-    deltaByUnderlying: '{underlying} · {state} · options {options} · perps/futures {linear} · net {net}',
+    deltaByUnderlying:
+      '{underlying} · {state} · options {options} · perps/futures {linear} · net {net}',
     deltaSplit: 'options {options} · perps {linear}',
-    deltaNote: 'Delta is evaluated per underlying. Hedge active means linear exposure offsets option delta; neutral means net rounds to 0.000.',
+    deltaNote:
+      'Delta is evaluated per underlying. Hedge active means linear exposure offsets option delta; neutral means net rounds to 0.000.',
     volatility: 'Volatility',
     longVol: 'Long vol',
     shortVol: 'Short vol',
@@ -195,9 +192,11 @@ const messages = defineMessages(
     hedgeActive: 'Cobertura activa',
     deltaUnknown: 'Delta no disponible',
     deltaPerUnderlying: 'Se muestra por subyacente',
-    deltaByUnderlying: '{underlying} · {state} · opciones {options} · perpetuos/futuros {linear} · neto {net}',
+    deltaByUnderlying:
+      '{underlying} · {state} · opciones {options} · perpetuos/futuros {linear} · neto {net}',
     deltaSplit: 'opciones {options} · perpetuos {linear}',
-    deltaNote: 'El delta se evalúa por subyacente. Cobertura activa significa que el delta lineal compensa opciones; neutral significa que el neto redondea a 0.000.',
+    deltaNote:
+      'El delta se evalúa por subyacente. Cobertura activa significa que el delta lineal compensa opciones; neutral significa que el neto redondea a 0.000.',
     volatility: 'Volatilidad',
     longVol: 'Long vol',
     shortVol: 'Short vol',
@@ -283,8 +282,7 @@ interface PremiumRowProps {
 function PremiumRow({ label, note, debitUsd, creditUsd }: PremiumRowProps) {
   const t = useT(messages);
   const net = debitUsd == null || creditUsd == null ? null : creditUsd - debitUsd;
-  const netSide =
-    net == null ? null : net > 0.005 ? 'credit' : net < -0.005 ? 'debit' : 'flat';
+  const netSide = net == null ? null : net > 0.005 ? 'credit' : net < -0.005 ? 'debit' : 'flat';
   return (
     <div className={styles.premiumRow} role="row">
       <span role="rowheader">
@@ -356,8 +354,13 @@ function CloseNowMetric({ closeNow }: { closeNow: PortfolioCloseNow | null | und
       </div>
       {total.peak != null && (
         <span className={styles.metricFoot}>
-          {t('peak', { pnl: fmtUsdSigned(total.peak.closeNowPnlUsd), time: fmtTime(total.peak.atMs) })}
-          {total.peak.markPnlUsd != null ? t('peakMark', { v: fmtUsdSigned(total.peak.markPnlUsd) }) : ''}
+          {t('peak', {
+            pnl: fmtUsdSigned(total.peak.closeNowPnlUsd),
+            time: fmtTime(total.peak.atMs),
+          })}
+          {total.peak.markPnlUsd != null
+            ? t('peakMark', { v: fmtUsdSigned(total.peak.markPnlUsd) })
+            : ''}
         </span>
       )}
       <span className={styles.metricFoot}>
@@ -375,10 +378,10 @@ export default function RiskCockpit({ metrics, positions }: Props) {
   const hedge =
     deltaByUnderlying.length > 1
       ? null
-      : singleDelta?.hedgeState ??
+      : (singleDelta?.hedgeState ??
         (totals == null
           ? null
-          : deltaHedgeState(totals.netDeltaCoin, totals.optionsDeltaCoin, totals.linearDeltaCoin));
+          : deltaHedgeState(totals.netDeltaCoin, totals.optionsDeltaCoin, totals.linearDeltaCoin)));
   const accounting = metrics?.accounting ?? null;
   const mode = classifyBook(totals, positions.length);
   const modeMeta = modeMetaFor(mode, t);
@@ -403,7 +406,10 @@ export default function RiskCockpit({ metrics, positions }: Props) {
         <div className={styles.headlineMetrics}>
           <div className={styles.headlineMetric}>
             <span className={styles.metricLabel}>{t('unrealizedPnl')}</span>
-            <strong className={styles.pnl} data-sign={(totals?.unrealizedPnlUsd ?? 0) >= 0 ? 'positive' : 'negative'}>
+            <strong
+              className={styles.pnl}
+              data-sign={(totals?.unrealizedPnlUsd ?? 0) >= 0 ? 'positive' : 'negative'}
+            >
               {fmtUsdSigned(totals?.unrealizedPnlUsd)}
             </strong>
             <span className={styles.metricFoot}>{t('markToEntry')}</span>
@@ -411,7 +417,10 @@ export default function RiskCockpit({ metrics, positions }: Props) {
           </div>
           <div className={styles.headlineMetric}>
             <span className={styles.metricLabel}>{t('ivEdge')}</span>
-            <strong className={styles.ivEdge} data-sign={(ivEdge?.edgeVolPts ?? 0) >= 0 ? 'positive' : 'negative'}>
+            <strong
+              className={styles.ivEdge}
+              data-sign={(ivEdge?.edgeVolPts ?? 0) >= 0 ? 'positive' : 'negative'}
+            >
               {fmtVolPoints(ivEdge?.edgeVolPts)}
             </strong>
             <span className={styles.metricFoot}>
@@ -443,11 +452,7 @@ export default function RiskCockpit({ metrics, positions }: Props) {
             />
             <PremiumRow
               label={t('lifetime')}
-              note={
-                accounting?.lifetimeGrossDebitUsd == null
-                  ? t('noFillHistory')
-                  : t('everyFill')
-              }
+              note={accounting?.lifetimeGrossDebitUsd == null ? t('noFillHistory') : t('everyFill')}
               debitUsd={accounting?.lifetimeGrossDebitUsd ?? null}
               creditUsd={accounting?.lifetimeGrossCreditUsd ?? null}
             />
@@ -467,7 +472,10 @@ export default function RiskCockpit({ metrics, positions }: Props) {
             </article>
           </div>
         </div>
-        <div className={styles.ledgerStatus} data-state={metrics?.accounting.persistence ?? 'unavailable'}>
+        <div
+          className={styles.ledgerStatus}
+          data-state={metrics?.accounting.persistence ?? 'unavailable'}
+        >
           <span>
             {metrics?.accounting.persistence === 'venue_history'
               ? t('fillsPersisted', { n: metrics.accounting.persistedTradeCount ?? 0 })
@@ -482,7 +490,6 @@ export default function RiskCockpit({ metrics, positions }: Props) {
           </span>
         </div>
       </div>
-
 
       <div className={styles.exposureGrid}>
         <article className={styles.exposureCard} data-accent="delta">
@@ -502,16 +509,16 @@ export default function RiskCockpit({ metrics, positions }: Props) {
             {deltaByUnderlying.length > 1
               ? t('deltaPerUnderlying')
               : hedge == null
-              ? t('flat')
-              : hedge === 'neutral' || hedge === 'hedged'
-                ? t('deltaHedged')
-                : hedge === 'offsetting'
-                  ? t('hedgeActive')
-                  : hedge === 'unknown'
-                    ? t('deltaUnknown')
-                : hedge === 'long'
-                  ? t('longDelta')
-                  : t('shortDelta')}
+                ? t('flat')
+                : hedge === 'neutral' || hedge === 'hedged'
+                  ? t('deltaHedged')
+                  : hedge === 'offsetting'
+                    ? t('hedgeActive')
+                    : hedge === 'unknown'
+                      ? t('deltaUnknown')
+                      : hedge === 'long'
+                        ? t('longDelta')
+                        : t('shortDelta')}
           </span>
           {deltaByUnderlying.length > 1 ? (
             <div className={styles.deltaBreakdown}>
@@ -543,13 +550,16 @@ export default function RiskCockpit({ metrics, positions }: Props) {
                 linear: fmtNum(singleDelta.linearDeltaCoin, DELTA_DIGITS),
               })}
             </span>
-          ) : totals != null && totals.linearDeltaCoin !== 0 && (
-            <span className={styles.exposureState}>
-              {t('deltaSplit', {
-                options: fmtNum(totals.optionsDeltaCoin, DELTA_DIGITS),
-                linear: fmtNum(totals.linearDeltaCoin, DELTA_DIGITS),
-              })}
-            </span>
+          ) : (
+            totals != null &&
+            totals.linearDeltaCoin !== 0 && (
+              <span className={styles.exposureState}>
+                {t('deltaSplit', {
+                  options: fmtNum(totals.optionsDeltaCoin, DELTA_DIGITS),
+                  linear: fmtNum(totals.linearDeltaCoin, DELTA_DIGITS),
+                })}
+              </span>
+            )
           )}
           <p>{t('deltaNote')}</p>
         </article>
@@ -604,22 +614,30 @@ export default function RiskCockpit({ metrics, positions }: Props) {
         <div className={styles.stressGrid}>
           <div className={styles.stressCard}>
             <span>{t('spotDown')}</span>
-            <strong data-sign={(spotDown ?? 0) >= 0 ? 'positive' : 'negative'}>{fmtUsdSigned(spotDown)}</strong>
+            <strong data-sign={(spotDown ?? 0) >= 0 ? 'positive' : 'negative'}>
+              {fmtUsdSigned(spotDown)}
+            </strong>
             <small>{t('deltaGamma')}</small>
           </div>
           <div className={styles.stressCard}>
             <span>{t('spotUp')}</span>
-            <strong data-sign={(spotUp ?? 0) >= 0 ? 'positive' : 'negative'}>{fmtUsdSigned(spotUp)}</strong>
+            <strong data-sign={(spotUp ?? 0) >= 0 ? 'positive' : 'negative'}>
+              {fmtUsdSigned(spotUp)}
+            </strong>
             <small>{t('deltaGamma')}</small>
           </div>
           <div className={styles.stressCard}>
             <span>{t('ivDown')}</span>
-            <strong data-sign={(volDown ?? 0) >= 0 ? 'positive' : 'negative'}>{fmtUsdSigned(volDown)}</strong>
+            <strong data-sign={(volDown ?? 0) >= 0 ? 'positive' : 'negative'}>
+              {fmtUsdSigned(volDown)}
+            </strong>
             <small>{t('volCrush')}</small>
           </div>
           <div className={styles.stressCard}>
             <span>{t('ivUp')}</span>
-            <strong data-sign={(volUp ?? 0) >= 0 ? 'positive' : 'negative'}>{fmtUsdSigned(volUp)}</strong>
+            <strong data-sign={(volUp ?? 0) >= 0 ? 'positive' : 'negative'}>
+              {fmtUsdSigned(volUp)}
+            </strong>
             <small>{t('volExpansion')}</small>
           </div>
           <div className={styles.stressCard}>

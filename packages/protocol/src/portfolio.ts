@@ -71,7 +71,10 @@ export const LinearPositionSchema = z.object({
   instrumentName: z.string().min(1),
   underlying: z.string().min(1),
   kind: z.enum(['perpetual', 'future']),
-  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  expiry: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable(),
   sizeCoin: z.number().refine((v) => v !== 0, 'size must be non-zero'),
   entryPriceUsd: z.number().positive(),
   markPriceUsd: z.number().nonnegative().nullable(),

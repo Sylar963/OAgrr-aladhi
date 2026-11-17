@@ -131,8 +131,11 @@ async function connectParadex(
   credentials: ParadexStoredCredentials,
   environment: VenueEnvironment = 'prod',
 ): Promise<void> {
-  await paradexPositionStore.connect({ accountId, readonlyToken: credentials.readonlyToken,
-    ...(environment === 'test' ? { env: environment } : {}) });
+  await paradexPositionStore.connect({
+    accountId,
+    readonlyToken: credentials.readonlyToken,
+    ...(environment === 'test' ? { env: environment } : {}),
+  });
   getOrCreatePortfolioRuntime(accountId, 'paradex');
 }
 
@@ -182,7 +185,14 @@ async function listThalexKeySlots(
   const slots = VENUE_ENVIRONMENTS.map((environment): ThalexKeySlot => {
     const slot = stored.find((row) => row.environment === environment);
     if (slot == null) {
-      return { environment, configured: false, active: false, connected: false, kidHint: null, account: null };
+      return {
+        environment,
+        configured: false,
+        active: false,
+        connected: false,
+        kidHint: null,
+        account: null,
+      };
     }
     let credentials: ThalexCredentials | null = null;
     try {
@@ -202,23 +212,38 @@ async function listThalexKeySlots(
 
 export type ReconnectOutcome = 'connected' | 'not_connected' | 'removed';
 
-async function listParadexKeySlots(cipher: VenueCredentialCipher, accountId: string): Promise<ParadexKeySlots> {
+async function listParadexKeySlots(
+  cipher: VenueCredentialCipher,
+  accountId: string,
+): Promise<ParadexKeySlots> {
   const rows = await venueCredentialsStore.listSlots(accountId, 'paradex');
   const connected = paradexPositionStore.environment(accountId);
-  return { venue: 'paradex', slots: VENUE_ENVIRONMENTS.map((environment) => {
-    const row = rows.find((slot) => slot.environment === environment);
-    let credentials: ParadexStoredCredentials | null = null;
-    if (row != null) {
-      try {
-        const parsed = ParadexStoredCredentialsSchema.safeParse(cipher.decrypt<unknown>(
-          row.encryptedCredentials, venueCredentialContext(accountId, 'paradex', environment)));
-        if (parsed.success) credentials = parsed.data;
-      } catch {}
-    }
-    return { environment, configured: row != null, active: row?.active ?? false,
-      connected: row?.active === true && connected === environment,
-      kidHint: null, account: credentials?.account ?? null };
-  }) };
+  return {
+    venue: 'paradex',
+    slots: VENUE_ENVIRONMENTS.map((environment) => {
+      const row = rows.find((slot) => slot.environment === environment);
+      let credentials: ParadexStoredCredentials | null = null;
+      if (row != null) {
+        try {
+          const parsed = ParadexStoredCredentialsSchema.safeParse(
+            cipher.decrypt<unknown>(
+              row.encryptedCredentials,
+              venueCredentialContext(accountId, 'paradex', environment),
+            ),
+          );
+          if (parsed.success) credentials = parsed.data;
+        } catch {}
+      }
+      return {
+        environment,
+        configured: row != null,
+        active: row?.active ?? false,
+        connected: row?.active === true && connected === environment,
+        kidHint: null,
+        account: credentials?.account ?? null,
+      };
+    }),
+  };
 }
 
 async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<ReconnectOutcome> {
@@ -233,7 +258,10 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
 
   if (venue === 'derive') {
     const parsed = DeriveStoredCredentialsSchema.safeParse(
-      cipher.decrypt<unknown>(stored.encryptedCredentials, venueCredentialContext(accountId, venue)),
+      cipher.decrypt<unknown>(
+        stored.encryptedCredentials,
+        venueCredentialContext(accountId, venue),
+      ),
     );
     // Rows saved before wallet connect hold a user-pasted signing key; drop them so
     // the user reconnects through their wallet instead.
@@ -247,7 +275,10 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
   }
   if (venue === 'paradex') {
     const parsed = ParadexStoredCredentialsSchema.safeParse(
-      cipher.decrypt<unknown>(stored.encryptedCredentials, venueCredentialContext(accountId, venue, stored.environment)),
+      cipher.decrypt<unknown>(
+        stored.encryptedCredentials,
+        venueCredentialContext(accountId, venue, stored.environment),
+      ),
     );
     if (!parsed.success) throw new Error('Stored Paradex credentials are invalid');
     if (parsed.data.expiresAtMs <= Date.now()) return 'not_connected';
@@ -319,11 +350,18 @@ export function isMainnetVenueConnected(accountId: string, venue: VenueId): bool
   return isVenueConnected(accountId, venue);
 }
 
-async function restoreActiveSlot(accountId: string, request: FastifyRequest, venue: VenueId = 'thalex'): Promise<void> {
+async function restoreActiveSlot(
+  accountId: string,
+  request: FastifyRequest,
+  venue: VenueId = 'thalex',
+): Promise<void> {
   try {
     await reconnectStoredVenue(accountId, venue);
   } catch (error) {
-    request.log.warn({ accountId, err: String(error) }, 'thalex restore after failed connect failed');
+    request.log.warn(
+      { accountId, err: String(error) },
+      'thalex restore after failed connect failed',
+    );
   }
 }
 
@@ -409,7 +447,8 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
       if (pending == null) {
         return reply.status(409).send({
           error: 'session_key_not_pending',
-          message: 'No Derive session key is waiting for confirmation. Start the wallet connect again.',
+          message:
+            'No Derive session key is waiting for confirmation. Start the wallet connect again.',
         });
       }
       const credentials: DeriveStoredCredentials = {
@@ -481,7 +520,10 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
             accountId,
             venue,
             environment: env,
-            encryptedCredentials: cipher.encrypt(credentials, venueCredentialContext(accountId, venue, env)),
+            encryptedCredentials: cipher.encrypt(
+              credentials,
+              venueCredentialContext(accountId, venue, env),
+            ),
           });
           return { venue, connected: true, configured: true };
         }
@@ -540,7 +582,9 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
       const sessionUsedRemovedKey =
         environment == null ||
         (venue !== 'thalex' && venue !== 'paradex') ||
-        (venue === 'thalex' ? thalexPositionStore.environment(accountId) : paradexPositionStore.environment(accountId)) === environment;
+        (venue === 'thalex'
+          ? thalexPositionStore.environment(accountId)
+          : paradexPositionStore.environment(accountId)) === environment;
       if (sessionUsedRemovedKey) {
         try {
           await disconnectVenue(accountId, venue);
@@ -573,8 +617,10 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
     return listParadexKeySlots(cipher, getAccountId(request));
   });
 
-  app.post<{ Body: unknown }>('/portfolio/venue-credentials/paradex/activate',
-    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
+  app.post<{ Body: unknown }>(
+    '/portfolio/venue-credentials/paradex/activate',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
       const cipher = getCredentialCipherOrSendError(reply);
       if (cipher == null) return reply;
       const parsed = VenueActivateSchema.safeParse(request.body);
@@ -584,8 +630,12 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
       const row = await venueCredentialsStore.get(accountId, 'paradex', environment);
       if (row == null) return reply.status(404).send({ error: 'slot_not_configured' });
       try {
-        const credentials = ParadexStoredCredentialsSchema.parse(cipher.decrypt<unknown>(
-          row.encryptedCredentials, venueCredentialContext(accountId, 'paradex', environment)));
+        const credentials = ParadexStoredCredentialsSchema.parse(
+          cipher.decrypt<unknown>(
+            row.encryptedCredentials,
+            venueCredentialContext(accountId, 'paradex', environment),
+          ),
+        );
         if (credentials.expiresAtMs <= Date.now()) throw new Error('Saved Paradex token expired');
         await connectParadex(accountId, credentials, environment);
         await venueCredentialsStore.activate(accountId, 'paradex', environment);
@@ -596,7 +646,8 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         return reply.status(502).send({ error: 'connect_failed' });
       }
       return listParadexKeySlots(cipher, accountId);
-    });
+    },
+  );
 
   app.post<{ Body: unknown }>(
     '/portfolio/venue-credentials/thalex/activate',

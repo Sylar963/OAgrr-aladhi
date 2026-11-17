@@ -88,9 +88,11 @@ async function resolveHeldLegs(scope: PortfolioRefScope) {
 
 async function previewThalexMargin(scope: PortfolioRefScope, request: ThalexMarginPreviewRequest) {
   if (
-    scope.source !== 'thalex' || scope.network !== 'mainnet' ||
+    scope.source !== 'thalex' ||
+    scope.network !== 'mainnet' ||
     thalexPositionStore.environment(scope.accountId) !== 'prod'
-  ) return null;
+  )
+    return null;
   return thalexPositionStore.previewMargin(scope.accountId, request);
 }
 
@@ -116,17 +118,20 @@ const contextBuilder = new PortfolioAssistantContextBuilder(
   exchangePortfolioLedgerStore,
   Date.now,
   portfolioRefStore,
-  (accountId, venue) => ledgerMatchesSession(accountId, venue) &&
+  (accountId, venue) =>
+    ledgerMatchesSession(accountId, venue) &&
     (venue !== 'paradex' || paradexPositionStore.environment(accountId) !== 'test'),
   thalexAccountLedger,
   (accountId, source) => {
     if (source === 'derive') return 'mainnet';
-    if (source === 'paradex') return paradexPositionStore.environment(accountId) === 'test' ? 'testnet' : 'mainnet';
+    if (source === 'paradex')
+      return paradexPositionStore.environment(accountId) === 'test' ? 'testnet' : 'mainnet';
     if (source !== 'thalex') return null;
     const environment = thalexPositionStore.environment(accountId);
     return environment == null ? null : environment === 'test' ? 'testnet' : 'mainnet';
   },
-  (accountId, source) => source === 'paradex' ? paradexPositionStore.ledgerAccountId(accountId) : accountId,
+  (accountId, source) =>
+    source === 'paradex' ? paradexPositionStore.ledgerAccountId(accountId) : accountId,
   (accountId) => paradexPositionStore.fetchAccountSummary(accountId),
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();

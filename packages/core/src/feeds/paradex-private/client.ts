@@ -9,7 +9,12 @@ import type {
 
 import { feedLogger } from '../../utils/logger.js';
 import { PARADEX_REST_BASE_URL, PARADEX_TESTNET_REST_BASE_URL } from '../shared/endpoints.js';
-import { paradexAccountHistoryToPoints, paradexPositionsToLegs, paradexPositionsToLinear, paradexFillToTrade } from './codec.js';
+import {
+  paradexAccountHistoryToPoints,
+  paradexPositionsToLegs,
+  paradexPositionsToLinear,
+  paradexFillToTrade,
+} from './codec.js';
 import {
   ParadexAccountHistorySchema,
   ParadexPositionsResponseSchema,
@@ -80,7 +85,11 @@ export class ParadexPrivateClient {
     const cursors = new Set<string>();
     let cursor: string | undefined;
     for (let page = 0; page < 20; page++) {
-      const params = new URLSearchParams({ asset_kind: 'OPTION', page_size: '1000', start_at: String(fromMs) });
+      const params = new URLSearchParams({
+        asset_kind: 'OPTION',
+        page_size: '1000',
+        start_at: String(fromMs),
+      });
       if (cursor != null) params.set('cursor', cursor);
       const result = ParadexFillsResponseSchema.parse(await this.read(`/fills?${params}`));
       for (const fill of result.results) {
@@ -175,7 +184,8 @@ export class ParadexPrivateClient {
   }
 
   private async read(path: string): Promise<unknown> {
-    const baseUrl = this.creds.env === 'test' ? PARADEX_TESTNET_REST_BASE_URL : PARADEX_REST_BASE_URL;
+    const baseUrl =
+      this.creds.env === 'test' ? PARADEX_TESTNET_REST_BASE_URL : PARADEX_REST_BASE_URL;
     const res = await this.fetchImpl(`${baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${this.creds.readonlyToken}` },
       signal: AbortSignal.any([this.abortController.signal, AbortSignal.timeout(10_000)]),

@@ -3,7 +3,12 @@ export type { VenueId, OptionRight, DataSource } from './types/common.js';
 export { VENUE_IDS } from './types/common.js';
 
 export { logger, feedLogger } from './utils/logger.js';
-export { analyzeFlowTrade, analyzeBlockTrade, analyzeFlowLegs, flowExecutionGroup } from './core/flow-analysis.js';
+export {
+  analyzeFlowTrade,
+  analyzeBlockTrade,
+  analyzeFlowLegs,
+  flowExecutionGroup,
+} from './core/flow-analysis.js';
 
 // core — canonical types, aggregator, registry, symbol utils
 export type {
@@ -594,10 +599,17 @@ export { ThalexWsAdapter } from './feeds/thalex/index.js';
 export { GateioWsAdapter } from './feeds/gateio/index.js';
 export { ParadexWsAdapter } from './feeds/paradex/index.js';
 export { FeedWorkerHost, WorkerVenueAdapter } from './feeds/worker/feed-worker-client.js';
-export { reconcileFlowPosition, flowPositionEffect, type FlowIntervalTape } from './core/flow-position.js';
+export {
+  reconcileFlowPosition,
+  flowPositionEffect,
+  type FlowIntervalTape,
+} from './core/flow-position.js';
 export { FlowOiRecorder } from './core/flow-oi-recorder.js';
 export { evaluateAlphaTrade, type AlphaEvaluationMarket } from './services/alpha-evaluation.js';
-export { buildAlphaStrategyContext, type AlphaStrategyContextInput } from './services/alpha-strategy-context.js';
+export {
+  buildAlphaStrategyContext,
+  type AlphaStrategyContextInput,
+} from './services/alpha-strategy-context.js';
 export {
   expectedMoveFraction,
   buildExpectedMoveSession,

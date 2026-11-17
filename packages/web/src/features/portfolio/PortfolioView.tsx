@@ -105,7 +105,8 @@ const messages = defineMessages(
     venueNoteBefore: 'Showing live',
     venueNoteAfter:
       'positions from your private WS feed. Trade on the venue directly to change the book.',
-    paradexNote: 'Showing Paradex positions refreshed every 15 seconds. Trade on Paradex directly to change the book.',
+    paradexNote:
+      'Showing Paradex positions refreshed every 15 seconds. Trade on Paradex directly to change the book.',
   },
   {
     manual: 'Manual',
@@ -137,7 +138,8 @@ const messages = defineMessages(
     venueNoteBefore: 'Mostrando posiciones en vivo de',
     venueNoteAfter:
       'desde tu feed WS privado. Opera directamente en el exchange para cambiar el libro.',
-    paradexNote: 'Posiciones de Paradex actualizadas cada 15 segundos. Opera directamente en Paradex para cambiar el libro.',
+    paradexNote:
+      'Posiciones de Paradex actualizadas cada 15 segundos. Opera directamente en Paradex para cambiar el libro.',
   },
 );
 
@@ -166,7 +168,9 @@ function venueSourceOptions(t: T): SourceOption[] {
       ready: spec.status === 'available',
       note:
         spec.status === 'available'
-          ? venue === 'paradex' ? t('paradexLiveNote') : t('venueLiveNote', { venue: VENUES[venue]?.label ?? venue })
+          ? venue === 'paradex'
+            ? t('paradexLiveNote')
+            : t('venueLiveNote', { venue: VENUES[venue]?.label ?? venue })
           : t('venuePendingNote', { status: spec.status }),
     };
   });
@@ -187,7 +191,9 @@ export default function PortfolioView() {
     underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
   const { data: positionsData } = usePortfolioPositions(source, positionsOpts);
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
-  const { data: venueMargin } = useVenueMargin(source === 'thalex' || source === 'paradex' ? source : null);
+  const { data: venueMargin } = useVenueMargin(
+    source === 'thalex' || source === 'paradex' ? source : null,
+  );
 
   const sourceOptions = useMemo(() => [...baseSources(t), ...venueSourceOptions(t)], [t]);
   const activeNote = sourceOptions.find((o) => o.value === source)?.note ?? '';

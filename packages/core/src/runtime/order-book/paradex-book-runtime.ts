@@ -1,17 +1,29 @@
 import { z } from 'zod';
 
 import { ParadexMarketsResponseSchema } from '../../feeds/paradex/types.js';
-import { PARADEX_REST_BASE_URL, PARADEX_TESTNET_REST_BASE_URL } from '../../feeds/shared/endpoints.js';
+import {
+  PARADEX_REST_BASE_URL,
+  PARADEX_TESTNET_REST_BASE_URL,
+} from '../../feeds/shared/endpoints.js';
 import type { OrderBookSnapshot } from '../../liquidity/types.js';
 import { feedLogger } from '../../utils/logger.js';
 import { OrderBookCapacityError, type OrderBookLease } from './order-book-runtime.js';
 
-const decimal = z.string().regex(/^\d+(?:\.\d+)?$/).transform(Number).pipe(z.number().finite());
-const level = z.tuple([decimal.pipe(z.number().positive()), decimal.pipe(z.number().nonnegative())]);
+const decimal = z
+  .string()
+  .regex(/^\d+(?:\.\d+)?$/)
+  .transform(Number)
+  .pipe(z.number().finite());
+const level = z.tuple([
+  decimal.pipe(z.number().positive()),
+  decimal.pipe(z.number().nonnegative()),
+]);
 const SnapshotSchema = z.object({
-  market: z.string(), seq_no: z.number().int().nonnegative(),
+  market: z.string(),
+  seq_no: z.number().int().nonnegative(),
   last_updated_at: z.number().int().nonnegative(),
-  bids: z.array(level).max(1000), asks: z.array(level).max(1000),
+  bids: z.array(level).max(1000),
+  asks: z.array(level).max(1000),
 });
 
 const log = feedLogger('paradex-exit-books');
@@ -47,7 +59,8 @@ export class ParadexBookRuntime {
     this.now = options.now ?? Date.now;
     this.refreshMs = options.refreshMs ?? 5_000;
     this.maxInstruments = options.maxInstruments ?? 40;
-    this.baseUrl = options.environment === 'test' ? PARADEX_TESTNET_REST_BASE_URL : PARADEX_REST_BASE_URL;
+    this.baseUrl =
+      options.environment === 'test' ? PARADEX_TESTNET_REST_BASE_URL : PARADEX_REST_BASE_URL;
   }
 
   acquire(instrument: string): OrderBookLease {
@@ -63,22 +76,24 @@ export class ParadexBookRuntime {
     }
     void this.refresh();
     let released = false;
-    return { release: () => {
-      if (released) return;
-      released = true;
-      const count = (this.refs.get(instrument) ?? 1) - 1;
-      if (count > 0) this.refs.set(instrument, count);
-      else {
-        this.refs.delete(instrument);
-        this.books.delete(instrument);
-        this.rejected.delete(instrument);
-        this.epochs.delete(instrument);
-      }
-      if (this.refs.size === 0 && this.timer != null) {
-        clearInterval(this.timer);
-        this.timer = null;
-      }
-    } };
+    return {
+      release: () => {
+        if (released) return;
+        released = true;
+        const count = (this.refs.get(instrument) ?? 1) - 1;
+        if (count > 0) this.refs.set(instrument, count);
+        else {
+          this.refs.delete(instrument);
+          this.books.delete(instrument);
+          this.rejected.delete(instrument);
+          this.epochs.delete(instrument);
+        }
+        if (this.refs.size === 0 && this.timer != null) {
+          clearInterval(this.timer);
+          this.timer = null;
+        }
+      },
+    };
   }
 
   getBook(instrument: string): OrderBookSnapshot | null {
@@ -92,12 +107,17 @@ export class ParadexBookRuntime {
   refresh(): Promise<void> {
     if (this.disposed || this.refs.size === 0) return Promise.resolve();
     if (this.inFlight != null) return this.inFlight;
-    this.inFlight = this.refreshBooks().catch((error: unknown) => {
-      if (!this.disposed) {
-        for (const [symbol, book] of this.books) this.books.set(symbol, { ...book, state: 'unsynchronized' });
-        log.warn({ err: String(error) }, 'paradex book metadata unavailable');
-      }
-    }).finally(() => { this.inFlight = null; });
+    this.inFlight = this.refreshBooks()
+      .catch((error: unknown) => {
+        if (!this.disposed) {
+          for (const [symbol, book] of this.books)
+            this.books.set(symbol, { ...book, state: 'unsynchronized' });
+          log.warn({ err: String(error) }, 'paradex book metadata unavailable');
+        }
+      })
+      .finally(() => {
+        this.inFlight = null;
+      });
     return this.inFlight;
   }
 
@@ -127,7 +147,9 @@ export class ParadexBookRuntime {
     }
     const symbols = [...this.refs.keys()];
     for (let offset = 0; offset < symbols.length && !this.disposed; offset += 4) {
-      await Promise.all(symbols.slice(offset, offset + 4).map((symbol) => this.refreshBook(symbol)));
+      await Promise.all(
+        symbols.slice(offset, offset + 4).map((symbol) => this.refreshBook(symbol)),
+      );
     }
   }
 
@@ -142,20 +164,41 @@ export class ParadexBookRuntime {
         if (previous != null) this.books.set(symbol, { ...previous, state: 'unsynchronized' });
         return;
       }
-      const snapshot = SnapshotSchema.parse(await this.read(`/orderbook/${encodeURIComponent(symbol)}?depth=100`));
+      const snapshot = SnapshotSchema.parse(
+        await this.read(`/orderbook/${encodeURIComponent(symbol)}?depth=100`),
+      );
       if (this.disposed || this.epochs.get(symbol) !== epoch) return;
       if (snapshot.market !== symbol) throw new Error('Paradex book market mismatch');
-      const bids = snapshot.bids.filter(([, size]) => size > 0).map(([price, amount]) => ({ price, amount, outrightAmount: amount })).sort((a, b) => b.price - a.price);
-      const asks = snapshot.asks.filter(([, size]) => size > 0).map(([price, amount]) => ({ price, amount, outrightAmount: amount })).sort((a, b) => a.price - b.price);
-      if (new Set(bids.map((l) => l.price)).size !== bids.length ||
-        new Set(asks.map((l) => l.price)).size !== asks.length) throw new Error('Duplicate Paradex book price');
+      const bids = snapshot.bids
+        .filter(([, size]) => size > 0)
+        .map(([price, amount]) => ({ price, amount, outrightAmount: amount }))
+        .sort((a, b) => b.price - a.price);
+      const asks = snapshot.asks
+        .filter(([, size]) => size > 0)
+        .map(([price, amount]) => ({ price, amount, outrightAmount: amount }))
+        .sort((a, b) => a.price - b.price);
+      if (
+        new Set(bids.map((l) => l.price)).size !== bids.length ||
+        new Set(asks.map((l) => l.price)).size !== asks.length
+      )
+        throw new Error('Duplicate Paradex book price');
       const crossed = bids[0] != null && asks[0] != null && bids[0].price >= asks[0].price;
       this.books.set(symbol, {
-        venue: 'paradex', instrument: symbol, priceUnit: 'usd', quantityUnit: 'base',
-        bids, asks, totalBidAmount: bids.reduce((sum, l) => sum + l.amount, 0),
+        venue: 'paradex',
+        instrument: symbol,
+        priceUnit: 'usd',
+        quantityUnit: 'base',
+        bids,
+        asks,
+        totalBidAmount: bids.reduce((sum, l) => sum + l.amount, 0),
         totalAskAmount: asks.reduce((sum, l) => sum + l.amount, 0),
-        exchangeTs: snapshot.last_updated_at, receivedAt: this.now(),
-        generation: epoch, state: 'synced', crossed, mark: null, takerFee: fee,
+        exchangeTs: snapshot.last_updated_at,
+        receivedAt: this.now(),
+        generation: epoch,
+        state: 'synced',
+        crossed,
+        mark: null,
+        takerFee: fee,
       });
       this.rejected.delete(symbol);
     } catch (error) {

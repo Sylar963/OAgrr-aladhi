@@ -4,7 +4,10 @@ import Fastify from 'fastify';
 const { deriveMock, thalexMock, paradexMock } = vi.hoisted(() => ({
   deriveMock: { fetchEquityHistory: vi.fn() },
   thalexMock: { fetchEquityHistory: vi.fn(), environment: vi.fn(() => 'prod') },
-  paradexMock: { fetchEquityHistory: vi.fn(), ledgerAccountId: vi.fn((accountId: string) => accountId) },
+  paradexMock: {
+    fetchEquityHistory: vi.fn(),
+    ledgerAccountId: vi.fn((accountId: string) => accountId),
+  },
 }));
 
 vi.mock('../../derive-position-store.js', () => ({ derivePositionStore: deriveMock }));
@@ -84,8 +87,16 @@ describe('GET /portfolio/equity-history', () => {
     ]);
     const headers = { 'x-account': nextAccount() };
 
-    const oneMonth = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=derive&range=1M', headers });
-    const threeMonth = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=derive&range=3M', headers });
+    const oneMonth = await app.inject({
+      method: 'GET',
+      url: '/portfolio/equity-history?venue=derive&range=1M',
+      headers,
+    });
+    const threeMonth = await app.inject({
+      method: 'GET',
+      url: '/portfolio/equity-history?venue=derive&range=3M',
+      headers,
+    });
 
     expect(oneMonth.statusCode).toBe(200);
     expect(oneMonth.json()).toMatchObject({ venue: 'derive', range: '1M', basis: 'venue_value' });
@@ -124,10 +135,18 @@ describe('GET /portfolio/equity-history', () => {
     const scope = `${headers['x-account']}:paradex`;
     paradexMock.ledgerAccountId.mockReturnValueOnce(`${scope}:prod:a`);
     paradexMock.fetchEquityHistory.mockResolvedValueOnce([{ ts: Date.now(), equityUsd: 100 }]);
-    const main = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=paradex', headers });
+    const main = await app.inject({
+      method: 'GET',
+      url: '/portfolio/equity-history?venue=paradex',
+      headers,
+    });
     paradexMock.ledgerAccountId.mockReturnValueOnce(`${scope}:test:a`);
     paradexMock.fetchEquityHistory.mockResolvedValueOnce([{ ts: Date.now(), equityUsd: 200 }]);
-    const test = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=paradex', headers });
+    const test = await app.inject({
+      method: 'GET',
+      url: '/portfolio/equity-history?venue=paradex',
+      headers,
+    });
     expect(main.json().points[0].equityUsd).toBe(100);
     expect(test.json().points[0].equityUsd).toBe(200);
   });

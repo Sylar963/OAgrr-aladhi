@@ -164,7 +164,8 @@ function sanePriceForLeg(
 ): number | null {
   if (v == null || !Number.isFinite(v) || v <= 0) return null;
   if (forward == null) return v;
-  const intrinsic = right === 'call' ? Math.max(0, forward - strike) : Math.max(0, strike - forward);
+  const intrinsic =
+    right === 'call' ? Math.max(0, forward - strike) : Math.max(0, strike - forward);
   const upper = right === 'call' ? forward : strike;
   return v >= intrinsic * 0.95 && v <= upper * 1.05 ? v : null;
 }
@@ -250,9 +251,7 @@ function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1]! + sorted[mid]!) / 2
-    : sorted[mid]!;
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
 }
 
 // Median with MAD-based outlier rejection when N ≥ 3. Stale or one-sided
@@ -563,9 +562,18 @@ export function getOrCreatePortfolioRuntime(
     chainSurface: portfolioChainSurface,
     ...(underlying != null ? { underlyingFilter: underlying } : {}),
     ...(source === 'paradex' && process.env['PARADEX_EXIT_BOOKS'] !== '0'
-      ? { exitBooks: new ParadexExitBooks(() => paradexPositionStore.environment(accountId) === 'test'
-          ? paradexTestnetExitBookRuntime : paradexExitBookRuntime) }
-      : exitBookRuntime != null ? { exitBooks: new ThalexExitBooks(exitBookRuntime) } : {}),
+      ? {
+          exitBooks: new ParadexExitBooks(
+            () =>
+              paradexPositionStore.environment(accountId) === 'test'
+                ? paradexTestnetExitBookRuntime
+                : paradexExitBookRuntime,
+            () => paradexPositionStore.ledgerAccountId(accountId),
+          ),
+        }
+      : exitBookRuntime != null
+        ? { exitBooks: new ThalexExitBooks(exitBookRuntime) }
+        : {}),
   });
 
   const unsubscribe = store.subscribe((event) => {
@@ -624,22 +632,25 @@ export async function disposePortfolioServices(): Promise<void> {
   );
 }
 
-setInterval(() => {
-  const cutoff = Date.now() - RUNTIME_IDLE_TTL_MS;
-  const referenced = new Set<string>();
-  for (const entry of portfolioRuntimes.values()) {
-    const snap = entry.runtime.getSnapshot();
-    if (snap == null) continue;
-    for (const leg of snap.positions) referenced.add(chainKey(leg.underlying, leg.expiry));
-  }
-  for (const [key, handle] of [...chainRefs.entries()]) {
-    if (!referenced.has(key) && handle.lastUsedAt < cutoff) {
-      chainRefs.delete(key);
-      handle.unsubscribe();
-      void handle.release();
+setInterval(
+  () => {
+    const cutoff = Date.now() - RUNTIME_IDLE_TTL_MS;
+    const referenced = new Set<string>();
+    for (const entry of portfolioRuntimes.values()) {
+      const snap = entry.runtime.getSnapshot();
+      if (snap == null) continue;
+      for (const leg of snap.positions) referenced.add(chainKey(leg.underlying, leg.expiry));
     }
-  }
-}, 5 * 60 * 1000).unref?.();
+    for (const [key, handle] of [...chainRefs.entries()]) {
+      if (!referenced.has(key) && handle.lastUsedAt < cutoff) {
+        chainRefs.delete(key);
+        handle.unsubscribe();
+        void handle.release();
+      }
+    }
+  },
+  5 * 60 * 1000,
+).unref?.();
 
 export async function getChainStats(
   underlying: string,

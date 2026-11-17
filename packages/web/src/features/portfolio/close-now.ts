@@ -14,7 +14,8 @@ export const SPREAD_WIDENED_RATIO = 1.5;
 
 export const closeNowMessages = defineMessages(
   {
-    tooltip: 'Estimated taker-close P&L on the holding venue. Paradex uses API depth snapshots refreshed every 5 seconds and public API fees; account discounts and RFQ execution may differ.',
+    tooltip:
+      'Estimated taker-close P&L on the holding venue. Paradex uses API depth snapshots refreshed every 5 seconds and public API fees; account discounts and RFQ execution may differ.',
     comboNote: 'Priced leg by leg; a combo or RFQ close may come in tighter.',
     reason_loading: 'book loading',
     reason_rejected: 'Venue book or fee schedule unavailable',
@@ -40,7 +41,7 @@ export const closeNowMessages = defineMessages(
   },
   {
     tooltip:
-      'Lo que recibirías cerrando todos los legs ahora como taker en el exchange donde están, después de comisiones.',
+      'P&L estimado al cerrar como taker. Paradex usa snapshots de profundidad API cada 5 segundos y comisiones públicas de API; los descuentos de la cuenta y la ejecución por RFQ pueden diferir.',
     comboNote: 'Cotizado leg por leg; un cierre por combo o RFQ podría salir más ajustado.',
     reason_loading: 'cargando libro',
     reason_rejected: 'Libro o comisiones del exchange no disponibles',
@@ -109,7 +110,9 @@ export function legFillStatus(leg: CloseNowLeg, locale: Locale = 'en'): string {
     case 'unsupported_venue':
       return t('noDepth', { venue: leg.venue ?? t('venueFallback') });
     case 'book_unavailable':
-      return leg.unavailableReason != null ? reasonText(leg.unavailableReason, locale) : t('noBook');
+      return leg.unavailableReason != null
+        ? reasonText(leg.unavailableReason, locale)
+        : t('noBook');
   }
 }
 
@@ -131,7 +134,8 @@ export function spreadNote(leg: CloseNowLeg, locale: Locale = 'en'): string | nu
   const spread = leg.spread;
   if (spread?.widthPct == null) return null;
   const width = t('spread', { pct: spread.widthPct.toFixed(1) });
-  if (spread.typicalWidthPct == null || spread.widthVsTypical == null) return t('typicalSampling', { width });
+  if (spread.typicalWidthPct == null || spread.widthVsTypical == null)
+    return t('typicalSampling', { width });
   const typical = t('typical', { pct: spread.typicalWidthPct.toFixed(1) });
   return spread.widthVsTypical >= SPREAD_WIDENED_RATIO
     ? t('quotesPulled', { width, ratio: spread.widthVsTypical.toFixed(1), typical })

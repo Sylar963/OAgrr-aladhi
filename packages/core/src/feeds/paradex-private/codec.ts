@@ -1,4 +1,9 @@
-import type { EquityHistoryPoint, ExchangePortfolioTrade, LinearPosition, PositionLeg } from '@oggregator/protocol';
+import type {
+  EquityHistoryPoint,
+  ExchangePortfolioTrade,
+  LinearPosition,
+  PositionLeg,
+} from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
 import {
@@ -45,7 +50,8 @@ export function parseParadexOptionSymbol(symbol: string): {
   if (optionRight == null) return null;
   const expiry = `20${date[3]}-${month}-${date[1]!.padStart(2, '0')}`;
   const timestamp = Date.parse(`${expiry}T00:00:00.000Z`);
-  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== expiry) return null;
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== expiry)
+    return null;
   return {
     underlying,
     expiry,
@@ -104,7 +110,9 @@ export function paradexPositionsToLegs(
   });
 }
 
-export function formatParadexOptionSymbol(leg: Pick<PositionLeg, 'underlying' | 'expiry' | 'strike' | 'optionRight'>): string {
+export function formatParadexOptionSymbol(
+  leg: Pick<PositionLeg, 'underlying' | 'expiry' | 'strike' | 'optionRight'>,
+): string {
   const [year, month, day] = leg.expiry.split('-');
   const monthName = Object.keys(MONTHS).find((key) => MONTHS[key] === month);
   if (year == null || day == null || monthName == null) throw new Error('Invalid option expiry');
@@ -121,12 +129,18 @@ export function paradexPositionsToLinear(positions: ParadexPosition[]): LinearPo
     const unrealized = finiteOrNull(pos.unrealized_pnl);
     const funding = finiteOrNull(pos.unrealized_funding_pnl) ?? 0;
     const mark = unrealized == null ? null : entry + (unrealized - funding) / size;
-    return [{
-      instrumentName: pos.market, underlying: symbol[1]!, kind: 'perpetual', expiry: null,
-      sizeCoin: size, entryPriceUsd: entry,
-      markPriceUsd: mark != null && Number.isFinite(mark) && mark >= 0 ? mark : null,
-      source: 'paradex',
-    }];
+    return [
+      {
+        instrumentName: pos.market,
+        underlying: symbol[1]!,
+        kind: 'perpetual',
+        expiry: null,
+        sizeCoin: size,
+        entryPriceUsd: entry,
+        markPriceUsd: mark != null && Number.isFinite(mark) && mark >= 0 ? mark : null,
+        source: 'paradex',
+      },
+    ];
   });
 }
 
@@ -140,12 +154,21 @@ export function paradexFillToTrade(fill: ParadexFill): ExchangePortfolioTrade | 
   }
   const underlying = finiteOrNull(fill.underlying_price);
   return {
-    venue: 'paradex', tradeId: fill.id, orderId: fill.order_id ?? null, groupId: null,
-    instrumentName: fill.market, ...parsed, direction: fill.side === 'BUY' ? 'buy' : 'sell',
-    amount, priceUsd: price,
-    feeUsd: ['USD', 'USDC', 'USDT'].includes(fill.fee_currency ?? '') ? finiteOrNull(fill.fee) : null,
+    venue: 'paradex',
+    tradeId: fill.id,
+    orderId: fill.order_id ?? null,
+    groupId: null,
+    instrumentName: fill.market,
+    ...parsed,
+    direction: fill.side === 'BUY' ? 'buy' : 'sell',
+    amount,
+    priceUsd: price,
+    feeUsd: ['USD', 'USDC', 'USDT'].includes(fill.fee_currency ?? '')
+      ? finiteOrNull(fill.fee)
+      : null,
     realizedPnlUsd: finiteOrNull(fill.realized_pnl),
-    liquidityRole: fill.liquidity === 'MAKER' ? 'maker' : fill.liquidity === 'TAKER' ? 'taker' : null,
+    liquidityRole:
+      fill.liquidity === 'MAKER' ? 'maker' : fill.liquidity === 'TAKER' ? 'taker' : null,
     timestampMs: fill.created_at,
     underlyingPriceUsd: underlying != null && underlying > 0 ? underlying : null,
   };
@@ -168,12 +191,15 @@ function paradexTimestampMs(ts: number): number {
   return Math.round(ts < 1e12 ? ts * 1000 : ts);
 }
 
-export function paradexAccountHistoryToPoints(history: ParadexAccountHistory): EquityHistoryPoint[] {
+export function paradexAccountHistoryToPoints(
+  history: ParadexAccountHistory,
+): EquityHistoryPoint[] {
   const points: EquityHistoryPoint[] = [];
   const count = Math.min(history.data.length, history.timestamps.length);
   for (let i = 0; i < count; i += 1) {
     const equityUsd = history.data[i]!;
-    if (Number.isFinite(equityUsd)) points.push({ ts: paradexTimestampMs(history.timestamps[i]!), equityUsd });
+    if (Number.isFinite(equityUsd))
+      points.push({ ts: paradexTimestampMs(history.timestamps[i]!), equityUsd });
   }
   return points.sort((a, b) => a.ts - b.ts);
 }

@@ -78,7 +78,8 @@ const messages = defineMessages(
     deltaLongState: 'long',
     deltaShortState: 'short',
     deltaUnknownState: 'unknown',
-    deltaTitle: 'Options delta {options} + perps/futures {linear} = net {net}. Hedged when the net rounds to 0.000.',
+    deltaTitle:
+      'Options delta {options} + perps/futures {linear} = net {net}. Hedged when the net rounds to 0.000.',
     linearPill: '{name} {size} @ {entry}',
     linearHint: ' Perps and futures are included as straight lines from their entry price.',
     builderLinear: ' Perp and future positions come along as hedge legs.',
@@ -137,9 +138,11 @@ const messages = defineMessages(
     deltaLongState: 'long',
     deltaShortState: 'short',
     deltaUnknownState: 'desconocido',
-    deltaTitle: 'Delta de opciones {options} + perpetuos/futuros {linear} = neto {net}. Cubierto cuando el neto redondea a 0.000.',
+    deltaTitle:
+      'Delta de opciones {options} + perpetuos/futuros {linear} = neto {net}. Cubierto cuando el neto redondea a 0.000.',
     linearPill: '{name} {size} @ {entry}',
-    linearHint: ' Los perpetuos y futuros se incluyen como líneas rectas desde su precio de entrada.',
+    linearHint:
+      ' Los perpetuos y futuros se incluyen como líneas rectas desde su precio de entrada.',
     builderLinear: ' Las posiciones en perpetuos y futuros se trasladan como coberturas.',
     upsideUnbounded: 'Alza ilimitada después de {date}',
     imTitle: 'Margen inicial de toda la cuenta del exchange',
@@ -224,7 +227,8 @@ function niceStep(span: number, targetCount: number): number {
   if (!(raw > 0) || !Number.isFinite(raw)) return 1;
   const magnitude = 10 ** Math.floor(Math.log10(raw));
   const normalized = raw / magnitude;
-  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  const factor =
+    normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
   return factor * magnitude;
 }
 
@@ -242,7 +246,10 @@ function nearestPoint(
 ): PortfolioPnlCurveData['points'][number] | null {
   let best: PortfolioPnlCurveData['points'][number] | null = null;
   for (const point of points) {
-    if (best == null || Math.abs(point.underlyingPriceUsd - price) < Math.abs(best.underlyingPriceUsd - price)) {
+    if (
+      best == null ||
+      Math.abs(point.underlyingPriceUsd - price) < Math.abs(best.underlyingPriceUsd - price)
+    ) {
       best = point;
     }
   }
@@ -265,7 +272,9 @@ function linePath(
   for (const point of points) {
     const y = pickY(point);
     if (y == null || !Number.isFinite(y)) continue;
-    commands.push(`${commands.length === 0 ? 'M' : 'L'} ${toX(point.underlyingPriceUsd)} ${toY(y)}`);
+    commands.push(
+      `${commands.length === 0 ? 'M' : 'L'} ${toX(point.underlyingPriceUsd)} ${toY(y)}`,
+    );
   }
   return commands.join(' ');
 }
@@ -277,7 +286,20 @@ function emptyMessage(status: PortfolioPnlCurveData['status'], t: T): string {
   return t('emptyFallback');
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null, strategies, positions, totals = null, linearPositions = [], deltaByUnderlying = [] }: Props) {
+export default function PortfolioPnlCurve({
+  curve,
+  forwardDays,
+  mixedExpiries = false,
+  onOpenBuilder,
+  builderDisabledReason,
+  equityVenue = null,
+  margin = null,
+  strategies,
+  positions,
+  totals = null,
+  linearPositions = [],
+  deltaByUnderlying = [],
+}: Props) {
   const t = useT(messages);
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
@@ -285,55 +307,58 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
   const mode: CurveMode = storedMode === 'equity' && equityVenue == null ? 'payoff' : storedMode;
   const [taUnderlying, setTaUnderlying] = useState<TaUnderlying | null>(null);
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  const deltaPills = deltaByUnderlying.length > 1
-    ? deltaByUnderlying.map((exposure) => (
-        <span
-          key={exposure.underlying}
-          className={styles.metricPill}
-          data-hedge={exposure.hedgeState}
-          title={t('deltaTitle', {
-            options: fmtDelta(exposure.optionsDeltaCoin),
-            linear: fmtDelta(exposure.linearDeltaCoin),
-            net: fmtDelta(exposure.netDeltaCoin),
-          })}
-        >
-          {t('deltaByUnderlying', {
-            underlying: exposure.underlying,
-            v: fmtDelta(exposure.netDeltaCoin),
-            state: deltaStateText(exposure.hedgeState, t),
-          })}
-        </span>
-      ))
-    : totals != null
-      ? (() => {
-          const exposure = deltaByUnderlying[0];
-          const net = exposure == null ? totals.netDeltaCoin : exposure.netDeltaCoin;
-          const state = exposure?.hedgeState ?? deltaHedgeState(
-            totals.netDeltaCoin,
-            totals.optionsDeltaCoin,
-            totals.linearDeltaCoin,
-          );
-          return (
-            <span
-              className={styles.metricPill}
-              data-hedge={state}
-              title={t('deltaTitle', {
-                options: fmtDelta(exposure == null ? totals.optionsDeltaCoin : exposure.optionsDeltaCoin),
-                linear: fmtDelta(exposure == null ? totals.linearDeltaCoin : exposure.linearDeltaCoin),
-                net: fmtDelta(net),
-              })}
-            >
-              {state === 'hedged' || state === 'neutral'
-                ? t('deltaHedged')
-                : state === 'offsetting'
-                  ? t('deltaOffsetting', { v: fmtDelta(net) })
-                  : state === 'unknown'
-                    ? t('deltaUnavailable')
-                    : t('deltaNet', { v: fmtDelta(net) })}
-            </span>
-          );
-        })()
-      : [];
+  const deltaPills =
+    deltaByUnderlying.length > 1
+      ? deltaByUnderlying.map((exposure) => (
+          <span
+            key={exposure.underlying}
+            className={styles.metricPill}
+            data-hedge={exposure.hedgeState}
+            title={t('deltaTitle', {
+              options: fmtDelta(exposure.optionsDeltaCoin),
+              linear: fmtDelta(exposure.linearDeltaCoin),
+              net: fmtDelta(exposure.netDeltaCoin),
+            })}
+          >
+            {t('deltaByUnderlying', {
+              underlying: exposure.underlying,
+              v: fmtDelta(exposure.netDeltaCoin),
+              state: deltaStateText(exposure.hedgeState, t),
+            })}
+          </span>
+        ))
+      : totals != null
+        ? (() => {
+            const exposure = deltaByUnderlying[0];
+            const net = exposure == null ? totals.netDeltaCoin : exposure.netDeltaCoin;
+            const state =
+              exposure?.hedgeState ??
+              deltaHedgeState(totals.netDeltaCoin, totals.optionsDeltaCoin, totals.linearDeltaCoin);
+            return (
+              <span
+                className={styles.metricPill}
+                data-hedge={state}
+                title={t('deltaTitle', {
+                  options: fmtDelta(
+                    exposure == null ? totals.optionsDeltaCoin : exposure.optionsDeltaCoin,
+                  ),
+                  linear: fmtDelta(
+                    exposure == null ? totals.linearDeltaCoin : exposure.linearDeltaCoin,
+                  ),
+                  net: fmtDelta(net),
+                })}
+              >
+                {state === 'hedged' || state === 'neutral'
+                  ? t('deltaHedged')
+                  : state === 'offsetting'
+                    ? t('deltaOffsetting', { v: fmtDelta(net) })
+                    : state === 'unknown'
+                      ? t('deltaUnavailable')
+                      : t('deltaNet', { v: fmtDelta(net) })}
+              </span>
+            );
+          })()
+        : [];
 
   useEffect(() => {
     if (curve.status === 'ok' && curve.points.length > 0) {
@@ -352,7 +377,9 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         ? stickyCurve
         : curve;
   const isStale = displayCurve !== curve;
-  const firstUnboundedIndex = displayCurve.riskWindows.findIndex((window) => window.upsideUnbounded);
+  const firstUnboundedIndex = displayCurve.riskWindows.findIndex(
+    (window) => window.upsideUnbounded,
+  );
   const upsideUnboundedAfter =
     firstUnboundedIndex > 0 ? (displayCurve.riskWindows[firstUnboundedIndex]?.from ?? null) : null;
   const lossLabel =
@@ -373,9 +400,12 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
   const liquidation = useMemo(() => {
     const spotUsd = displayCurve.currentSpotUsd;
     if (margin == null || spotUsd == null || displayCurve.status !== 'ok') return null;
-    const bufferUsd = margin.venue === 'thalex'
-      ? liquidationBufferUsd(margin.marginUsd, margin.initialMarginUsd)
-      : margin.maintenanceMarginUsd == null ? null : margin.marginUsd - margin.maintenanceMarginUsd;
+    const bufferUsd =
+      margin.venue === 'thalex'
+        ? liquidationBufferUsd(margin.marginUsd, margin.initialMarginUsd)
+        : margin.maintenanceMarginUsd == null
+          ? null
+          : margin.marginUsd - margin.maintenanceMarginUsd;
     if (bufferUsd == null) return null;
     if (bufferUsd <= 0) return null;
     const level = marginCallPnl(displayCurve.points, spotUsd, bufferUsd);
@@ -429,7 +459,8 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
   }, [displayCurve, forwardDays]);
 
   const spot = displayCurve.currentSpotUsd;
-  const hovered = chart != null && hoverPrice != null ? nearestPoint(displayCurve.points, hoverPrice) : null;
+  const hovered =
+    chart != null && hoverPrice != null ? nearestPoint(displayCurve.points, hoverPrice) : null;
 
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
     if (chart == null) return;
@@ -465,23 +496,55 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
       </div>
       <div className={styles.headerRight}>
         <div className={styles.modeToggle} role="radiogroup" aria-label={t('curveView')}>
-          <button type="button" role="radio" aria-checked={mode === 'payoff'} className={styles.modeButton} data-active={mode === 'payoff' || undefined} onClick={() => selectMode('payoff')}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={mode === 'payoff'}
+            className={styles.modeButton}
+            data-active={mode === 'payoff' || undefined}
+            onClick={() => selectMode('payoff')}
+          >
             {t('payoff')}
           </button>
-          <button type="button" role="radio" aria-checked={mode === 'ta'} className={styles.modeButton} data-active={mode === 'ta' || undefined} onClick={() => selectMode('ta')}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={mode === 'ta'}
+            className={styles.modeButton}
+            data-active={mode === 'ta' || undefined}
+            onClick={() => selectMode('ta')}
+          >
             {t('taV2')}
           </button>
           {equityVenue != null && (
-            <button type="button" role="radio" aria-checked={mode === 'equity'} className={styles.modeButton} data-active={mode === 'equity' || undefined} onClick={() => selectMode('equity')}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'equity'}
+              className={styles.modeButton}
+              data-active={mode === 'equity' || undefined}
+              onClick={() => selectMode('equity')}
+            >
               {t('equity')}
             </button>
           )}
         </div>
         {mode === 'payoff' && (
           <div className={styles.legend}>
-            <span className={styles.legendItem}><span className={styles.nowSwatch} />{t('now')}</span>
-            {forwardDays > 0 && <span className={styles.legendItem}><span className={styles.forwardSwatch} />T+{forwardDays}d</span>}
-            <span className={styles.legendItem}><span className={styles.expirySwatch} />{t('expiry')}</span>
+            <span className={styles.legendItem}>
+              <span className={styles.nowSwatch} />
+              {t('now')}
+            </span>
+            {forwardDays > 0 && (
+              <span className={styles.legendItem}>
+                <span className={styles.forwardSwatch} />
+                T+{forwardDays}d
+              </span>
+            )}
+            <span className={styles.legendItem}>
+              <span className={styles.expirySwatch} />
+              {t('expiry')}
+            </span>
           </div>
         )}
       </div>
@@ -502,7 +565,10 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
       <div className={styles.wrap}>
         {header}
         <BreakevenTaChart
-          underlying={taUnderlying ?? (isTaUnderlying(displayCurve.underlying) ? displayCurve.underlying : 'BTC')}
+          underlying={
+            taUnderlying ??
+            (isTaUnderlying(displayCurve.underlying) ? displayCurve.underlying : 'BTC')
+          }
           onUnderlyingChange={setTaUnderlying}
           portfolioUnderlying={displayCurve.underlying}
           portfolioBreakEvensUsd={displayCurve.breakEvenPricesUsd}
@@ -529,22 +595,40 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
             {t('openBuilder')}
           </button>
           <span id="portfolio-builder-hint" className={styles.subtitle}>
-            {builderDisabledReason ?? `${t('builderHint')}${linearPositions.length > 0 ? t('builderLinear') : ''}`}
+            {builderDisabledReason ??
+              `${t('builderHint')}${linearPositions.length > 0 ? t('builderLinear') : ''}`}
           </span>
         </div>
       )}
 
       <div className={styles.metaRow}>
-        <span className={styles.metricPill}>{t('underlying', { v: displayCurve.underlying ?? '—' })}</span>
-        <span className={styles.metricPill}>{t('spot', { v: fmtPrice(displayCurve.currentSpotUsd) })}</span>
         <span className={styles.metricPill}>
-          BE {displayCurve.breakEvenPricesUsd.length === 0 ? '—' : displayCurve.breakEvenPricesUsd.map((value) => fmtPrice(value)).join(' / ')}
+          {t('underlying', { v: displayCurve.underlying ?? '—' })}
         </span>
-        {displayCurve.maxProfitUsd != null && <span className={styles.metricPill}>{t('maxGain', { v: fmtUsd(displayCurve.maxProfitUsd) })}</span>}
+        <span className={styles.metricPill}>
+          {t('spot', { v: fmtPrice(displayCurve.currentSpotUsd) })}
+        </span>
+        <span className={styles.metricPill}>
+          BE{' '}
+          {displayCurve.breakEvenPricesUsd.length === 0
+            ? '—'
+            : displayCurve.breakEvenPricesUsd.map((value) => fmtPrice(value)).join(' / ')}
+        </span>
+        {displayCurve.maxProfitUsd != null && (
+          <span className={styles.metricPill}>
+            {t('maxGain', { v: fmtUsd(displayCurve.maxProfitUsd) })}
+          </span>
+        )}
         {upsideUnboundedAfter != null ? (
-          <span className={styles.metricPill}>{t('upsideUnbounded', { date: formatExpiry(upsideUnboundedAfter) })}</span>
+          <span className={styles.metricPill}>
+            {t('upsideUnbounded', { date: formatExpiry(upsideUnboundedAfter) })}
+          </span>
         ) : (
-          displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{lossLabel} {fmtUsd(displayCurve.maxLossUsd)}</span>
+          displayCurve.maxLossUsd != null && (
+            <span className={styles.metricPill}>
+              {lossLabel} {fmtUsd(displayCurve.maxLossUsd)}
+            </span>
+          )
         )}
         {deltaPills}
         {linearPositions.map((position) => (
@@ -572,7 +656,10 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 {t('imBreach')}{' '}
                 {marginCall.below == null && marginCall.above == null
                   ? t('noneInRange')
-                  : `≈ ${[marginCall.below, marginCall.above].filter((value) => value != null).map((value) => fmtPrice(value)).join(' / ')}`}
+                  : `≈ ${[marginCall.below, marginCall.above]
+                      .filter((value) => value != null)
+                      .map((value) => fmtPrice(value))
+                      .join(' / ')}`}
               </span>
             )}
             {liquidation != null && (
@@ -580,7 +667,10 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 {t('liquidation')}{' '}
                 {liquidation.below == null && liquidation.above == null
                   ? t('noneInRange')
-                  : `≈ ${[liquidation.below, liquidation.above].filter((value) => value != null).map((value) => fmtPrice(value)).join(' / ')}`}
+                  : `≈ ${[liquidation.below, liquidation.above]
+                      .filter((value) => value != null)
+                      .map((value) => fmtPrice(value))
+                      .join(' / ')}`}
               </span>
             )}
           </>
@@ -619,7 +709,13 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                     stroke="#1a1f2b"
                     strokeWidth={1}
                   />
-                  <text x={PADDING.left - 8} y={y + 3} textAnchor="end" fontSize={10} fill="#7c8798">
+                  <text
+                    x={PADDING.left - 8}
+                    y={y + 3}
+                    textAnchor="end"
+                    fontSize={10}
+                    fill="#7c8798"
+                  >
                     {fmtUsd(value)}
                   </text>
                 </g>
@@ -637,19 +733,39 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                     stroke="#10151e"
                     strokeWidth={1}
                   />
-                  <text x={x} y={HEIGHT - PADDING.bottom + 16} textAnchor="middle" fontSize={10} fill="#7c8798">
+                  <text
+                    x={x}
+                    y={HEIGHT - PADDING.bottom + 16}
+                    textAnchor="middle"
+                    fontSize={10}
+                    fill="#7c8798"
+                  >
                     {fmtPrice(value)}
                   </text>
                   {spot != null && (
-                    <text x={x} y={HEIGHT - PADDING.bottom + 30} textAnchor="middle" fontSize={9} fill="#4b5563">
+                    <text
+                      x={x}
+                      y={HEIGHT - PADDING.bottom + 30}
+                      textAnchor="middle"
+                      fontSize={9}
+                      fill="#4b5563"
+                    >
                       {fmtPct((value / spot - 1) * 100, 0)}
                     </text>
                   )}
                 </g>
               );
             })}
-            <path d={chart.expiryAreaPath} fill="rgba(74, 222, 128, 0.12)" clipPath={`url(#${clipId}-gain)`} />
-            <path d={chart.expiryAreaPath} fill="rgba(248, 113, 113, 0.14)" clipPath={`url(#${clipId}-loss)`} />
+            <path
+              d={chart.expiryAreaPath}
+              fill="rgba(74, 222, 128, 0.12)"
+              clipPath={`url(#${clipId}-gain)`}
+            />
+            <path
+              d={chart.expiryAreaPath}
+              fill="rgba(248, 113, 113, 0.14)"
+              clipPath={`url(#${clipId}-loss)`}
+            />
             <line
               x1={PADDING.left}
               x2={WIDTH - PADDING.right}
@@ -673,7 +789,13 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                     strokeDasharray="3 5"
                     opacity={0.95}
                   />
-                  <text x={x} y={PADDING.top - 5} textAnchor={labelAnchor(x)} fontSize={9} fill="#fbbf24">
+                  <text
+                    x={x}
+                    y={PADDING.top - 5}
+                    textAnchor={labelAnchor(x)}
+                    fontSize={9}
+                    fill="#fbbf24"
+                  >
                     BE {fmtPrice(value)}
                   </text>
                 </g>
@@ -701,50 +823,54 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 </text>
               </g>
             )}
-            {marginCall != null && marginCall.level >= chart.yMin && marginCall.level <= chart.yMax && (
-              <g data-testid="im-breach-line">
-                <line
-                  x1={PADDING.left}
-                  x2={WIDTH - PADDING.right}
-                  y1={chart.toY(marginCall.level)}
-                  y2={chart.toY(marginCall.level)}
-                  stroke={MARGIN_CALL_COLOR}
-                  strokeWidth={1}
-                  strokeDasharray="2 4"
-                />
-                <text
-                  x={WIDTH - PADDING.right - 4}
-                  y={chart.toY(marginCall.level) - 4}
-                  textAnchor="end"
-                  fontSize={9}
-                  fill={MARGIN_CALL_COLOR}
-                >
-                  {t('imBreachLine', { v: fmtUsd(marginCall.level) })}
-                </text>
-              </g>
-            )}
-            {liquidation != null && liquidation.level >= chart.yMin && liquidation.level <= chart.yMax && (
-              <g data-testid="liquidation-line">
-                <line
-                  x1={PADDING.left}
-                  x2={WIDTH - PADDING.right}
-                  y1={chart.toY(liquidation.level)}
-                  y2={chart.toY(liquidation.level)}
-                  stroke={LIQUIDATION_COLOR}
-                  strokeWidth={1}
-                  strokeDasharray="6 3"
-                />
-                <text
-                  x={WIDTH - PADDING.right - 4}
-                  y={chart.toY(liquidation.level) - 4}
-                  textAnchor="end"
-                  fontSize={9}
-                  fill={LIQUIDATION_COLOR}
-                >
-                  {t('liquidationLine', { v: fmtUsd(liquidation.level) })}
-                </text>
-              </g>
-            )}
+            {marginCall != null &&
+              marginCall.level >= chart.yMin &&
+              marginCall.level <= chart.yMax && (
+                <g data-testid="im-breach-line">
+                  <line
+                    x1={PADDING.left}
+                    x2={WIDTH - PADDING.right}
+                    y1={chart.toY(marginCall.level)}
+                    y2={chart.toY(marginCall.level)}
+                    stroke={MARGIN_CALL_COLOR}
+                    strokeWidth={1}
+                    strokeDasharray="2 4"
+                  />
+                  <text
+                    x={WIDTH - PADDING.right - 4}
+                    y={chart.toY(marginCall.level) - 4}
+                    textAnchor="end"
+                    fontSize={9}
+                    fill={MARGIN_CALL_COLOR}
+                  >
+                    {t('imBreachLine', { v: fmtUsd(marginCall.level) })}
+                  </text>
+                </g>
+              )}
+            {liquidation != null &&
+              liquidation.level >= chart.yMin &&
+              liquidation.level <= chart.yMax && (
+                <g data-testid="liquidation-line">
+                  <line
+                    x1={PADDING.left}
+                    x2={WIDTH - PADDING.right}
+                    y1={chart.toY(liquidation.level)}
+                    y2={chart.toY(liquidation.level)}
+                    stroke={LIQUIDATION_COLOR}
+                    strokeWidth={1}
+                    strokeDasharray="6 3"
+                  />
+                  <text
+                    x={WIDTH - PADDING.right - 4}
+                    y={chart.toY(liquidation.level) - 4}
+                    textAnchor="end"
+                    fontSize={9}
+                    fill={LIQUIDATION_COLOR}
+                  >
+                    {t('liquidationLine', { v: fmtUsd(liquidation.level) })}
+                  </text>
+                </g>
+              )}
             {chart.forwardPath && (
               <path
                 d={chart.forwardPath}
@@ -816,7 +942,15 @@ interface HoverReadoutProps {
   toY: (value: number) => number;
 }
 
-function HoverReadout({ point, spot, forwardDays, marginCallLevel, liquidationLevel, toX, toY }: HoverReadoutProps) {
+function HoverReadout({
+  point,
+  spot,
+  forwardDays,
+  marginCallLevel,
+  liquidationLevel,
+  toX,
+  toY,
+}: HoverReadoutProps) {
   const t = useT(messages);
   const x = toX(point.underlyingPriceUsd);
   const rows: Array<{ label: string; value: number; color: string }> = [
@@ -825,7 +959,11 @@ function HoverReadout({ point, spot, forwardDays, marginCallLevel, liquidationLe
   if (forwardDays > 0 && point.forwardPnlUsd != null) {
     rows.push({ label: `T+${forwardDays}d`, value: point.forwardPnlUsd, color: '#38bdf8' });
   }
-  rows.push({ label: t('expiry'), value: point.expiryPnlUsd, color: point.expiryPnlUsd < 0 ? '#f87171' : '#4ade80' });
+  rows.push({
+    label: t('expiry'),
+    value: point.expiryPnlUsd,
+    color: point.expiryPnlUsd < 0 ? '#f87171' : '#4ade80',
+  });
   const readoutRows: Array<{ label: string; value: string; color: string }> = rows.map((row) => ({
     label: row.label,
     value: fmtUsd(row.value),
@@ -852,9 +990,25 @@ function HoverReadout({ point, spot, forwardDays, marginCallLevel, liquidationLe
 
   return (
     <g pointerEvents="none" data-testid="pnl-hover">
-      <line x1={x} x2={x} y1={PADDING.top} y2={HEIGHT - PADDING.bottom} stroke="#94a3b8" strokeWidth={1} opacity={0.6} />
+      <line
+        x1={x}
+        x2={x}
+        y1={PADDING.top}
+        y2={HEIGHT - PADDING.bottom}
+        stroke="#94a3b8"
+        strokeWidth={1}
+        opacity={0.6}
+      />
       {rows.map((row) => (
-        <circle key={row.label} cx={x} cy={toY(row.value)} r={3.5} fill={row.color} stroke="#0b0f17" strokeWidth={1.5} />
+        <circle
+          key={row.label}
+          cx={x}
+          cy={toY(row.value)}
+          r={3.5}
+          fill={row.color}
+          stroke="#0b0f17"
+          strokeWidth={1.5}
+        />
       ))}
       <rect
         x={boxX}
@@ -869,7 +1023,13 @@ function HoverReadout({ point, spot, forwardDays, marginCallLevel, liquidationLe
         {fmtPrice(point.underlyingPriceUsd)}
       </text>
       {spot != null && (
-        <text x={boxX + TOOLTIP_WIDTH - 8} y={boxY + 15} fontSize={10} fill="#94a3b8" textAnchor="end">
+        <text
+          x={boxX + TOOLTIP_WIDTH - 8}
+          y={boxY + 15}
+          fontSize={10}
+          fill="#94a3b8"
+          textAnchor="end"
+        >
           {fmtPct((point.underlyingPriceUsd / spot - 1) * 100, 1)}
         </text>
       )}
@@ -878,7 +1038,13 @@ function HoverReadout({ point, spot, forwardDays, marginCallLevel, liquidationLe
           <text x={boxX + 8} y={boxY + 31 + index * 14} fontSize={10} fill={row.color}>
             {row.label}
           </text>
-          <text x={boxX + TOOLTIP_WIDTH - 8} y={boxY + 31 + index * 14} fontSize={10} fill="#e2e8f0" textAnchor="end">
+          <text
+            x={boxX + TOOLTIP_WIDTH - 8}
+            y={boxY + 31 + index * 14}
+            fontSize={10}
+            fill="#e2e8f0"
+            textAnchor="end"
+          >
             {row.value}
           </text>
         </g>

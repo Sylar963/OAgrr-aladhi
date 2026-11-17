@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ExpiryRiskWindow, PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
+import type {
+  ExpiryRiskWindow,
+  PortfolioPnlCurve as PortfolioPnlCurveData,
+} from '@oggregator/protocol';
 
 import PortfolioPnlCurve from './PortfolioPnlCurve';
 
@@ -18,7 +21,9 @@ vi.mock('./EquityHistoryChart', () => ({
   default: (props: { venue: string }) => <div data-testid="equity-chart">{props.venue}</div>,
 }));
 
-function riskWindow(partial: Partial<ExpiryRiskWindow> & Pick<ExpiryRiskWindow, 'from' | 'until'>): ExpiryRiskWindow {
+function riskWindow(
+  partial: Partial<ExpiryRiskWindow> & Pick<ExpiryRiskWindow, 'from' | 'until'>,
+): ExpiryRiskWindow {
   return {
     liveLegIds: [],
     netCallSize: 0,
@@ -59,14 +64,27 @@ afterEach(() => {
 });
 
 it('uses Paradex reported maintenance margin for the liquidation approximation', () => {
-  const { container } = render(<PortfolioPnlCurve forwardDays={0} curve={curve({
-    currentSpotUsd: 85000,
-    points: [
-      { underlyingPriceUsd: 80000, nowPnlUsd: -1000, forwardPnlUsd: null, expiryPnlUsd: -1000 },
-      { underlyingPriceUsd: 90000, nowPnlUsd: 1000, forwardPnlUsd: null, expiryPnlUsd: 1000 },
-    ],
-  })} margin={{ accountId: 'a', venue: 'paradex', initialMarginUsd: 400, marginUsd: 1000,
-    remainingMarginUsd: 600, maintenanceMarginUsd: 180, updatedAt: 1 }} />);
+  const { container } = render(
+    <PortfolioPnlCurve
+      forwardDays={0}
+      curve={curve({
+        currentSpotUsd: 85000,
+        points: [
+          { underlyingPriceUsd: 80000, nowPnlUsd: -1000, forwardPnlUsd: null, expiryPnlUsd: -1000 },
+          { underlyingPriceUsd: 90000, nowPnlUsd: 1000, forwardPnlUsd: null, expiryPnlUsd: 1000 },
+        ],
+      })}
+      margin={{
+        accountId: 'a',
+        venue: 'paradex',
+        initialMarginUsd: 400,
+        marginUsd: 1000,
+        remainingMarginUsd: 600,
+        maintenanceMarginUsd: 180,
+        updatedAt: 1,
+      }}
+    />,
+  );
   expect(container.textContent).toContain('Liquidation ≈ -$820');
   expect(container.textContent).not.toContain('Liquidation ≈ -$720');
 });
@@ -105,7 +123,11 @@ describe('PortfolioPnlCurve', () => {
         curve={curve({
           maxLossUsd: -1_000,
           riskWindows: [
-            riskWindow({ from: '2026-10-07T12:00:00.000Z', until: '2026-10-16', worstLossUsd: -1_000 }),
+            riskWindow({
+              from: '2026-10-07T12:00:00.000Z',
+              until: '2026-10-16',
+              worstLossUsd: -1_000,
+            }),
             riskWindow({ from: '2026-10-16', until: '2026-10-30', netCallSize: 1 }),
           ],
         })}
@@ -137,7 +159,9 @@ describe('PortfolioPnlCurve', () => {
     const svg = container.querySelector('svg');
     if (svg == null) throw new Error('chart missing');
     const identity = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-    Object.defineProperty(svg, 'getScreenCTM', { value: () => ({ ...identity, inverse: () => identity }) });
+    Object.defineProperty(svg, 'getScreenCTM', {
+      value: () => ({ ...identity, inverse: () => identity }),
+    });
 
     fireEvent.pointerMove(svg, { clientX: 690, clientY: 100 });
     const readout = screen.getByTestId('pnl-hover');
@@ -152,7 +176,12 @@ describe('PortfolioPnlCurve', () => {
   });
 
   it('switches to the TA view with the book underlying and portfolio break-evens', () => {
-    render(<PortfolioPnlCurve forwardDays={0} curve={curve({ underlying: 'ETH', breakEvenPricesUsd: [3_100, 3_900] })} />);
+    render(
+      <PortfolioPnlCurve
+        forwardDays={0}
+        curve={curve({ underlying: 'ETH', breakEvenPricesUsd: [3_100, 3_900] })}
+      />,
+    );
     expect(screen.queryByTestId('ta-chart')).toBeNull();
 
     fireEvent.click(screen.getByRole('radio', { name: 'TA V2' }));
@@ -182,7 +211,12 @@ describe('PortfolioPnlCurve', () => {
         curve={curve({
           currentSpotUsd: 85_000,
           points: [
-            { underlyingPriceUsd: 80_000, nowPnlUsd: -100, forwardPnlUsd: null, expiryPnlUsd: -100 },
+            {
+              underlyingPriceUsd: 80_000,
+              nowPnlUsd: -100,
+              forwardPnlUsd: null,
+              expiryPnlUsd: -100,
+            },
             { underlyingPriceUsd: 85_000, nowPnlUsd: 0, forwardPnlUsd: null, expiryPnlUsd: 0 },
             { underlyingPriceUsd: 90_000, nowPnlUsd: 100, forwardPnlUsd: null, expiryPnlUsd: 100 },
           ],
@@ -211,7 +245,12 @@ describe('PortfolioPnlCurve', () => {
         curve={curve({
           currentSpotUsd: 85_000,
           points: [
-            { underlyingPriceUsd: 80_000, nowPnlUsd: -100, forwardPnlUsd: null, expiryPnlUsd: -100 },
+            {
+              underlyingPriceUsd: 80_000,
+              nowPnlUsd: -100,
+              forwardPnlUsd: null,
+              expiryPnlUsd: -100,
+            },
             { underlyingPriceUsd: 85_000, nowPnlUsd: 0, forwardPnlUsd: null, expiryPnlUsd: 0 },
             { underlyingPriceUsd: 90_000, nowPnlUsd: 100, forwardPnlUsd: null, expiryPnlUsd: 100 },
           ],

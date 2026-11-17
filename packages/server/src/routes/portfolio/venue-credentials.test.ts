@@ -1,87 +1,102 @@
 import Fastify from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { credentialsStoreMock, deriveStoreMock, paradexStoreMock, thalexStoreMock } = vi.hoisted(() => {
-  type Env = 'prod' | 'test';
-  interface Slot {
-    accountId: string;
-    venue: string;
-    environment: Env;
-    active: boolean;
-    encryptedCredentials: string;
-  }
-  // Keyed `${accountId}:${venue}:${environment}`.
-  const rows = new Map<string, Slot>();
-  const slotsOf = (accountId: string, venue: string) =>
-    [...rows.values()].filter((row) => row.accountId === accountId && row.venue === venue);
-  const put = (accountId: string, venue: string, environment: Env, encryptedCredentials: string) => {
-    for (const row of slotsOf(accountId, venue)) row.active = false;
-    rows.set(`${accountId}:${venue}:${environment}`, {
-      accountId,
-      venue,
-      environment,
-      active: true,
-      encryptedCredentials,
-    });
-  };
-  const thalexState: { env: Env | null } = { env: null };
-  return {
-    credentialsStoreMock: {
-      rows,
-      put,
-      enabled: true,
-      listVenues: vi.fn(async (accountId: string) => [
-        ...new Set([...rows.values()].filter((row) => row.accountId === accountId).map((row) => row.venue)),
-      ]),
-      listSlots: vi.fn(async (accountId: string, venue: string) => slotsOf(accountId, venue)),
-      get: vi.fn(async (accountId: string, venue: string, environment?: Env) =>
-        slotsOf(accountId, venue).find((row) =>
-          environment == null ? row.active : row.environment === environment,
-        ) ?? null,
-      ),
-      upsert: vi.fn(
-        async (row: { accountId: string; venue: string; environment?: Env; encryptedCredentials: string }) => {
-          put(row.accountId, row.venue, row.environment ?? 'prod', row.encryptedCredentials);
-        },
-      ),
-      activate: vi.fn(async (accountId: string, venue: string, environment: Env) => {
-        const target = rows.get(`${accountId}:${venue}:${environment}`);
-        if (target == null) return false;
-        for (const row of slotsOf(accountId, venue)) row.active = row === target;
-        return true;
-      }),
-      delete: vi.fn(async (accountId: string, venue: string, environment?: Env) => {
-        for (const row of slotsOf(accountId, venue)) {
-          if (environment == null || row.environment === environment) {
-            rows.delete(`${accountId}:${venue}:${row.environment}`);
+const { credentialsStoreMock, deriveStoreMock, paradexStoreMock, thalexStoreMock } = vi.hoisted(
+  () => {
+    type Env = 'prod' | 'test';
+    interface Slot {
+      accountId: string;
+      venue: string;
+      environment: Env;
+      active: boolean;
+      encryptedCredentials: string;
+    }
+    // Keyed `${accountId}:${venue}:${environment}`.
+    const rows = new Map<string, Slot>();
+    const slotsOf = (accountId: string, venue: string) =>
+      [...rows.values()].filter((row) => row.accountId === accountId && row.venue === venue);
+    const put = (
+      accountId: string,
+      venue: string,
+      environment: Env,
+      encryptedCredentials: string,
+    ) => {
+      for (const row of slotsOf(accountId, venue)) row.active = false;
+      rows.set(`${accountId}:${venue}:${environment}`, {
+        accountId,
+        venue,
+        environment,
+        active: true,
+        encryptedCredentials,
+      });
+    };
+    const thalexState: { env: Env | null } = { env: null };
+    return {
+      credentialsStoreMock: {
+        rows,
+        put,
+        enabled: true,
+        listVenues: vi.fn(async (accountId: string) => [
+          ...new Set(
+            [...rows.values()].filter((row) => row.accountId === accountId).map((row) => row.venue),
+          ),
+        ]),
+        listSlots: vi.fn(async (accountId: string, venue: string) => slotsOf(accountId, venue)),
+        get: vi.fn(
+          async (accountId: string, venue: string, environment?: Env) =>
+            slotsOf(accountId, venue).find((row) =>
+              environment == null ? row.active : row.environment === environment,
+            ) ?? null,
+        ),
+        upsert: vi.fn(
+          async (row: {
+            accountId: string;
+            venue: string;
+            environment?: Env;
+            encryptedCredentials: string;
+          }) => {
+            put(row.accountId, row.venue, row.environment ?? 'prod', row.encryptedCredentials);
+          },
+        ),
+        activate: vi.fn(async (accountId: string, venue: string, environment: Env) => {
+          const target = rows.get(`${accountId}:${venue}:${environment}`);
+          if (target == null) return false;
+          for (const row of slotsOf(accountId, venue)) row.active = row === target;
+          return true;
+        }),
+        delete: vi.fn(async (accountId: string, venue: string, environment?: Env) => {
+          for (const row of slotsOf(accountId, venue)) {
+            if (environment == null || row.environment === environment) {
+              rows.delete(`${accountId}:${venue}:${row.environment}`);
+            }
           }
-        }
-      }),
-    },
-    deriveStoreMock: {
-      connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      isConnected: vi.fn(() => false),
-    },
-    paradexStoreMock: {
-      environment: vi.fn(() => 'prod' as Env),
-      connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      isConnected: vi.fn(() => false),
-    },
-    thalexStoreMock: {
-      state: thalexState,
-      connect: vi.fn(async (creds: { env?: Env }) => {
-        thalexState.env = creds.env ?? 'prod';
-      }),
-      disconnect: vi.fn(async () => {
-        thalexState.env = null;
-      }),
-      isConnected: () => thalexState.env != null,
-      environment: () => thalexState.env,
-    },
-  };
-});
+        }),
+      },
+      deriveStoreMock: {
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        isConnected: vi.fn(() => false),
+      },
+      paradexStoreMock: {
+        environment: vi.fn(() => 'prod' as Env),
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        isConnected: vi.fn(() => false),
+      },
+      thalexStoreMock: {
+        state: thalexState,
+        connect: vi.fn(async (creds: { env?: Env }) => {
+          thalexState.env = creds.env ?? 'prod';
+        }),
+        disconnect: vi.fn(async () => {
+          thalexState.env = null;
+        }),
+        isConnected: () => thalexState.env != null,
+        environment: () => thalexState.env,
+      },
+    };
+  },
+);
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: { enabled: false },
@@ -170,7 +185,12 @@ describe('Derive wallet-connect credential routes', () => {
 
     const stored = credentialsStoreMock.rows.get('paper-default:derive:prod')!.encryptedCredentials;
     expect(stored).not.toContain(creds.signerPrivateKey.slice(2));
-    expect(getVenueCredentialCipher()!.decrypt(stored, venueCredentialContext('paper-default', 'derive'))).toMatchObject({
+    expect(
+      getVenueCredentialCipher()!.decrypt(
+        stored,
+        venueCredentialContext('paper-default', 'derive'),
+      ),
+    ).toMatchObject({
       publicSessionKey: grant.publicSessionKey,
       expirySec: grant.expirySec,
     });
@@ -202,11 +222,14 @@ describe('Derive wallet-connect credential routes', () => {
       'paper-default',
       'derive',
       'prod',
-      getVenueCredentialCipher()!.encrypt({
-        walletAddress: WALLET,
-        signerPrivateKey: '0x' + 'b'.repeat(64),
-        subaccountId: 1,
-      }, venueCredentialContext('paper-default', 'derive')),
+      getVenueCredentialCipher()!.encrypt(
+        {
+          walletAddress: WALLET,
+          signerPrivateKey: '0x' + 'b'.repeat(64),
+          subaccountId: 1,
+        },
+        venueCredentialContext('paper-default', 'derive'),
+      ),
     );
 
     const res = await app.inject({
@@ -214,7 +237,9 @@ describe('Derive wallet-connect credential routes', () => {
       url: '/portfolio/venue-credentials/reconnect',
     });
 
-    expect(res.json()).toEqual({ venues: [{ venue: 'derive', configured: false, connected: false }] });
+    expect(res.json()).toEqual({
+      venues: [{ venue: 'derive', configured: false, connected: false }],
+    });
     expect(credentialsStoreMock.rows.has('paper-default:derive:prod')).toBe(false);
     expect(deriveStoreMock.connect).not.toHaveBeenCalled();
   });
@@ -224,18 +249,23 @@ describe('Derive wallet-connect credential routes', () => {
       'paper-default',
       'derive',
       'prod',
-      getVenueCredentialCipher()!.encrypt({
-        walletAddress: WALLET,
-        sessionPrivateKey: '0x' + 'c'.repeat(64),
-        publicSessionKey: '0x' + 'd'.repeat(40),
-        subaccountId: 1,
-        expirySec: Math.floor(Date.now() / 1000) - 60,
-      }, venueCredentialContext('paper-default', 'derive')),
+      getVenueCredentialCipher()!.encrypt(
+        {
+          walletAddress: WALLET,
+          sessionPrivateKey: '0x' + 'c'.repeat(64),
+          publicSessionKey: '0x' + 'd'.repeat(40),
+          subaccountId: 1,
+          expirySec: Math.floor(Date.now() / 1000) - 60,
+        },
+        venueCredentialContext('paper-default', 'derive'),
+      ),
     );
 
     const res = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/reconnect' });
 
-    expect(res.json()).toEqual({ venues: [{ venue: 'derive', configured: true, connected: false }] });
+    expect(res.json()).toEqual({
+      venues: [{ venue: 'derive', configured: true, connected: false }],
+    });
     expect(deriveStoreMock.connect).not.toHaveBeenCalled();
   });
 });
@@ -291,10 +321,20 @@ describe('Paradex read-only key routes', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(paradexStoreMock.connect).toHaveBeenCalledWith({ accountId: 'paper-default', readonlyToken });
-    const stored = credentialsStoreMock.rows.get('paper-default:paradex:prod')!.encryptedCredentials;
+    expect(paradexStoreMock.connect).toHaveBeenCalledWith({
+      accountId: 'paper-default',
+      readonlyToken,
+    });
+    const stored = credentialsStoreMock.rows.get(
+      'paper-default:paradex:prod',
+    )!.encryptedCredentials;
     expect(stored).not.toContain(readonlyToken);
-    expect(getVenueCredentialCipher()!.decrypt(stored, venueCredentialContext('paper-default', 'paradex'))).toEqual({
+    expect(
+      getVenueCredentialCipher()!.decrypt(
+        stored,
+        venueCredentialContext('paper-default', 'paradex'),
+      ),
+    ).toEqual({
       readonlyToken,
       account: ACCOUNT,
       expiresAtMs: exp * 1000,
@@ -331,13 +371,34 @@ describe('Paradex read-only key routes', () => {
 
   it('keeps a separate encrypted testnet token and activates it without exposing either token', async () => {
     const readonlyToken = paradexToken({ sub: ACCOUNT, exp: Math.floor(Date.now() / 1000) + 3600 });
-    await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/paradex', payload: { readonlyToken } });
-    const saved = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/paradex', payload: { readonlyToken, env: 'test' } });
+    await app.inject({
+      method: 'POST',
+      url: '/portfolio/venue-credentials/paradex',
+      payload: { readonlyToken },
+    });
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/portfolio/venue-credentials/paradex',
+      payload: { readonlyToken, env: 'test' },
+    });
     expect(saved.statusCode).toBe(200);
-    expect(paradexStoreMock.connect).toHaveBeenLastCalledWith({ accountId: 'paper-default', readonlyToken, env: 'test' });
+    expect(paradexStoreMock.connect).toHaveBeenLastCalledWith({
+      accountId: 'paper-default',
+      readonlyToken,
+      env: 'test',
+    });
     const row = credentialsStoreMock.rows.get('paper-default:paradex:test')!;
-    expect(getVenueCredentialCipher()!.decrypt(row.encryptedCredentials, venueCredentialContext('paper-default', 'paradex', 'test'))).toMatchObject({ readonlyToken });
-    const switched = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/paradex/activate', payload: { environment: 'prod' } });
+    expect(
+      getVenueCredentialCipher()!.decrypt(
+        row.encryptedCredentials,
+        venueCredentialContext('paper-default', 'paradex', 'test'),
+      ),
+    ).toMatchObject({ readonlyToken });
+    const switched = await app.inject({
+      method: 'POST',
+      url: '/portfolio/venue-credentials/paradex/activate',
+      payload: { environment: 'prod' },
+    });
     expect(switched.statusCode).toBe(200);
     expect(switched.json().slots).toHaveLength(2);
     expect(switched.body).not.toContain(readonlyToken);
@@ -407,7 +468,9 @@ describe('Paradex read-only key routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/portfolio/venue-credentials/paradex',
-      payload: { readonlyToken: paradexToken({ sub: ACCOUNT, exp: Math.floor(Date.now() / 1000) + 60 }) },
+      payload: {
+        readonlyToken: paradexToken({ sub: ACCOUNT, exp: Math.floor(Date.now() / 1000) + 60 }),
+      },
     });
     expect(res.statusCode).toBe(502);
     expect(credentialsStoreMock.rows.size).toBe(0);
@@ -464,23 +527,44 @@ describe('Thalex key slots per environment', () => {
     expect(test.active).toBe(true);
     expect(prod.active).toBe(false);
     const cipher = getVenueCredentialCipher()!;
-    expect(cipher.decrypt(test.encryptedCredentials, venueCredentialContext(ACCT, 'thalex', 'test'))).toMatchObject({
+    expect(
+      cipher.decrypt(test.encryptedCredentials, venueCredentialContext(ACCT, 'thalex', 'test')),
+    ).toMatchObject({
       kid: TESTNET.kid,
       env: 'test',
     });
-    expect(() => cipher.decrypt(test.encryptedCredentials, venueCredentialContext(ACCT, 'thalex'))).toThrow();
+    expect(() =>
+      cipher.decrypt(test.encryptedCredentials, venueCredentialContext(ACCT, 'thalex')),
+    ).toThrow();
   });
 
   it('lists both environments with which one is in use, never the key itself', async () => {
     await saveMainnet();
 
-    const res = await app.inject({ method: 'GET', url: '/portfolio/venue-credentials/thalex/keys' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/portfolio/venue-credentials/thalex/keys',
+    });
 
     expect(res.json()).toEqual({
       venue: 'thalex',
       slots: [
-        { environment: 'prod', configured: true, active: true, connected: true, kidHint: '9f3c', account: null },
-        { environment: 'test', configured: false, active: false, connected: false, kidHint: null, account: null },
+        {
+          environment: 'prod',
+          configured: true,
+          active: true,
+          connected: true,
+          kidHint: '9f3c',
+          account: null,
+        },
+        {
+          environment: 'test',
+          configured: false,
+          active: false,
+          connected: false,
+          kidHint: null,
+          account: null,
+        },
       ],
     });
     expect(res.body).not.toContain('MAIN-PEM');
@@ -504,7 +588,14 @@ describe('Thalex key slots per environment', () => {
     expect(thalexStoreMock.connect).toHaveBeenLastCalledWith(
       expect.objectContaining({ kid: MAINNET.kid, env: 'prod' }),
     );
-    expect(res.json().slots.map((slot: { environment: string; active: boolean }) => [slot.environment, slot.active])).toEqual([
+    expect(
+      res
+        .json()
+        .slots.map((slot: { environment: string; active: boolean }) => [
+          slot.environment,
+          slot.active,
+        ]),
+    ).toEqual([
       ['prod', true],
       ['test', false],
     ]);
@@ -579,7 +670,9 @@ describe('Thalex key slots per environment', () => {
 
     const res = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/reconnect' });
 
-    expect(res.json()).toEqual({ venues: [{ venue: 'thalex', configured: true, connected: true }] });
+    expect(res.json()).toEqual({
+      venues: [{ venue: 'thalex', configured: true, connected: true }],
+    });
     expect(thalexStoreMock.connect).toHaveBeenCalledWith(expect.objectContaining({ env: 'test' }));
   });
 

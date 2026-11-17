@@ -9,9 +9,16 @@ import {
   type PositionStoreListener,
 } from '@oggregator/core';
 import type { EquityHistoryPoint, PortfolioAccounting } from '@oggregator/protocol';
-import { NoopExchangePortfolioLedgerStore, type ExchangePortfolioLedgerStore } from '@oggregator/db';
+import {
+  NoopExchangePortfolioLedgerStore,
+  type ExchangePortfolioLedgerStore,
+} from '@oggregator/db';
 
-import { carryEntryIvs, mergePersistedEntryIvs, VenuePositionPersistence } from './venue-position-persistence.js';
+import {
+  carryEntryIvs,
+  mergePersistedEntryIvs,
+  VenuePositionPersistence,
+} from './venue-position-persistence.js';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 import { portfolioFillPriceAt } from './portfolio-fill-prices.js';
 
@@ -30,7 +37,10 @@ export class ParadexPositionStore implements PositionStore {
   private readonly historyReads = new Map<string, Promise<void>>();
   private readonly historyFrom = new Map<string, number>();
   private readonly persistence: VenuePositionPersistence;
-  private readonly testnetPersistence = new VenuePositionPersistence('paradex', new NoopExchangePortfolioLedgerStore());
+  private readonly testnetPersistence = new VenuePositionPersistence(
+    'paradex',
+    new NoopExchangePortfolioLedgerStore(),
+  );
   private readonly environments = new Map<string, 'prod' | 'test'>();
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, ParadexPrivateClient>();
@@ -53,7 +63,7 @@ export class ParadexPositionStore implements PositionStore {
   }
 
   environment(accountId: string): 'prod' | 'test' | null {
-    return this.clients.has(accountId) ? this.environments.get(accountId) ?? 'prod' : null;
+    return this.clients.has(accountId) ? (this.environments.get(accountId) ?? 'prod') : null;
   }
 
   private persistenceFor(accountId: string): VenuePositionPersistence {
@@ -65,7 +75,11 @@ export class ParadexPositionStore implements PositionStore {
   }
 
   getAccounting(accountId: string, underlying?: string): PortfolioAccounting {
-    return this.persistenceFor(accountId).getAccounting(this.ledgerAccountId(accountId), this.list(accountId), underlying);
+    return this.persistenceFor(accountId).getAccounting(
+      this.ledgerAccountId(accountId),
+      this.list(accountId),
+      underlying,
+    );
   }
 
   list(accountId: string): PositionLeg[] {
@@ -110,9 +124,11 @@ export class ParadexPositionStore implements PositionStore {
   private serialize(accountId: string, work: () => Promise<void>): Promise<void> {
     const next = (this.lifecycle.get(accountId) ?? Promise.resolve()).catch(() => {}).then(work);
     this.lifecycle.set(accountId, next);
-    void next.finally(() => {
-      if (this.lifecycle.get(accountId) === next) this.lifecycle.delete(accountId);
-    }).catch(() => {});
+    void next
+      .finally(() => {
+        if (this.lifecycle.get(accountId) === next) this.lifecycle.delete(accountId);
+      })
+      .catch(() => {});
     return next;
   }
 
@@ -120,7 +136,12 @@ export class ParadexPositionStore implements PositionStore {
     await this.disconnectClient(creds.accountId);
     const subject = decodeParadexJwtClaims(creds.readonlyToken)?.sub;
     const environment = creds.env ?? 'prod';
-    const address = subject == null ? 'unknown' : /^0x[0-9a-f]+$/i.test(subject) ? BigInt(subject).toString(16) : subject;
+    const address =
+      subject == null
+        ? 'unknown'
+        : /^0x[0-9a-f]+$/i.test(subject)
+          ? BigInt(subject).toString(16)
+          : subject;
     const identity = `${creds.accountId}:paradex:${environment}:${address}`;
     if (identity !== this.ledgerAccountId(creds.accountId)) {
       this.cache.delete(creds.accountId);
@@ -130,7 +151,10 @@ export class ParadexPositionStore implements PositionStore {
     this.ledgerAccounts.set(creds.accountId, identity);
     this.environments.set(creds.accountId, environment);
     await this.hydrate(creds.accountId);
-    const client = this.createClient({ readonlyToken: creds.readonlyToken, ...(creds.env != null ? { env: creds.env } : {}) });
+    const client = this.createClient({
+      readonlyToken: creds.readonlyToken,
+      ...(creds.env != null ? { env: creds.env } : {}),
+    });
     const unsubscribe = client.subscribe((incoming, linear = []) => {
       if (this.clients.get(creds.accountId) !== client) return;
       this.positionSnapshots.add(client);
@@ -166,18 +190,28 @@ export class ParadexPositionStore implements PositionStore {
 
   private async hydrate(accountId: string): Promise<void> {
     try {
-      const persisted = await this.persistenceFor(accountId).hydrate(this.ledgerAccountId(accountId));
+      const persisted = await this.persistenceFor(accountId).hydrate(
+        this.ledgerAccountId(accountId),
+      );
       const current = this.list(accountId);
-      this.applyLegs(accountId, current.length === 0 ? persisted : mergePersistedEntryIvs(current, persisted));
+      this.applyLegs(
+        accountId,
+        current.length === 0 ? persisted : mergePersistedEntryIvs(current, persisted),
+      );
     } catch (error) {
       logger.warn({ err: String(error), venue: 'paradex' }, 'portfolio snapshot hydration failed');
     }
   }
 
   private persistCurrent(accountId: string): void {
-    void this.persistenceFor(accountId).persistPositions(this.ledgerAccountId(accountId), this.list(accountId)).catch((error) => {
-      logger.warn({ err: String(error), venue: 'paradex' }, 'portfolio snapshot persistence failed');
-    });
+    void this.persistenceFor(accountId)
+      .persistPositions(this.ledgerAccountId(accountId), this.list(accountId))
+      .catch((error) => {
+        logger.warn(
+          { err: String(error), venue: 'paradex' },
+          'portfolio snapshot persistence failed',
+        );
+      });
   }
 
   private refreshHistory(accountId: string, client: ParadexPrivateClient): Promise<void> {
@@ -194,23 +228,36 @@ export class ParadexPositionStore implements PositionStore {
       await this.persistence.persistTrades(identity, trades);
       if (!isCurrent()) return;
       this.historyFrom.set(identity, startedAt - 5 * 60_000);
-      const anchors = await this.persistence.resolveFillEntryAnchors(identity, this.list(accountId));
+      const anchors = await this.persistence.resolveFillEntryAnchors(
+        identity,
+        this.list(accountId),
+      );
       if (!isCurrent()) return;
       const legs = this.cache.get(accountId);
       for (const [legId, anchor] of anchors) {
         const leg = legs?.get(legId);
-        if (leg != null) legs!.set(legId, {
-          ...leg, entryIv: anchor.iv, entryIvSource: 'fill',
-          entryUnderlyingUsd: anchor.underlyingUsd, entryTs: anchor.timestampMs,
-        });
+        if (leg != null)
+          legs!.set(legId, {
+            ...leg,
+            entryIv: anchor.iv,
+            entryIvSource: 'fill',
+            entryUnderlyingUsd: anchor.underlyingUsd,
+            entryTs: anchor.timestampMs,
+          });
       }
       this.persistCurrent(accountId);
       this.broadcast(accountId, [...anchors.keys()]);
-    })().catch((error) => {
-      if (isCurrent()) logger.warn({ err: String(error), venue: 'paradex' }, 'portfolio fill history refresh failed');
-    }).finally(() => {
-      if (this.historyReads.get(accountId) === work) this.historyReads.delete(accountId);
-    });
+    })()
+      .catch((error) => {
+        if (isCurrent())
+          logger.warn(
+            { err: String(error), venue: 'paradex' },
+            'portfolio fill history refresh failed',
+          );
+      })
+      .finally(() => {
+        if (this.historyReads.get(accountId) === work) this.historyReads.delete(accountId);
+      });
     this.historyReads.set(accountId, work);
     return work;
   }

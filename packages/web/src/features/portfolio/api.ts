@@ -227,7 +227,11 @@ export function fetchParadexKeySlots() {
 }
 
 export function activateParadexEnvironment(environment: VenueEnvironment) {
-  return postJson('/portfolio/venue-credentials/paradex/activate', { environment }, ParadexKeySlotsSchema);
+  return postJson(
+    '/portfolio/venue-credentials/paradex/activate',
+    { environment },
+    ParadexKeySlotsSchema,
+  );
 }
 
 const LiveStatusResponseSchema: z.ZodType<LiveStatus> = z.object({

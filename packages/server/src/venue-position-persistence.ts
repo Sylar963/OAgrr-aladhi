@@ -4,10 +4,7 @@ import {
   type EntryFill,
   type PositionLeg,
 } from '@oggregator/core';
-import type {
-  ExchangePortfolioTrade,
-  PortfolioAccounting,
-} from '@oggregator/protocol';
+import type { ExchangePortfolioTrade, PortfolioAccounting } from '@oggregator/protocol';
 import type {
   ExchangePortfolioLedgerStore,
   ExchangePortfolioVenue,
@@ -163,8 +160,11 @@ export class VenuePositionPersistence {
           amount: trade.amount,
           priceUsd: trade.priceUsd,
           timestampMs: trade.timestampMs,
-          underlyingPriceUsd: trade.underlyingPriceUsd ??
-            (priceAt == null ? null : await priceAt(trade.underlying, trade.timestampMs).catch(() => null)),
+          underlyingPriceUsd:
+            trade.underlyingPriceUsd ??
+            (priceAt == null
+              ? null
+              : await priceAt(trade.underlying, trade.timestampMs).catch(() => null)),
         })),
       );
       const anchor = entryAnchorFromFills(leg, fills);
@@ -225,12 +225,7 @@ export class VenuePositionPersistence {
 
   async persistTrades(accountId: string, trades: ExchangePortfolioTrade[]): Promise<void> {
     if (!this.ledger.enabled) return;
-    await this.ledger.upsertTrades(
-      accountId,
-      this.venue,
-      trades.map(toPersistedTrade),
-      new Date(),
-    );
+    await this.ledger.upsertTrades(accountId, this.venue, trades.map(toPersistedTrade), new Date());
     const underlyings = [...new Set(trades.map((trade) => trade.underlying))];
     await Promise.all([
       this.refreshSummary(accountId),

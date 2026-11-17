@@ -51,10 +51,20 @@ describe('ParadexPrivateClient', () => {
   });
 
   it('reads all option-fill pages and deduplicates overlapping fill IDs', async () => {
-    const fill = { id: 'f1', market: option.market, side: 'BUY', size: '1', price: '10', created_at: 10 };
-    const fetchImpl = vi.fn()
+    const fill = {
+      id: 'f1',
+      market: option.market,
+      side: 'BUY',
+      size: '1',
+      price: '10',
+      created_at: 10,
+    };
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(jsonResponse(200, { results: [fill], next: 'a+=/b' }))
-      .mockResolvedValueOnce(jsonResponse(200, { results: [fill, { ...fill, id: 'f2' }], next: null }));
+      .mockResolvedValueOnce(
+        jsonResponse(200, { results: [fill, { ...fill, id: 'f2' }], next: null }),
+      );
     const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
     expect(await client.fetchOptionTrades(5)).toHaveLength(2);
     const url = new URL(fetchImpl.mock.calls[1]![0]);
@@ -65,8 +75,14 @@ describe('ParadexPrivateClient', () => {
   });
 
   it('rejects a looping fill cursor instead of reporting partial accounting', async () => {
-    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, vi.fn().mockImplementation(() =>
-      Promise.resolve(jsonResponse(200, { results: [], next: 'same' }))));
+    const client = new ParadexPrivateClient(
+      { readonlyToken: 'tok' },
+      vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(jsonResponse(200, { results: [], next: 'same' })),
+        ),
+    );
     await expect(client.fetchOptionTrades(0)).rejects.toThrow('repeated a cursor');
     await client.dispose();
   });
@@ -90,9 +106,12 @@ describe('ParadexPrivateClient', () => {
   });
 
   it('reads venue cumulative P&L separately from equity and preserves losses', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, {
-      data: [0, -18.72], timestamps: [1_790_000_000_000, 1_791_000_000_000],
-    }));
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        data: [0, -18.72],
+        timestamps: [1_790_000_000_000, 1_791_000_000_000],
+      }),
+    );
     const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
     expect(await client.fetchPnlHistory(1_790_500_000_000)).toEqual([
       { ts: 1_791_000_000_000, pnlUsd: -18.72 },

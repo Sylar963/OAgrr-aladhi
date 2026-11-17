@@ -17,23 +17,36 @@ const log = feedLogger('exit-books');
 
 export type ExitBookRuntime = Pick<OrderBookRuntime, 'acquire' | 'getBook' | 'isRejected'>;
 
-/**
- * Close-now books for legs held on Thalex. Leases exactly the instruments `sync` was last
- * given, so the shared order-book runtime only streams what is held; released books linger
- * there before unsubscribing, which absorbs a leg briefly dropping out of the list.
- */
 export class VenueExitBooks implements ExitBookSource {
   private readonly leases = new Map<string, OrderBookLease>();
   private readonly failed = new Map<string, CloseNowUnavailableReason>();
   private activeRuntime: ExitBookRuntime | null = null;
+  private activeScope = '';
+  private scopeRevision = 0;
+  private keyRuntime: ExitBookRuntime | null = null;
 
-  constructor(private readonly runtime: ExitBookRuntime | (() => ExitBookRuntime), private readonly venue: 'thalex' | 'paradex') {}
+  constructor(
+    private readonly runtime: ExitBookRuntime | (() => ExitBookRuntime),
+    private readonly venue: 'thalex' | 'paradex',
+    private readonly scope: () => string = () => '',
+  ) {}
+
+  scopeKey(): string {
+    const runtime = typeof this.runtime === 'function' ? this.runtime() : this.runtime;
+    if (runtime !== this.keyRuntime) {
+      this.keyRuntime = runtime;
+      this.scopeRevision++;
+    }
+    return `${this.scopeRevision}:${this.scope()}`;
+  }
 
   sync(legs: readonly PositionLeg[]): void {
     const runtime = typeof this.runtime === 'function' ? this.runtime() : this.runtime;
-    if (this.activeRuntime !== runtime) {
+    const scope = this.scope();
+    if (this.activeRuntime !== runtime || this.activeScope !== scope) {
       this.dispose();
       this.activeRuntime = runtime;
+      this.activeScope = scope;
     }
     const wanted = new Set<string>();
     for (const leg of legs) {
@@ -52,7 +65,8 @@ export class VenueExitBooks implements ExitBookSource {
         this.leases.set(instrument, runtime.acquire(instrument));
       } catch (err) {
         const reason = err instanceof OrderBookCapacityError ? 'capacity' : 'loading';
-        if (reason === 'loading') log.warn({ err: String(err), instrument }, 'exit book acquire failed');
+        if (reason === 'loading')
+          log.warn({ err: String(err), instrument }, 'exit book acquire failed');
         this.failed.set(instrument, reason);
       }
     }
@@ -66,7 +80,10 @@ export class VenueExitBooks implements ExitBookSource {
     // A book that arrives after a refused subscribe wins: the rejected flag is not cleared on recovery.
     const book = this.activeRuntime?.getBook(instrument);
     if (book != null) return { kind: 'book', book };
-    return { kind: 'unavailable', reason: this.activeRuntime?.isRejected(instrument) ? 'rejected' : 'loading' };
+    return {
+      kind: 'unavailable',
+      reason: this.activeRuntime?.isRejected(instrument) ? 'rejected' : 'loading',
+    };
   }
 
   dispose(): void {
@@ -83,9 +100,13 @@ export class VenueExitBooks implements ExitBookSource {
 }
 
 export class ThalexExitBooks extends VenueExitBooks {
-  constructor(runtime: ExitBookRuntime) { super(runtime, 'thalex'); }
+  constructor(runtime: ExitBookRuntime) {
+    super(runtime, 'thalex');
+  }
 }
 
 export class ParadexExitBooks extends VenueExitBooks {
-  constructor(runtime: ExitBookRuntime | (() => ExitBookRuntime)) { super(runtime, 'paradex'); }
+  constructor(runtime: ExitBookRuntime | (() => ExitBookRuntime), scope: () => string = () => '') {
+    super(runtime, 'paradex', scope);
+  }
 }

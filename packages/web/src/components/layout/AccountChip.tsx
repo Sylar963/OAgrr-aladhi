@@ -71,7 +71,8 @@ const messages = defineMessages(
     pasteParadex: 'Or manage mainnet and testnet read-only keys:',
   },
   {
-    usernamesOff: 'Los nombres de usuario están desactivados en Clerk; actívalos en el panel de Clerk',
+    usernamesOff:
+      'Los nombres de usuario están desactivados en Clerk; actívalos en el panel de Clerk',
     saveUsernameFailed: 'No se pudo guardar el nombre de usuario',
     adapterUnavailable: 'El adaptador privado de {venue} no está disponible',
     missing: 'Falta: {fields}',
@@ -464,9 +465,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                 <div className={styles.section}>
                   <div className={styles.label}>{t('venueConnections')}</div>
                   {configuredVenues.length === 0 ? (
-                    <div className={styles.hint}>
-                      {t('noVenues')}
-                    </div>
+                    <div className={styles.hint}>{t('noVenues')}</div>
                   ) : (
                     <div className={styles.venueChipsRow}>
                       {configuredVenues.map((venue) => (
@@ -477,14 +476,18 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                             className={styles.venueChipStatus}
                             data-status={PRIVATE_ADAPTER_SPECS[venue].status}
                           >
-                            {PRIVATE_ADAPTER_SPECS[venue].status === 'available' ? t('live') : 'TODO'}
+                            {PRIVATE_ADAPTER_SPECS[venue].status === 'available'
+                              ? t('live')
+                              : 'TODO'}
                           </span>
                           <button
                             type="button"
                             className={styles.venueChipRemove}
                             onClick={() => onRemoveVenue(venue)}
                             aria-label={
-                              venue === 'thalex' ? t('manageThalexAria') : t('removeVenueAria', { venue })
+                              venue === 'thalex'
+                                ? t('manageThalexAria')
+                                : t('removeVenueAria', { venue })
                             }
                             title={venue === 'thalex' ? t('manageThalex') : undefined}
                           >
@@ -507,9 +510,14 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   </button>
                   {hasUnsupportedConfigured && (
                     <div className={styles.warning}>
-                      {t(unsupportedVenueLabels.length === 1 ? 'unsupported_one' : 'unsupported_other', {
-                        venues: unsupportedVenueLabels.join(', '),
-                      })}
+                      {t(
+                        unsupportedVenueLabels.length === 1
+                          ? 'unsupported_one'
+                          : 'unsupported_other',
+                        {
+                          venues: unsupportedVenueLabels.join(', '),
+                        },
+                      )}
                     </div>
                   )}
                 </div>
@@ -589,11 +597,14 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   }}
                   onError={setError}
                 >
-                  <ParadexKeyManager onChanged={(configured) => {
-                    if (configured) markVenueConfigured('paradex');
-                    else markVenueUnconfigured('paradex');
-                    refresh();
-                  }} onError={setError} />
+                  <ParadexKeyManager
+                    onChanged={(configured) => {
+                      if (configured) markVenueConfigured('paradex');
+                      else markVenueUnconfigured('paradex');
+                      refresh();
+                    }}
+                    onError={setError}
+                  />
                 </ParadexWalletConnect>
               ) : pasteTarget === 'thalex' ? (
                 <ThalexKeyManager
@@ -735,9 +746,7 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
 
   return (
     <>
-      <div className={styles.hint}>
-        {t('deriveHint')}
-      </div>
+      <div className={styles.hint}>{t('deriveHint')}</div>
       {step.kind === 'idle' && (
         <button type="button" className={styles.primaryBtn} onClick={() => void start()}>
           {t('connectWallet')}
@@ -798,9 +807,7 @@ function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletC
 
   return (
     <>
-      <div className={styles.hint}>
-        {t('paradexHint')}
-      </div>
+      <div className={styles.hint}>{t('paradexHint')}</div>
       <button
         type="button"
         className={styles.primaryBtn}

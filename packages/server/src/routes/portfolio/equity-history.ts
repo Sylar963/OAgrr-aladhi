@@ -68,8 +68,12 @@ async function loadHistory(
   accountId: string,
   nowMs: number,
 ): Promise<CachedHistory | null> {
-  const scope = venue === 'paradex' ? paradexPositionStore.ledgerAccountId(accountId) :
-    venue === 'thalex' ? `${accountId}:${thalexPositionStore.environment(accountId) ?? 'prod'}` : accountId;
+  const scope =
+    venue === 'paradex'
+      ? paradexPositionStore.ledgerAccountId(accountId)
+      : venue === 'thalex'
+        ? `${accountId}:${thalexPositionStore.environment(accountId) ?? 'prod'}`
+        : accountId;
   const key = `${scope}|${venue}`;
   const cached = cache.get(key);
   if (cached != null && nowMs - cached.fetchedAt < CACHE_TTL_MS) return cached;

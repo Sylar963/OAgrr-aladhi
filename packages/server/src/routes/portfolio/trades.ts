@@ -2,10 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
-import {
-  ExchangePortfolioVenueSchema,
-  type ExchangeTradesResponse,
-} from '@oggregator/protocol';
+import { ExchangePortfolioVenueSchema, type ExchangeTradesResponse } from '@oggregator/protocol';
 
 import { ledgerMatchesSession } from '../../thalex-position-store.js';
 import { paradexPositionStore } from '../../paradex-position-store.js';
@@ -15,7 +12,10 @@ import { getRequestAccountId } from '../../user-service.js';
 const ExchangeTradesQuerySchema = z.object({
   venue: z.string(),
   underlying: z.string().trim().min(1).optional(),
-  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expiry: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   strike: z.coerce.number().positive().optional(),
   right: z.enum(['call', 'put']).optional(),
 });
@@ -36,14 +36,22 @@ export async function portfolioTradesRoute(app: FastifyInstance) {
     const { underlying, expiry, strike, right } = parsed.data;
     const accountId = getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 
-    if (!exchangePortfolioLedgerStore.enabled || !ledgerMatchesSession(accountId, venue) ||
-      (venue === 'paradex' && paradexPositionStore.environment(accountId) === 'test')) {
+    if (
+      !exchangePortfolioLedgerStore.enabled ||
+      !ledgerMatchesSession(accountId, venue) ||
+      (venue === 'paradex' && paradexPositionStore.environment(accountId) === 'test')
+    ) {
       const empty: ExchangeTradesResponse = { accountId, venue, ledgerEnabled: false, trades: [] };
       return empty;
     }
 
-    const ledgerAccountId = venue === 'paradex' ? paradexPositionStore.ledgerAccountId(accountId) : accountId;
-    const rows = await exchangePortfolioLedgerStore.loadTrades(ledgerAccountId, venue, LEDGER_LOAD_LIMIT);
+    const ledgerAccountId =
+      venue === 'paradex' ? paradexPositionStore.ledgerAccountId(accountId) : accountId;
+    const rows = await exchangePortfolioLedgerStore.loadTrades(
+      ledgerAccountId,
+      venue,
+      LEDGER_LOAD_LIMIT,
+    );
     const trades = rows
       .filter(
         (row) =>

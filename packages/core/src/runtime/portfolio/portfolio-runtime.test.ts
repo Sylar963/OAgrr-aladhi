@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryPositionStore } from '../../portfolio/in-memory-store.js';
 import type { ExitBookLookup } from '../../portfolio/close-now.js';
 import type { MarkContext, MarkProvider } from '../../portfolio/types.js';
-import {
-  PortfolioRuntime,
-  type PortfolioRuntimeEvent,
-} from './portfolio-runtime.js';
+import { PortfolioRuntime, type PortfolioRuntimeEvent } from './portfolio-runtime.js';
 import { price76, vega76 } from '../../feeds/thalex/bs-solver.js';
 import type { PositionLeg } from '@oggregator/protocol';
 
@@ -327,16 +324,28 @@ describe('PortfolioRuntime close-now', () => {
     books.lookup.mockImplementation(() => ({
       kind: 'book',
       book: {
-        venue: 'thalex', instrument: 'BTC-12AUG26-70000-C',
-        priceUnit: 'usd', quantityUnit: 'base',
+        venue: 'thalex',
+        instrument: 'BTC-12AUG26-70000-C',
+        priceUnit: 'usd',
+        quantityUnit: 'base',
         bids: [{ price: bid, amount: 2, outrightAmount: 2 }],
         asks: [{ price: 1_500, amount: 2, outrightAmount: 2 }],
-        totalBidAmount: 2, totalAskAmount: 2,
-        exchangeTs: Date.now(), receivedAt: Date.now(), generation: 1,
-        state: 'synced', crossed: false, mark: null,
+        totalBidAmount: 2,
+        totalAskAmount: 2,
+        exchangeTs: Date.now(),
+        receivedAt: Date.now(),
+        generation: 1,
+        state: 'synced',
+        crossed: false,
+        mark: null,
       },
     }));
-    const runtime = new PortfolioRuntime({ accountId: ACCOUNT, store, markProvider, exitBooks: books });
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      exitBooks: books,
+    });
     try {
       const events: PortfolioRuntimeEvent[] = [];
       runtime.subscribe({ onEvent: (event) => events.push(event) });
@@ -352,7 +361,10 @@ describe('PortfolioRuntime close-now', () => {
       if (initial?.type !== 'snapshot' || next?.type !== 'delta') return;
       expect(next.metrics.closeNow?.computedAt).toBe(NOW + 1_000);
       expect(next.metrics.closeNow?.legs[0]?.exitVwapUsd).toBe(1_400);
-      expect(next.metrics.closeNow!.portfolio.closeNowPnlUsd! - initial.metrics.closeNow!.portfolio.closeNowPnlUsd!).toBeCloseTo(200);
+      expect(
+        next.metrics.closeNow!.portfolio.closeNowPnlUsd! -
+          initial.metrics.closeNow!.portfolio.closeNowPnlUsd!,
+      ).toBeCloseTo(200);
       expect(next.metrics.totals).toEqual(initial.metrics.totals);
       expect(books.lookup).toHaveBeenCalledTimes(2);
     } finally {
@@ -364,8 +376,60 @@ describe('PortfolioRuntime close-now', () => {
   it('leaves closeNow null without an exit-book source', () => {
     const store = new InMemoryPositionStore();
     store.upsert(ACCOUNT, makeLeg(70_000, 1));
-    const runtime = new PortfolioRuntime({ accountId: ACCOUNT, store, markProvider, now: () => NOW });
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => NOW,
+    });
     expect(runtime.computeMetricsAt(0).metrics.closeNow).toBeNull();
+  });
+
+  it('clears close estimates and peaks immediately when the venue account or network changes', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70000, 1));
+    let scope = 'prod:alice';
+    const books = { ...exitBooks(), scopeKey: () => scope };
+    books.lookup.mockReturnValue({
+      kind: 'book',
+      book: {
+        venue: 'thalex',
+        instrument: 'BTC-12AUG26-70000-C',
+        priceUnit: 'usd',
+        quantityUnit: 'base',
+        bids: [{ price: 1200, amount: 1, outrightAmount: 1 }],
+        asks: [],
+        totalBidAmount: 1,
+        totalAskAmount: 0,
+        exchangeTs: NOW,
+        receivedAt: NOW,
+        generation: 1,
+        state: 'synced',
+        crossed: false,
+        mark: null,
+      },
+    });
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => NOW,
+      exitBooks: books,
+    });
+    try {
+      expect(runtime.computeMetricsAt(0).metrics.closeNow?.legs[0]?.closeNowPnlUsd).not.toBeNull();
+      scope = 'test:alice';
+      books.lookup.mockReturnValue({ kind: 'unavailable', reason: 'loading' });
+      const switched = runtime.computeMetricsAt(0).metrics.closeNow?.legs[0];
+      expect(switched).toMatchObject({
+        status: 'book_unavailable',
+        closeNowPnlUsd: null,
+        peak: null,
+        stale: false,
+      });
+    } finally {
+      runtime.dispose();
+    }
   });
 
   it('recomputes close-now at most once per interval, unless the legs change', () => {

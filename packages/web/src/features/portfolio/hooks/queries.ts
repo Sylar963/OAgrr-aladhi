@@ -147,7 +147,8 @@ export function useParadexKeySlots(enabled = true) {
     queryKey: ['account', session.accountId ?? 'unresolved', 'portfolio', 'paradex-keys'],
     queryFn: fetchParadexKeySlots,
     enabled: session.status === 'ready' && enabled,
-    staleTime: 30_000, retry: false,
+    staleTime: 30_000,
+    retry: false,
   });
 }
 

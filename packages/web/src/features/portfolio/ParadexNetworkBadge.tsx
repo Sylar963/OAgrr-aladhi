@@ -12,7 +12,10 @@ export default function ParadexNetworkBadge() {
   const { data } = useParadexKeySlots();
   const active = data?.slots.find((slot) => slot.active);
   if (active == null) return null;
-  return <span className={styles.badge} data-network={active.environment}>
-    {t(active.environment)}{!active.connected && <span className={styles.offline}>{t('offline')}</span>}
-  </span>;
+  return (
+    <span className={styles.badge} data-network={active.environment}>
+      {t(active.environment)}
+      {!active.connected && <span className={styles.offline}>{t('offline')}</span>}
+    </span>
+  );
 }

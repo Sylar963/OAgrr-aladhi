@@ -23,9 +23,13 @@ export async function portfolioVenueMarginRoute(app: FastifyInstance) {
           return reply.status(503).send({ error: 'margin_unavailable' });
         }
         const response: VenueMarginResponse = {
-          accountId, venue: 'paradex', initialMarginUsd: account.initialMarginUsd,
-          marginUsd: account.equityUsd, remainingMarginUsd: account.freeCollateralUsd,
-          maintenanceMarginUsd: account.maintenanceMarginUsd, updatedAt: account.fetchedAt,
+          accountId,
+          venue: 'paradex',
+          initialMarginUsd: account.initialMarginUsd,
+          marginUsd: account.equityUsd,
+          remainingMarginUsd: account.freeCollateralUsd,
+          maintenanceMarginUsd: account.maintenanceMarginUsd,
+          updatedAt: account.fetchedAt,
         };
         return response;
       } catch (error) {

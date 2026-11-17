@@ -310,7 +310,7 @@ function isLedgerVenue(source: PortfolioSource): source is ExchangePortfolioVenu
 }
 
 const TRADE_TOTALS_SCOPE =
-  'Sums over the fills listed in trades only (newest first), not lifetime figures; lifetime totals are in accountingFacts. Null fees and null realized PnL are excluded from the sums and counted separately.';
+  'Sums over the fills listed in trades only (newest first), not lifetime figures; accountingFacts totals cover the recorded history, which may be incomplete. Null fees and null realized PnL are excluded from the sums and counted separately.';
 const RECENT_FEE_WINDOWS = [5, 10, 20];
 const TRADE_TOTALS_INSTRUMENT_LIMIT = 10;
 
@@ -940,8 +940,12 @@ export class PortfolioAssistantContextBuilder {
       accountId: string,
       source: PortfolioSource,
     ) => 'mainnet' | 'testnet' | null = () => null,
-    private readonly ledgerAccountId: (accountId: string, source: PortfolioSource) => string = (accountId) => accountId,
-    private readonly paradexAccount: ((accountId: string) => Promise<ParadexAccountSummary | null>) | null = null,
+    private readonly ledgerAccountId: (accountId: string, source: PortfolioSource) => string = (
+      accountId,
+    ) => accountId,
+    private readonly paradexAccount:
+      | ((accountId: string) => Promise<ParadexAccountSummary | null>)
+      | null = null,
   ) {}
 
   private async buildAccountEquity(
@@ -952,17 +956,30 @@ export class PortfolioAssistantContextBuilder {
       try {
         const account = await this.paradexAccount(input.accountId);
         if (account == null) return null;
-        limitations.push('Paradex account facts cover all assets. Cash movements, funding history and hypothetical-order margin are not included in this account snapshot.');
+        limitations.push(
+          'Paradex account facts cover all assets. Cash movements, funding history and hypothetical-order margin are not included in this account snapshot.',
+        );
         return {
-          venue: 'paradex', venueAccount: account.venueAccount,
-          network: account.environment === 'test' ? 'testnet' : 'mainnet', asOf: new Date(account.fetchedAt).toISOString(),
-          basis: 'Venue-reported account_value includes unrealized P&L. Total collateral is separate from the cash ledger; no P&L decomposition is inferred. Settlement asset is displayed at 1:1 USD.',
-          equityUsd: account.equityUsd, totalCollateralUsd: account.totalCollateralUsd ?? null,
-          cashUsd: null, unrealisedPnlUsd: null,
-          sessionRealisedPnlUsd: null, marginUsd: account.equityUsd,
-          requiredMarginUsd: account.initialMarginUsd, remainingMarginUsd: account.freeCollateralUsd,
-          maintenanceMarginUsd: account.maintenanceMarginUsd, cash: [], dailyEquity: [],
-          transactions: [], transactionsTruncated: false, windowDays: 0,
+          venue: 'paradex',
+          venueAccount: account.venueAccount,
+          network: account.environment === 'test' ? 'testnet' : 'mainnet',
+          asOf: new Date(account.fetchedAt).toISOString(),
+          basis:
+            'Venue-reported account_value includes unrealized P&L. Total collateral is separate from the cash ledger; no P&L decomposition is inferred. Settlement asset is displayed at 1:1 USD.',
+          equityUsd: account.equityUsd,
+          totalCollateralUsd: account.totalCollateralUsd ?? null,
+          cashUsd: null,
+          unrealisedPnlUsd: null,
+          sessionRealisedPnlUsd: null,
+          marginUsd: account.equityUsd,
+          requiredMarginUsd: account.initialMarginUsd,
+          remainingMarginUsd: account.freeCollateralUsd,
+          maintenanceMarginUsd: account.maintenanceMarginUsd,
+          cash: [],
+          dailyEquity: [],
+          transactions: [],
+          transactionsTruncated: false,
+          windowDays: 0,
         };
       } catch {
         limitations.push('Paradex account equity and margin could not be read.');
@@ -1109,6 +1126,11 @@ export class PortfolioAssistantContextBuilder {
         input.source,
         TRADE_LOAD_LIMIT,
       );
+      if (input.source === 'paradex') {
+        limitations.push(
+          'Paradex option fills are initially imported from the last 90 days and updated incrementally. Recorded history may not cover account inception; perpetual fills and funding are excluded from option accounting.',
+        );
+      }
       const facts = buildTradeHistoryFacts(
         input.source,
         trades,
@@ -1117,7 +1139,7 @@ export class PortfolioAssistantContextBuilder {
       );
       if (facts.truncated) {
         limitations.push(
-          `tradeHistoryFacts lists the ${TRADE_CONTEXT_LIMIT} most recent trades; use accountingFacts for lifetime totals.`,
+          `tradeHistoryFacts lists the ${TRADE_CONTEXT_LIMIT} most recent trades; accountingFacts totals cover recorded history, not guaranteed lifetime coverage.`,
         );
       }
       return facts;

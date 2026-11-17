@@ -375,6 +375,50 @@ describe('PortfolioAssistantContextBuilder', () => {
     ]);
   });
 
+  it('attaches Paradex account margin without inventing a cash ledger or Thalex settlement rules', async () => {
+    const builder = new PortfolioAssistantContextBuilder(
+      readPortfolioAssistantConfiguration({}),
+      null,
+      null,
+      () => NOW,
+      new PortfolioRefStore({ now: () => NOW }),
+      () => true,
+      null,
+      () => 'testnet',
+      (accountId) => accountId,
+      async () => ({
+        equityUsd: 1000,
+        freeCollateralUsd: 600,
+        initialMarginUsd: 400,
+        maintenanceMarginUsd: 180,
+        settlementAsset: 'USDC',
+        updatedAt: NOW,
+        fetchedAt: NOW,
+        totalCollateralUsd: 900,
+        venueAccount: '0xabc',
+        environment: 'test',
+      }),
+    );
+    const context = await builder.buildPortfolioAssistantContext({
+      accountId: ACCOUNT,
+      source: 'paradex',
+      underlying: 'BTC',
+      forwardDays: 0,
+    });
+    expect(context.accountEquityFacts).toMatchObject({
+      venue: 'paradex',
+      network: 'testnet',
+      venueAccount: '0xabc',
+      equityUsd: 1000,
+      totalCollateralUsd: 900,
+      requiredMarginUsd: 400,
+      maintenanceMarginUsd: 180,
+      cashUsd: null,
+      transactions: [],
+    });
+    expect(context.limitations.join(' ')).toContain('hypothetical-order margin');
+  });
+
   it('skips market, ledger and horizon work for a narrow exposure question', async () => {
     const runtime = diagonalRuntime();
     vi.mocked(services.getOrCreatePortfolioRuntime).mockReturnValue(runtime);

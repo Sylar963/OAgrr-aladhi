@@ -11,7 +11,10 @@ const market = {
   base_currency: 'BTC',
   quote_currency: 'USD',
   asset_kind: 'OPTION',
-  fee_config: { api_fee: { taker_fee: { fee: '0.0001', fee_cap: '0.125' } } },
+  fee_config: {
+    api_fee: { taker_fee: { fee: '0.0001', fee_cap: '0.125' } },
+    interactive_fee: { taker_fee: { fee: '0', fee_cap: '0.125' } },
+  },
 };
 const depth = {
   market: symbol,
@@ -59,10 +62,50 @@ describe('Paradex observed API depth', () => {
     await Promise.all(runtimes.splice(0).map((r) => r.dispose()));
   });
   const create = (fetchImpl: typeof fetch, maxInstruments = 40) => {
-    const runtime = new ParadexBookRuntime({ fetchImpl, now: () => 1000, maxInstruments });
+    const runtime = new ParadexBookRuntime({
+      fetchImpl,
+      now: () => 1000,
+      maxInstruments,
+      access: 'api',
+    });
     runtimes.push(runtime);
     return runtime;
   };
+
+  it('uses interactive liquidity and its own fee schedule by default without substituting API liquidity', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation((url: string) =>
+        Promise.resolve(
+          response(
+            url.endsWith('/markets')
+              ? { results: [market] }
+              : url.includes('/interactive?')
+                ? depth
+                : { ...depth, bids: [], asks: [] },
+          ),
+        ),
+      );
+    const runtime = new ParadexBookRuntime({ fetchImpl, now: () => 1000 });
+    runtimes.push(runtime);
+    runtime.acquire(symbol);
+    await runtime.refresh();
+    const result = new CloseNowTracker().compute(
+      [{ leg, mark }],
+      [],
+      () => ({ kind: 'book', book: runtime.getBook(symbol)! }),
+      1000,
+    );
+    expect(result.legs[0]).toMatchObject({
+      status: 'ok',
+      closeNowPnlUsd: 150,
+      feesUsd: 0,
+      liquidityAccess: 'interactive',
+    });
+    expect(
+      fetchImpl.mock.calls.some(([url]) => String(url).includes('/interactive?depth=100')),
+    ).toBe(true);
+  });
 
   it('walks the holding venue depth with API fees and preserves thin-short uncertainty', async () => {
     const fetchImpl = vi

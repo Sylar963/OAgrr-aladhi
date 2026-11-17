@@ -10,19 +10,24 @@ const UNDERLYING_EVENTS: DxEventType[] = ['Quote', 'Trade', 'Summary'];
  * `surface` streams greeks only on a sampled strike set — IV and delta are all a
  * surface or smile fit reads, at a fraction of the DXLink subscription budget.
  */
-export type ChainTier = 'full' | 'surface';
+export type ChainTier = 'full' | 'surface' | 'analytics' | 'parity';
 
 const TIER_EVENTS: Record<ChainTier, readonly DxEventType[]> = {
   full: CONTRACT_EVENTS,
   surface: ['Greeks'],
+  analytics: ['Trade', 'Summary'],
+  parity: ['Quote'],
 };
 
 /** Quote fields each event type writes, cleared when that stream is dropped. */
-export const EVENT_QUOTE_FIELDS: Record<DxEventType, readonly (keyof Omit<TradfiLiveQuote, 'ts'>)[]> = {
-  Quote: ['bid', 'ask', 'bidSize', 'askSize', 'mark'],
+export const EVENT_QUOTE_FIELDS: Record<
+  DxEventType,
+  readonly (keyof Omit<TradfiLiveQuote, 'ts'>)[]
+> = {
+  Quote: ['bid', 'ask', 'bidSize', 'askSize', 'mark', 'bidTime', 'askTime', 'quoteReceivedAt'],
   Greeks: ['iv', 'delta', 'gamma', 'theta', 'vega', 'rho'],
-  Trade: ['last', 'volume'],
-  Summary: ['openInterest'],
+  Trade: ['last', 'volume', 'volumeDayId', 'volumeTs'],
+  Summary: ['openInterest', 'oiTs'],
 };
 
 export const SURFACE_MAX_STRIKES = 60;
@@ -105,8 +110,8 @@ export function planChainSubscriptions(
   };
 
   for (const tier of tiers) {
-    if (tier === 'full') {
-      for (const inst of insts) add(inst.streamerSymbol, TIER_EVENTS.full);
+    if (tier !== 'surface') {
+      for (const inst of insts) add(inst.streamerSymbol, TIER_EVENTS[tier]);
       continue;
     }
     const expiryTs = insts[0]?.expiryTs ?? now;
@@ -117,14 +122,16 @@ export function planChainSubscriptions(
         (expiryTs - now) / YEAR_MS,
       ),
     );
-    for (const inst of insts) if (sampled.has(inst.strike)) add(inst.streamerSymbol, TIER_EVENTS.surface);
+    for (const inst of insts)
+      if (sampled.has(inst.strike)) add(inst.streamerSymbol, TIER_EVENTS.surface);
   }
 
   const subs: DxSub[] = [];
   for (const inst of insts) {
     const set = types.get(inst.streamerSymbol);
     if (set == null) continue;
-    for (const type of CONTRACT_EVENTS) if (set.has(type)) subs.push({ type, symbol: inst.streamerSymbol });
+    for (const type of CONTRACT_EVENTS)
+      if (set.has(type)) subs.push({ type, symbol: inst.streamerSymbol });
   }
   return subs;
 }

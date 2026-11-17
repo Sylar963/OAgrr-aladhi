@@ -42,6 +42,7 @@ const messages = defineMessages(
     noVenues: 'No venues connected yet. Connect one to enable per-venue private feeds.',
     live: 'live',
     manageThalexAria: 'manage thalex keys',
+    manageParadex: 'Manage Paradex keys',
     removeVenueAria: 'remove {venue}',
     manageThalex: 'Manage Thalex keys',
     connectVenue: '+ Connect venue',
@@ -92,6 +93,7 @@ const messages = defineMessages(
       'Aún no hay exchanges conectados. Conecta uno para activar feeds privados por exchange.',
     live: 'activo',
     manageThalexAria: 'gestionar claves de thalex',
+    manageParadex: 'Gestionar claves de Paradex',
     removeVenueAria: 'quitar {venue}',
     manageThalex: 'Gestionar claves de Thalex',
     connectVenue: '+ Conectar exchange',
@@ -487,11 +489,19 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                             aria-label={
                               venue === 'thalex'
                                 ? t('manageThalexAria')
-                                : t('removeVenueAria', { venue })
+                                : venue === 'paradex'
+                                  ? t('manageParadex')
+                                  : t('removeVenueAria', { venue })
                             }
-                            title={venue === 'thalex' ? t('manageThalex') : undefined}
+                            title={
+                              venue === 'thalex'
+                                ? t('manageThalex')
+                                : venue === 'paradex'
+                                  ? t('manageParadex')
+                                  : undefined
+                            }
                           >
-                            {venue === 'thalex' ? '⚙' : '×'}
+                            {venue === 'thalex' || venue === 'paradex' ? '⚙' : '×'}
                           </button>
                         </div>
                       ))}

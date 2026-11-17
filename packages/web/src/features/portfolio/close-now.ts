@@ -15,7 +15,7 @@ export const SPREAD_WIDENED_RATIO = 1.5;
 export const closeNowMessages = defineMessages(
   {
     tooltip:
-      'Estimated taker-close P&L on the holding venue. Paradex uses API depth snapshots refreshed every 5 seconds and public API fees; account discounts and RFQ execution may differ.',
+      'Estimated taker-close P&L on the holding venue. Paradex uses UI depth (including retail-only liquidity) refreshed every 5 seconds and public interactive fees. API orders have different liquidity and fees; account discounts and RFQ execution may differ.',
     comboNote: 'Priced leg by leg; a combo or RFQ close may come in tighter.',
     reason_loading: 'book loading',
     reason_rejected: 'Venue book or fee schedule unavailable',
@@ -41,7 +41,7 @@ export const closeNowMessages = defineMessages(
   },
   {
     tooltip:
-      'P&L estimado al cerrar como taker. Paradex usa snapshots de profundidad API cada 5 segundos y comisiones públicas de API; los descuentos de la cuenta y la ejecución por RFQ pueden diferir.',
+      'P&L estimado al cerrar como taker. Paradex usa profundidad de la UI (incluida liquidez exclusiva para retail) cada 5 segundos y comisiones públicas interactivas. Las órdenes API tienen liquidez y comisiones distintas; descuentos y RFQ pueden diferir.',
     comboNote: 'Cotizado leg por leg; un cierre por combo o RFQ podría salir más ajustado.',
     reason_loading: 'cargando libro',
     reason_rejected: 'Libro o comisiones del exchange no disponibles',

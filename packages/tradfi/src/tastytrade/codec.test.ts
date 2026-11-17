@@ -18,23 +18,61 @@ describe('dxlink codec', () => {
 
   it('parses a COMPACT Trade FEED_DATA frame (chunk-by-field-count, NaN->null)', () => {
     const frame = {
-      type: 'FEED_DATA', channel: 3,
-      data: ['Trade', ['Trade', 'SPY', 559.36, 1.3743299e7, 100.0,
-                        'Trade', 'BTC/USD:CXTALP', 58356.71, 'NaN', 'NaN']],
+      type: 'FEED_DATA',
+      channel: 3,
+      data: [
+        'Trade',
+        [
+          'Trade',
+          'SPY',
+          559.36,
+          1.3743299e7,
+          100.0,
+          20774,
+          'Trade',
+          'BTC/USD:CXTALP',
+          58356.71,
+          'NaN',
+          'NaN',
+          'NaN',
+        ],
+      ],
     };
     const events = parseFeedData(frame);
     expect(events).toHaveLength(2);
-    expect(events[0]).toMatchObject({ eventType: 'Trade', eventSymbol: 'SPY', price: 559.36, dayVolume: 1.3743299e7, size: 100 });
-    expect(events[1]).toMatchObject({ eventType: 'Trade', eventSymbol: 'BTC/USD:CXTALP', price: 58356.71, dayVolume: null, size: null });
+    expect(events[0]).toMatchObject({
+      eventType: 'Trade',
+      eventSymbol: 'SPY',
+      price: 559.36,
+      dayVolume: 1.3743299e7,
+      size: 100,
+    });
+    expect(events[1]).toMatchObject({
+      eventType: 'Trade',
+      eventSymbol: 'BTC/USD:CXTALP',
+      price: 58356.71,
+      dayVolume: null,
+      size: null,
+    });
   });
 
   it('parses a Greeks frame with the documented field order', () => {
     const frame = {
-      type: 'FEED_DATA', channel: 3,
+      type: 'FEED_DATA',
+      channel: 3,
       data: ['Greeks', ['Greeks', '.AAPL200C', 0.4, 0.55, 0.02, -0.03, 0.01, 0.12]],
     };
     const [g] = parseFeedData(frame);
-    expect(g).toMatchObject({ eventType: 'Greeks', eventSymbol: '.AAPL200C', volatility: 0.4, delta: 0.55, gamma: 0.02, theta: -0.03, rho: 0.01, vega: 0.12 });
+    expect(g).toMatchObject({
+      eventType: 'Greeks',
+      eventSymbol: '.AAPL200C',
+      volatility: 0.4,
+      delta: 0.55,
+      gamma: 0.02,
+      theta: -0.03,
+      rho: 0.01,
+      vega: 0.12,
+    });
   });
 
   it('ignores non-FEED_DATA frames', () => {

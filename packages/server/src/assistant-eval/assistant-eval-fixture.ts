@@ -129,8 +129,16 @@ const PayoffFactsSchema = z.object({
   expiryBasis: protocol(ExpiryBasisSchema),
 });
 
-const GammaLevelSchema = z.object({ strike: z.number(), gexUsdMillions: nullableNumber, distancePct: z.number() });
-const PriceLevelSchema = z.object({ priceUsd: z.number(), distancePct: z.number(), activity: z.number() });
+const GammaLevelSchema = z.object({
+  strike: z.number(),
+  gexUsdMillions: nullableNumber,
+  distancePct: z.number(),
+});
+const PriceLevelSchema = z.object({
+  priceUsd: z.number(),
+  distancePct: z.number(),
+  activity: z.number(),
+});
 const OiLevelSchema = z.object({ strike: z.number(), openInterestContracts: z.number() });
 
 const BookVsMarketFactsSchema = z.object({
@@ -152,17 +160,29 @@ const BookVsMarketFactsSchema = z.object({
           probabilityAbove: nullableNumber,
         }),
       ),
-      profitZones: z.array(z.object({ fromSpotUsd: nullableNumber, toSpotUsd: nullableNumber })).nullable(),
+      profitZones: z
+        .array(z.object({ fromSpotUsd: nullableNumber, toSpotUsd: nullableNumber }))
+        .nullable(),
       profitProbability: nullableNumber,
     }),
   ),
   gammaLevels: z
-    .object({ netGexUsdMillions: nullableNumber, positive: z.array(GammaLevelSchema), negative: z.array(GammaLevelSchema) })
+    .object({
+      netGexUsdMillions: nullableNumber,
+      positive: z.array(GammaLevelSchema),
+      negative: z.array(GammaLevelSchema),
+    })
     .nullable(),
   priceLevels: z
-    .object({ lookbackDays: z.number(), support: z.array(PriceLevelSchema), resistance: z.array(PriceLevelSchema) })
+    .object({
+      lookbackDays: z.number(),
+      support: z.array(PriceLevelSchema),
+      resistance: z.array(PriceLevelSchema),
+    })
     .nullable(),
-  openInterestLevels: z.array(z.object({ expiry: isoDate, calls: z.array(OiLevelSchema), puts: z.array(OiLevelSchema) })),
+  openInterestLevels: z.array(
+    z.object({ expiry: isoDate, calls: z.array(OiLevelSchema), puts: z.array(OiLevelSchema) }),
+  ),
   heldLegOdds: z.array(
     z.object({
       expiry: isoDate,
@@ -337,13 +357,16 @@ const PortfolioAssistantContextSchema = z.object({
   bookVsMarketFacts: BookVsMarketFactsSchema.nullable().default(null),
   accountEquityFacts: z
     .object({
-      venue: z.literal('thalex'),
+      venue: z.enum(['thalex', 'paradex']),
+      venueAccount: z.string().optional(),
+      maintenanceMarginUsd: z.number().nullable().optional(),
+      totalCollateralUsd: z.number().nullable().optional(),
       network: z.enum(['mainnet', 'testnet']),
       asOf: z.string(),
       basis: z.string(),
       equityUsd: z.number(),
-      cashUsd: z.number(),
-      unrealisedPnlUsd: z.number(),
+      cashUsd: z.number().nullable(),
+      unrealisedPnlUsd: z.number().nullable(),
       sessionRealisedPnlUsd: nullableNumber,
       marginUsd: nullableNumber,
       requiredMarginUsd: nullableNumber,

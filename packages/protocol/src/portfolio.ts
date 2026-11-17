@@ -487,6 +487,7 @@ export const CloseNowPeakSchema = z.object({
 export type CloseNowPeak = z.infer<typeof CloseNowPeakSchema>;
 
 export const CloseNowLegSchema = z.object({
+  liquidityAccess: z.enum(['api', 'interactive']).optional(),
   legId: z.string(),
   venue: VenueIdSchema.nullable(),
   instrument: z.string().nullable(),

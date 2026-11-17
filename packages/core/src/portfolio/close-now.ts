@@ -195,6 +195,7 @@ export function evaluateCloseNowLeg(
 
   return withComparison(
     {
+      ...(book.liquidityAccess != null ? { liquidityAccess: book.liquidityAccess } : {}),
       legId: leg.legId,
       venue,
       instrument,

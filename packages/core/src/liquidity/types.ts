@@ -29,6 +29,7 @@ export interface BookMark {
 export interface OrderBookSnapshot {
   venue: 'thalex' | 'paradex';
   takerFee?: { rate: number; cap: number };
+  liquidityAccess?: 'api' | 'interactive';
   instrument: string;
   priceUnit: 'usd';
   quantityUnit: 'base';

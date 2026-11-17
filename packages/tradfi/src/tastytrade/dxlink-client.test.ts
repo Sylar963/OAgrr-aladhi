@@ -32,14 +32,31 @@ describe('DxLinkProtocol state machine', () => {
 
   it('routes FEED_DATA to onData', () => {
     const onData = vi.fn();
-    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData, desiredSubs: () => [] });
-    proto.onMessage({ type: 'FEED_DATA', channel: 3, data: ['Trade', ['Trade', 'AAPL', 1, 2, 3]] });
+    const proto = new DxLinkProtocol({
+      channel: 3,
+      token: 'QT',
+      send: () => {},
+      onData,
+      desiredSubs: () => [],
+    });
+    proto.onMessage({
+      type: 'FEED_DATA',
+      channel: 3,
+      data: ['Trade', ['Trade', 'AAPL', 1, 2, 3, 20774]],
+    });
     expect(onData).toHaveBeenCalledTimes(1);
   });
 
   it('fires onAuthError when the token is rejected (UNAUTHORIZED after AUTH)', () => {
     const onAuthError = vi.fn();
-    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [], onAuthError });
+    const proto = new DxLinkProtocol({
+      channel: 3,
+      token: 'QT',
+      send: () => {},
+      onData: () => {},
+      desiredSubs: () => [],
+      onAuthError,
+    });
     proto.onOpen();
     proto.onMessage({ type: 'AUTH_STATE', state: 'UNAUTHORIZED' }); // first → sends AUTH
     expect(onAuthError).not.toHaveBeenCalled();
@@ -49,14 +66,28 @@ describe('DxLinkProtocol state machine', () => {
 
   it('fires onAuthError on an UNAUTHORIZED ERROR frame', () => {
     const onAuthError = vi.fn();
-    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [], onAuthError });
+    const proto = new DxLinkProtocol({
+      channel: 3,
+      token: 'QT',
+      send: () => {},
+      onData: () => {},
+      desiredSubs: () => [],
+      onAuthError,
+    });
     proto.onMessage({ type: 'ERROR', error: 'UNAUTHORIZED', message: 'bad token' });
     expect(onAuthError).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT reconnect on non-auth ERROR frames (no storm)', () => {
     const onAuthError = vi.fn();
-    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [], onAuthError });
+    const proto = new DxLinkProtocol({
+      channel: 3,
+      token: 'QT',
+      send: () => {},
+      onData: () => {},
+      desiredSubs: () => [],
+      onAuthError,
+    });
     proto.onMessage({ type: 'ERROR', error: 'INVALID_MESSAGE' });
     proto.onMessage({ type: 'ERROR', error: 'TIMEOUT' });
     expect(onAuthError).not.toHaveBeenCalled();
@@ -99,9 +130,15 @@ describe('DxLinkProtocol state machine', () => {
     vi.useFakeTimers();
     try {
       const sent: Array<{ type: string }> = [];
-      const desired = Array.from({ length: 2_000 }, (_, i) => ({ type: 'Greeks' as const, symbol: `.X${i}` }));
+      const desired = Array.from({ length: 2_000 }, (_, i) => ({
+        type: 'Greeks' as const,
+        symbol: `.X${i}`,
+      }));
       const proto = new DxLinkProtocol({
-        channel: 3, token: 'QT', send: (m) => sent.push(m as { type: string }), onData: vi.fn(),
+        channel: 3,
+        token: 'QT',
+        send: (m) => sent.push(m as { type: string }),
+        onData: vi.fn(),
         desiredSubs: () => desired,
       });
       proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
@@ -117,10 +154,19 @@ describe('DxLinkProtocol state machine', () => {
     const onAuthError = vi.fn();
     const onSubscriptionRejected = vi.fn();
     const proto = new DxLinkProtocol({
-      channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [],
-      onAuthError, onSubscriptionRejected,
+      channel: 3,
+      token: 'QT',
+      send: () => {},
+      onData: () => {},
+      desiredSubs: () => [],
+      onAuthError,
+      onSubscriptionRejected,
     });
-    proto.onMessage({ type: 'ERROR', error: 'BAD_ACTION', message: 'Your subscription size is too big' });
+    proto.onMessage({
+      type: 'ERROR',
+      error: 'BAD_ACTION',
+      message: 'Your subscription size is too big',
+    });
     proto.onMessage({ type: 'ERROR', error: 'BAD_ACTION', message: 'Some other action problem' });
     expect(onSubscriptionRejected).toHaveBeenCalledTimes(1);
     expect(onSubscriptionRejected).toHaveBeenCalledWith('Your subscription size is too big');

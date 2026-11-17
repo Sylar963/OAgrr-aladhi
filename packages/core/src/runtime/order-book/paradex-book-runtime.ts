@@ -29,6 +29,7 @@ const SnapshotSchema = z.object({
 const log = feedLogger('paradex-exit-books');
 
 export interface ParadexBookRuntimeOptions {
+  access?: 'api' | 'interactive';
   environment?: 'prod' | 'test';
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -42,6 +43,7 @@ export class ParadexBookRuntime {
   private readonly refreshMs: number;
   private readonly maxInstruments: number;
   private readonly baseUrl: string;
+  private readonly access: 'api' | 'interactive';
   private readonly refs = new Map<string, number>();
   private readonly books = new Map<string, OrderBookSnapshot>();
   private readonly fees = new Map<string, { rate: number; cap: number }>();
@@ -59,6 +61,7 @@ export class ParadexBookRuntime {
     this.now = options.now ?? Date.now;
     this.refreshMs = options.refreshMs ?? 5_000;
     this.maxInstruments = options.maxInstruments ?? 40;
+    this.access = options.access ?? 'interactive';
     this.baseUrl =
       options.environment === 'test' ? PARADEX_TESTNET_REST_BASE_URL : PARADEX_REST_BASE_URL;
   }
@@ -136,7 +139,11 @@ export class ParadexBookRuntime {
       this.fees.clear();
       for (const market of markets.results) {
         if (market.asset_kind !== 'OPTION' || market.quote_currency !== 'USD') continue;
-        const fee = market.fee_config?.api_fee?.taker_fee;
+        const fee = (
+          this.access === 'interactive'
+            ? market.fee_config?.interactive_fee
+            : market.fee_config?.api_fee
+        )?.taker_fee;
         const rate = fee?.fee == null || fee.fee === '' ? NaN : Number(fee.fee);
         const cap = fee?.fee_cap == null || fee.fee_cap === '' ? NaN : Number(fee.fee_cap);
         if (Number.isFinite(rate) && rate >= 0 && Number.isFinite(cap) && cap >= 0) {
@@ -165,7 +172,9 @@ export class ParadexBookRuntime {
         return;
       }
       const snapshot = SnapshotSchema.parse(
-        await this.read(`/orderbook/${encodeURIComponent(symbol)}?depth=100`),
+        await this.read(
+          `/orderbook/${encodeURIComponent(symbol)}${this.access === 'interactive' ? '/interactive' : ''}?depth=100`,
+        ),
       );
       if (this.disposed || this.epochs.get(symbol) !== epoch) return;
       if (snapshot.market !== symbol) throw new Error('Paradex book market mismatch');
@@ -199,6 +208,7 @@ export class ParadexBookRuntime {
         crossed,
         mark: null,
         takerFee: fee,
+        liquidityAccess: this.access,
       });
       this.rejected.delete(symbol);
     } catch (error) {

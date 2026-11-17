@@ -4,6 +4,7 @@ import websocket from '@fastify/websocket';
 import type { IvHistoryService } from '@oggregator/core';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { candlesRoute } from './routes/candles.js';
+import { analyticsRoute } from './routes/analytics.js';
 import { chainsRoute } from './routes/chains.js';
 import { expiriesRoute } from './routes/expiries.js';
 import { expectedMoveRoute } from './routes/expected-move.js';
@@ -30,6 +31,7 @@ export interface FeedLike {
   ensureChainSubscribed(underlying: string, expiry: string, tier?: ChainTier): void;
   refreshChainQuotes(underlying: string, expiry: string): Promise<number>;
   subscriptionStats?(): TradfiSubscriptionStats;
+  hasChainTier?(underlying: string, expiry: string, tier: ChainTier): boolean;
 }
 
 export interface TradfiDeps {
@@ -52,6 +54,7 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(expiriesRoute(deps));
   void app.register(expectedMoveRoute(deps));
   void app.register(chainsRoute(deps));
+  void app.register(analyticsRoute(deps));
   void app.register(wsChainRoute(deps));
   void app.register(wsUnderlyingCandlesRoute(deps));
   void app.register(candlesRoute(deps));

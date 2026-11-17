@@ -9,6 +9,10 @@ export function applyEvent(
   flowBook?: TradfiFlowBook,
 ): void {
   const inst = store.getInstrument(ev.eventSymbol);
+  if (ev.eventType === 'Trade') {
+    const dayId = numOrNull(ev.dayId);
+    if (dayId != null) store.setTradingDay(inst?.underlying ?? ev.eventSymbol, dayId);
+  }
 
   // Underlying symbol (no option instrument) -> spot price.
   if (inst == null) {
@@ -19,7 +23,9 @@ export function applyEvent(
       }
       return;
     }
-    const price = (ev.eventType === 'Trade' ? ev.price : null) ?? (ev.eventType === 'Quote' ? mid(ev.bidPrice, ev.askPrice) : null);
+    const price =
+      (ev.eventType === 'Trade' ? ev.price : null) ??
+      (ev.eventType === 'Quote' ? mid(ev.bidPrice, ev.askPrice) : null);
     if (typeof price === 'number') store.setSpot(ev.eventSymbol, price);
     if (ev.eventType === 'Trade') {
       const lastTrade = positiveOrNull(ev.price);
@@ -36,6 +42,9 @@ export function applyEvent(
       patch.ask = numOrNull(ev.askPrice);
       patch.bidSize = numOrNull(ev.bidSize);
       patch.askSize = numOrNull(ev.askSize);
+      patch.bidTime = numOrNull(ev.bidTime);
+      patch.askTime = numOrNull(ev.askTime);
+      patch.quoteReceivedAt = ts;
       const m = mid(ev.bidPrice, ev.askPrice);
       if (m != null) patch.mark = m;
       break;
@@ -51,7 +60,13 @@ export function applyEvent(
     }
     case 'Trade': {
       patch.last = numOrNull(ev.price);
-      patch.volume = numOrNull(ev.dayVolume);
+      const dayId = numOrNull(ev.dayId);
+      const previousDay = store.getQuote(ev.eventSymbol)?.volumeDayId;
+      if (dayId == null || previousDay == null || dayId >= previousDay) {
+        patch.volume = numOrNull(ev.dayVolume);
+        patch.volumeDayId = dayId;
+        patch.volumeTs = ts;
+      }
       if (flowBook != null) {
         // Prevailing quote (last Quote merge) classifies aggressor side.
         const q = store.getQuote(ev.eventSymbol);
@@ -68,6 +83,7 @@ export function applyEvent(
     }
     case 'Summary': {
       patch.openInterest = numOrNull(ev.openInterest);
+      patch.oiTs = ts;
       break;
     }
   }

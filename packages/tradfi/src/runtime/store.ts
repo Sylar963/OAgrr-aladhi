@@ -15,14 +15,38 @@ export interface TradfiLiveQuote {
   rho: number | null;
   openInterest: number | null;
   volume: number | null;
+  volumeDayId: number | null;
+  volumeTs: number | null;
+  oiTs: number | null;
+  bidTime: number | null;
+  askTime: number | null;
+  quoteReceivedAt: number | null;
   ts: number;
 }
 
 export function emptyQuote(): TradfiLiveQuote {
   return {
-    bid: null, ask: null, bidSize: null, askSize: null, last: null, mark: null,
-    iv: null, delta: null, gamma: null, theta: null, vega: null, rho: null,
-    openInterest: null, volume: null, ts: 0,
+    bid: null,
+    ask: null,
+    bidSize: null,
+    askSize: null,
+    last: null,
+    mark: null,
+    iv: null,
+    delta: null,
+    gamma: null,
+    theta: null,
+    vega: null,
+    rho: null,
+    openInterest: null,
+    volume: null,
+    volumeDayId: null,
+    volumeTs: null,
+    oiTs: null,
+    bidTime: null,
+    askTime: null,
+    quoteReceivedAt: null,
+    ts: 0,
   };
 }
 
@@ -47,6 +71,17 @@ export class TradfiStore {
   private underlyings: string[] = [];
   private spot = new Map<string, number>();
   private sessions = new Map<string, UnderlyingSession>();
+  private tradingDays = new Map<string, number>();
+
+  setTradingDay(underlying: string, dayId: number): void {
+    if (Number.isInteger(dayId) && dayId > 0 && dayId >= (this.tradingDays.get(underlying) ?? 0)) {
+      this.tradingDays.set(underlying, dayId);
+    }
+  }
+
+  getTradingDay(underlying: string): number | null {
+    return this.tradingDays.get(underlying) ?? null;
+  }
 
   setInstruments(insts: TradfiInstrument[]): void {
     this.instruments.clear();
@@ -104,7 +139,10 @@ export class TradfiStore {
   }
 
   /** Null out fields whose stream was dropped, so frozen values don't pass as live. */
-  clearQuoteFields(streamerSymbol: string, fields: readonly (keyof Omit<TradfiLiveQuote, 'ts'>)[]): void {
+  clearQuoteFields(
+    streamerSymbol: string,
+    fields: readonly (keyof Omit<TradfiLiveQuote, 'ts'>)[],
+  ): void {
     const prev = this.quotes.get(streamerSymbol);
     if (prev == null) return;
     const next = { ...prev };
@@ -136,7 +174,12 @@ export class TradfiStore {
   }
 
   mergeSession(underlying: string, patch: Partial<UnderlyingSession> & { ts: number }): void {
-    const prev = this.sessions.get(underlying) ?? { lastTrade: null, prevClose: null, prevDayId: null, ts: 0 };
+    const prev = this.sessions.get(underlying) ?? {
+      lastTrade: null,
+      prevClose: null,
+      prevDayId: null,
+      ts: 0,
+    };
     this.sessions.set(underlying, { ...prev, ...patch });
   }
 

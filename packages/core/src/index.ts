@@ -607,6 +607,18 @@ export {
 export { FlowOiRecorder } from './core/flow-oi-recorder.js';
 export { evaluateAlphaTrade, type AlphaEvaluationMarket } from './services/alpha-evaluation.js';
 export {
+  aggregateOptionsActivity,
+  type OptionsActivityInput,
+} from './services/options-activity.js';
+export {
+  computeOptionsParity,
+  PARITY_MAX_QUOTE_AGE_MS,
+  PARITY_MAX_QUOTE_SKEW_MS,
+  PARITY_MAX_RECEIPT_AGE_MS,
+  type OptionsParityInput,
+  type ParityQuote,
+} from './services/options-parity.js';
+export {
   buildAlphaStrategyContext,
   type AlphaStrategyContextInput,
 } from './services/alpha-strategy-context.js';

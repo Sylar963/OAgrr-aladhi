@@ -1022,3 +1022,23 @@ invalid ratios, storage round trips, OI gaps, all four inferred actions, exhaust
 accounting mixtures, other trades explaining a positive OI change, stale OI timestamps, and
 24h sync throttling through failures/restarts. These tests validate accounting and labeling,
 not predictive profitability.
+
+## Paradex portfolio parity (2026-11-17)
+
+Engineering integration evidence, not a new book review or validated trading edge.
+Official account, fills, order-book and authentication contracts were checked alongside public
+production and testnet API responses. See [implementation and limits](../paradex-portfolio-parity.md).
+
+- Imported perpetual exposure is signed base size. Positional marks exclude running funding
+  when reconstructed from venue unrealized P&L; option fill accounting excludes perpetual fills.
+- Recorded option fills initially cover 90 days. Their fees and realized P&L are historical
+  observations, not guaranteed lifetime coverage. Entry IV requires opening fills and an
+  underlying price at those fills; first-observed IV remains explicitly a proxy.
+- Public option summaries can show UI-only liquidity absent from the API order book. A live
+  BTC option check returned an empty API book and a two-sided interactive book at the same
+  sequence. Dashboard close estimates therefore use the interactive endpoint and matching
+  public interactive fees; the core runtime supports an explicitly separate API mode.
+- Paradex maintenance thresholds use the venue's reported requirement. Holding that requirement
+  fixed while moving spot is an approximation, not native post-trade margin approval. No
+  hypothetical-order margin preview is claimed. Thalex's maintenance ratio does not transfer.
+- Mainnet/testnet tokens, histories, depth estimates and leaderboard eligibility are isolated.

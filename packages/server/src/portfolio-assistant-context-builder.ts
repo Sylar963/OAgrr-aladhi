@@ -180,8 +180,8 @@ export interface PortfolioAssistantCashTransactionFact {
 export interface PortfolioAssistantAccountEquityFacts {
   venue: 'thalex' | 'paradex';
   venueAccount?: string | undefined;
-  maintenanceMarginUsd?: number | null;
-  totalCollateralUsd?: number | null;
+  maintenanceMarginUsd?: number | null | undefined;
+  totalCollateralUsd?: number | null | undefined;
   network: 'mainnet' | 'testnet';
   asOf: string;
   basis: string;

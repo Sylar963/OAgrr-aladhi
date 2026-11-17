@@ -5,7 +5,10 @@ import { feedLogger } from '../logger.js';
 import { applyEvent } from './state.js';
 import { TradfiFlowBook } from '../runtime/flow-book.js';
 import {
-  type ChainTier, EVENT_QUOTE_FIELDS, planChainSubscriptions, underlyingSubscriptions,
+  type ChainTier,
+  EVENT_QUOTE_FIELDS,
+  planChainSubscriptions,
+  underlyingSubscriptions,
 } from './planner.js';
 import type { DxEvent, DxSub } from './codec.js';
 import type { DxLinkClient } from './dxlink-client.js';
@@ -124,9 +127,12 @@ export class TradfiFeed {
     private readonly store: TradfiStore,
     private readonly underlyings: string[],
     private readonly dxFactory: (opts: {
-      url: string; token: string;
-      onData: (e: DxEvent[]) => void; desiredSubs: () => DxSub[];
-      onAuthError: () => void; onSubscriptionRejected: (detail: string) => void;
+      url: string;
+      token: string;
+      onData: (e: DxEvent[]) => void;
+      desiredSubs: () => DxSub[];
+      onAuthError: () => void;
+      onSubscriptionRejected: (detail: string) => void;
     }) => DxLinkClient = (opts) => new RealDxLinkClient(opts),
     options: { maxSubscriptions?: number | undefined } = {},
   ) {
@@ -153,7 +159,10 @@ export class TradfiFeed {
     // Honest readiness: only "loaded" if the catalog actually holds instruments.
     this.catalogLoaded = all.length > 0;
     if (!this.catalogLoaded) {
-      log.error({ failures, underlyings: this.underlyings.length }, 'catalog empty — no chains loaded');
+      log.error(
+        { failures, underlyings: this.underlyings.length },
+        'catalog empty — no chains loaded',
+      );
     }
   }
 
@@ -180,6 +189,11 @@ export class TradfiFeed {
     };
   }
 
+  hasChainTier(underlying: string, expiry: string, tier: ChainTier): boolean {
+    const lease = this.chains.get(`${underlying}|${expiry}`);
+    return lease?.admitted === true && lease.tiers.has(tier);
+  }
+
   async startStreaming(): Promise<void> {
     await this.reconnectStreaming('initial');
   }
@@ -187,7 +201,10 @@ export class TradfiFeed {
   /** Open a fresh DXLink stream (new quote token + connection). Throws on failure. */
   private async openStream(): Promise<void> {
     // Double-connect guard: tear down any existing connection and clear the token timer.
-    if (this.tokenTimer) { clearTimeout(this.tokenTimer); this.tokenTimer = null; }
+    if (this.tokenTimer) {
+      clearTimeout(this.tokenTimer);
+      this.tokenTimer = null;
+    }
     await this.dx?.disconnect();
     this.dx = null;
 
@@ -206,14 +223,18 @@ export class TradfiFeed {
       },
       desiredSubs: () => this.desiredSubs(),
       // A rejected token means the timer-based refresh is too late; re-auth now.
-      onAuthError: () => { void this.reconnectStreaming('auth-error'); },
+      onAuthError: () => {
+        void this.reconnectStreaming('auth-error');
+      },
       onSubscriptionRejected: (detail) => this.onSubscriptionRejected(detail),
     });
     await this.dx.connect();
     log.info({ subs: this.baseSubCount() + this.chainSubCount }, 'dxlink streaming started');
 
     const ttl = computeQuoteTokenTtl(qt.expiresAt, Date.now());
-    this.tokenTimer = setTimeout(() => { void this.reconnectStreaming('token-expiry'); }, ttl);
+    this.tokenTimer = setTimeout(() => {
+      void this.reconnectStreaming('token-expiry');
+    }, ttl);
   }
 
   /** Stream spot + previous close for symbols whose option chains are not loaded. */
@@ -274,7 +295,10 @@ export class TradfiFeed {
       }
     }
     if (dropped > 0) {
-      log.info({ chains: dropped, subs: droppedSubs, remaining: this.chains.size }, 'idle chains unsubscribed');
+      log.info(
+        { chains: dropped, subs: droppedSubs, remaining: this.chains.size },
+        'idle chains unsubscribed',
+      );
     }
     return dropped;
   }
@@ -290,7 +314,12 @@ export class TradfiFeed {
     if (growth > 0 && !this.reserve(growth, key, now, false)) {
       if (lease.admitted || lease.subs.length === 0) {
         log.warn(
-          { underlying: lease.underlying, expiry: lease.expiry, needed: growth, ...this.subscriptionStats() },
+          {
+            underlying: lease.underlying,
+            expiry: lease.expiry,
+            needed: growth,
+            ...this.subscriptionStats(),
+          },
           'subscription budget full; chain deferred',
         );
       }
@@ -302,7 +331,12 @@ export class TradfiFeed {
     lease.admitted = true;
     if (isNew) {
       log.info(
-        { underlying: lease.underlying, expiry: lease.expiry, tiers: [...lease.tiers.keys()], subs: next.length },
+        {
+          underlying: lease.underlying,
+          expiry: lease.expiry,
+          tiers: [...lease.tiers.keys()],
+          subs: next.length,
+        },
         'chain subscription added',
       );
     }
@@ -313,10 +347,16 @@ export class TradfiFeed {
    * chains. Without `force`, chains still in active use are never evicted.
    */
   private reserve(needed: number, exceptKey: string | null, now: number, force: boolean): boolean {
-    let over = this.chainSubCount + needed - Math.max(0, this.maxSubscriptions - this.baseSubCount());
+    let over =
+      this.chainSubCount + needed - Math.max(0, this.maxSubscriptions - this.baseSubCount());
     if (over <= 0) return true;
     const victims = [...this.chains]
-      .filter(([k, l]) => k !== exceptKey && l.subs.length > 0 && (force || now - lastRequested(l) > ACTIVE_LEASE_MS))
+      .filter(
+        ([k, l]) =>
+          k !== exceptKey &&
+          l.subs.length > 0 &&
+          (force || now - lastRequested(l) > ACTIVE_LEASE_MS),
+      )
       .sort((a, b) => lastRequested(a[1]) - lastRequested(b[1]));
     for (const [k, l] of victims) {
       if (over <= 0) break;
@@ -361,7 +401,10 @@ export class TradfiFeed {
         Math.floor(Math.min(this.maxSubscriptions, current) * 0.8),
       );
       this.reserve(0, null, now, true);
-      log.warn({ budget: this.maxSubscriptions, subscriptions: current }, 'dxlink subscription budget lowered');
+      log.warn(
+        { budget: this.maxSubscriptions, subscriptions: current },
+        'dxlink subscription budget lowered',
+      );
     }
     if (this.resyncTimer != null) return;
     this.resyncTimer = setTimeout(() => {
@@ -383,7 +426,10 @@ export class TradfiFeed {
       log.warn({ reason }, 'dxlink reconnect throttled');
       return;
     }
-    if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     this.reconnecting = true;
     this.lastReconnectAt = Date.now();
     try {
@@ -400,7 +446,9 @@ export class TradfiFeed {
         { reason, attempt: this.retryAttempts, backoffMs: backoff, err: String(err) },
         'dxlink connect failed; retrying',
       );
-      this.retryTimer = setTimeout(() => { void this.reconnectStreaming('retry'); }, backoff);
+      this.retryTimer = setTimeout(() => {
+        void this.reconnectStreaming('retry');
+      }, backoff);
     } finally {
       this.reconnecting = false;
     }
@@ -408,9 +456,18 @@ export class TradfiFeed {
 
   async dispose(): Promise<void> {
     clearInterval(this.sweepTimer);
-    if (this.resyncTimer) { clearTimeout(this.resyncTimer); this.resyncTimer = null; }
-    if (this.tokenTimer) { clearTimeout(this.tokenTimer); this.tokenTimer = null; }
-    if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
+    if (this.resyncTimer) {
+      clearTimeout(this.resyncTimer);
+      this.resyncTimer = null;
+    }
+    if (this.tokenTimer) {
+      clearTimeout(this.tokenTimer);
+      this.tokenTimer = null;
+    }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     await this.dx?.disconnect();
     this.dx = null;
   }
@@ -442,7 +499,10 @@ export class TradfiFeed {
       } catch (err: unknown) {
         if (!/-> 403\b/.test(String(err))) throw err;
         this.restForbiddenUntil = Date.now() + REST_FORBIDDEN_BACKOFF_MS;
-        log.warn({ err: String(err) }, 'market-data REST not entitled (403); fallback paused for 1h');
+        log.warn(
+          { err: String(err) },
+          'market-data REST not entitled (403); fallback paused for 1h',
+        );
         return merged;
       }
       const ts = Date.now();
@@ -450,9 +510,19 @@ export class TradfiFeed {
         const inst = this.occIndex.get(d.symbol);
         if (inst == null) continue;
         this.store.mergeQuote(inst.streamerSymbol, {
-          bid: d.bid ?? null, ask: d.ask ?? null, bidSize: d.bidSize ?? null,
-          askSize: d.askSize ?? null, mark: d.mark ?? d.mid ?? null, last: d.last ?? null,
-          volume: d.volume ?? null, ts,
+          bid: d.bid ?? null,
+          ask: d.ask ?? null,
+          bidSize: d.bidSize ?? null,
+          askSize: d.askSize ?? null,
+          mark: d.mark ?? d.mid ?? null,
+          last: d.last ?? null,
+          volume: d.volume ?? null,
+          volumeDayId: null,
+          volumeTs: null,
+          bidTime: null,
+          askTime: null,
+          quoteReceivedAt: null,
+          ts,
         });
         merged += 1;
       }

@@ -1,9 +1,18 @@
 export type DxEventType = 'Quote' | 'Greeks' | 'Trade' | 'Summary';
 
 export const ACCEPT_EVENT_FIELDS: Record<DxEventType, string[]> = {
-  Quote: ['eventType', 'eventSymbol', 'bidPrice', 'askPrice', 'bidSize', 'askSize'],
+  Quote: [
+    'eventType',
+    'eventSymbol',
+    'bidPrice',
+    'askPrice',
+    'bidSize',
+    'askSize',
+    'bidTime',
+    'askTime',
+  ],
   Greeks: ['eventType', 'eventSymbol', 'volatility', 'delta', 'gamma', 'theta', 'rho', 'vega'],
-  Trade: ['eventType', 'eventSymbol', 'price', 'dayVolume', 'size'],
+  Trade: ['eventType', 'eventSymbol', 'price', 'dayVolume', 'size', 'dayId'],
   Summary: ['eventType', 'eventSymbol', 'openInterest', 'prevDayClosePrice', 'prevDayId'],
 };
 
@@ -13,7 +22,13 @@ export interface DxSub {
 }
 
 export function buildSetup() {
-  return { type: 'SETUP', channel: 0, version: '0.1-DXF-JS/0.3.0', keepaliveTimeout: 60, acceptKeepaliveTimeout: 60 };
+  return {
+    type: 'SETUP',
+    channel: 0,
+    version: '0.1-DXF-JS/0.3.0',
+    keepaliveTimeout: 60,
+    acceptKeepaliveTimeout: 60,
+  };
 }
 
 export function buildAuth(token: string) {
@@ -36,7 +51,10 @@ export function buildFeedSetup(channel: number) {
 
 export function buildSubscribe(channel: number, subs: DxSub[], action: 'add' | 'remove') {
   return { type: 'FEED_SUBSCRIPTION', channel, [action]: subs } as {
-    type: 'FEED_SUBSCRIPTION'; channel: number; add?: DxSub[]; remove?: DxSub[];
+    type: 'FEED_SUBSCRIPTION';
+    channel: number;
+    add?: DxSub[];
+    remove?: DxSub[];
   };
 }
 

@@ -30,31 +30,34 @@ async function compute(underlying: 'BTC' | 'ETH' | 'HYPE', lookbackDays: number)
     ),
   );
   const asOf = Date.now();
-  const profile = buildTimeAtPrice(candles, {
+  const completed = candles.filter(
+    (candle) => candle.timestamp + TIME_AT_PRICE_RESOLUTION_SEC * 1000 <= asOf,
+  );
+  const profile = buildTimeAtPrice(completed, {
     fromTs: asOf - lookbackDays * DAY_MS,
     volWindowBars: VOL_WINDOW_HOURS,
     barsPerYear: HOURS_PER_YEAR,
     targetLevels: TARGET_LEVELS,
     targetVolBins: TARGET_VOL_BINS,
   });
-  const last = candles[candles.length - 1];
-  if (profile == null || last == null) return null;
-  const firstCounted = candles.find((c) => c.timestamp >= asOf - lookbackDays * DAY_MS)!;
+  if (profile == null) return null;
   return {
     underlying,
     asOf,
     lookbackDays,
     resolutionSec: TIME_AT_PRICE_RESOLUTION_SEC,
-    from: firstCounted.timestamp,
-    to: last.timestamp,
+    from: profile.from,
+    to: profile.to,
     bars: profile.bars,
-    spot: last.close,
+    spot: profile.spot,
     binSize: profile.binSize,
     volBinSize: profile.volBinSize,
     volWindowHours: VOL_WINDOW_HOURS,
     levels: profile.levels,
     volByLevel: profile.volByLevel,
     dailyCloses: profile.dailyCloses,
+    hoursByLevel: profile.hoursByLevel,
+    dailyActivity: profile.dailyActivity,
   } satisfies TimeAtPriceResponse;
 }
 

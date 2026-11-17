@@ -38,6 +38,16 @@ export const TimeAtPriceResponseSchema = z.object({
   levels: z.array(z.object({ price: z.number(), bars: z.number().int() })),
   /** Mean trailing Parkinson vol (annualized fraction) of bars whose mid fell in the bin. */
   volByLevel: z.array(z.object({ price: z.number(), vol: z.number(), bars: z.number().int() })),
+  hoursByLevel: z.array(z.object({ price: z.number(), bars: z.number().int().nonnegative() })),
+  dailyActivity: z.array(
+    z.object({
+      ts: z.number().int(),
+      bars: z.number().int().min(1).max(24),
+      range: z.number().finite().nonnegative(),
+      vol: z.number().finite().nonnegative(),
+      hourlyRanges: z.array(z.number().finite().nonnegative().nullable()).length(24),
+    }),
+  ),
   dailyCloses: z.array(z.object({ ts: z.number().int(), close: z.number() })),
 });
 

@@ -39,10 +39,22 @@ export interface TimeAtPriceProfile {
   levels: TimeAtPriceLevel[];
   volByLevel: VolByPriceLevel[];
   dailyCloses: { ts: number; close: number }[];
+  hoursByLevel: TimeAtPriceLevel[];
+  dailyActivity: {
+    ts: number;
+    bars: number;
+    range: number;
+    vol: number;
+    hourlyRanges: (number | null)[];
+  }[];
+  from: number;
+  to: number;
+  spot: number;
   bars: number;
 }
 
-const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 const PARKINSON_DENOM = 4 * Math.LN2;
 
 /** Smallest 1/2/2.5/5 × 10^k step at or above `raw`. */
@@ -73,14 +85,28 @@ function roundPrice(value: number): number {
 }
 
 function isValidBar(c: TimeAtPriceCandle): boolean {
-  return c.low > 0 && c.high >= c.low && Number.isFinite(c.high);
+  return (
+    Number.isSafeInteger(c.timestamp) &&
+    c.low > 0 &&
+    c.high >= c.low &&
+    Number.isFinite(c.high) &&
+    Number.isFinite(c.close) &&
+    c.close >= c.low &&
+    c.close <= c.high
+  );
 }
 
 export function buildTimeAtPrice(
   candles: readonly TimeAtPriceCandle[],
   options: TimeAtPriceOptions,
 ): TimeAtPriceProfile | null {
-  const all = candles.filter(isValidBar);
+  const byHour = new Map<number, TimeAtPriceCandle>();
+  for (const candle of candles) {
+    if (!isValidBar(candle)) continue;
+    const timestamp = Math.floor(candle.timestamp / HOUR_MS) * HOUR_MS;
+    byHour.set(timestamp, { ...candle, timestamp });
+  }
+  const all = [...byHour.values()].sort((a, b) => a.timestamp - b.timestamp);
   const inRange = all.filter((c) => c.timestamp >= options.fromTs);
   if (inRange.length === 0) return null;
 
@@ -128,11 +154,65 @@ export function buildTimeAtPrice(
     .sort(([a], [b]) => a - b)
     .map(([price, { sum, bars }]) => ({ price, vol: sum / bars, bars }));
 
+  const hoursByBin = new Map<number, number>();
+  const activityByDay = new Map<
+    number,
+    {
+      low: number;
+      high: number;
+      variance: number;
+      bars: number;
+      hourlyRanges: (number | null)[];
+    }
+  >();
+  for (const candle of inRange) {
+    const mid = (candle.high + candle.low) / 2;
+    const bin = roundPrice(Math.floor(mid / volBinSize) * volBinSize);
+    hoursByBin.set(bin, (hoursByBin.get(bin) ?? 0) + 1);
+    const day = Math.floor(candle.timestamp / DAY_MS) * DAY_MS;
+    const activity = activityByDay.get(day) ?? {
+      low: candle.low,
+      high: candle.high,
+      variance: 0,
+      bars: 0,
+      hourlyRanges: Array<number | null>(24).fill(null),
+    };
+    activity.low = Math.min(activity.low, candle.low);
+    activity.high = Math.max(activity.high, candle.high);
+    activity.variance += Math.log(candle.high / candle.low) ** 2 / PARKINSON_DENOM;
+    activity.bars += 1;
+    activity.hourlyRanges[Math.floor((candle.timestamp - day) / HOUR_MS)] =
+      candle.high / candle.low - 1;
+    activityByDay.set(day, activity);
+  }
+  const hoursByLevel = [...hoursByBin.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([price, bars]) => ({ price, bars }));
+  const dailyActivity = [...activityByDay.entries()].map(([ts, activity]) => ({
+    ts,
+    bars: activity.bars,
+    range: activity.high / activity.low - 1,
+    vol: Math.sqrt((activity.variance / activity.bars) * options.barsPerYear),
+    hourlyRanges: activity.hourlyRanges,
+  }));
+
   const closeByDay = new Map<number, number>();
   for (const c of inRange) closeByDay.set(Math.floor(c.timestamp / DAY_MS) * DAY_MS, c.close);
   const dailyCloses = [...closeByDay.entries()]
     .sort(([a], [b]) => a - b)
     .map(([ts, close]) => ({ ts, close }));
 
-  return { binSize, volBinSize, levels, volByLevel, dailyCloses, bars: inRange.length };
+  return {
+    binSize,
+    volBinSize,
+    levels,
+    volByLevel,
+    dailyCloses,
+    hoursByLevel,
+    dailyActivity,
+    from: inRange[0]!.timestamp,
+    to: inRange[inRange.length - 1]!.timestamp,
+    spot: inRange[inRange.length - 1]!.close,
+    bars: inRange.length,
+  };
 }

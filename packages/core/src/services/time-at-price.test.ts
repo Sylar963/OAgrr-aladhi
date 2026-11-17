@@ -78,3 +78,54 @@ describe('buildTimeAtPrice', () => {
     expect(buildTimeAtPrice([bar(0, 0, 10), bar(1, 12, 11)], baseOptions)).toBeNull();
   });
 });
+
+describe('hourly and daily comparisons', () => {
+  it('counts all hours at price even before trailing volatility is available', () => {
+    const profile = buildTimeAtPrice([bar(0, 100, 101)], baseOptions)!;
+    expect(profile.volByLevel).toEqual([]);
+    expect(profile.hoursByLevel).toEqual([{ price: 100.5, bars: 1 }]);
+    expect(profile.dailyActivity[0]!.bars).toBe(1);
+    expect(profile.dailyActivity[0]!.hourlyRanges[0]).toBeCloseTo(0.01);
+    expect(profile.dailyActivity[0]!.hourlyRanges.slice(1)).toEqual(Array(23).fill(null));
+  });
+
+  it('compares daily variance independently of the trailing seven-day window', () => {
+    const calm = Array.from({ length: 24 }, (_, i) => bar(i, 100, 101));
+    const active = Array.from({ length: 24 }, (_, i) => bar(i + 24, 100, 110));
+    const profile = buildTimeAtPrice([...calm, ...active], { ...baseOptions, volWindowBars: 168 })!;
+    const [first, second] = profile.dailyActivity;
+    expect(first!.bars).toBe(24);
+    expect(second!.bars).toBe(24);
+    expect(first!.range).toBeCloseTo(0.01);
+    expect(second!.range).toBeCloseTo(0.1);
+    expect(first!.vol).toBeCloseTo(Math.log(1.01) * Math.sqrt((365 * 24) / (4 * Math.LN2)));
+    expect(second!.vol / first!.vol).toBeCloseTo(Math.log(1.1) / Math.log(1.01));
+    expect(profile.hoursByLevel.reduce((sum, level) => sum + level.bars, 0)).toBe(48);
+  });
+
+  it('sorts and deduplicates hours, keeps UTC gaps, and ignores malformed observations', () => {
+    const profile = buildTimeAtPrice(
+      [
+        bar(24, 100, 110, 105),
+        bar(0, 100, 101),
+        bar(23, 100, 100),
+        bar(24, 100, 120, 115),
+        { ...bar(25, 100, 110), close: Number.NaN },
+        { ...bar(25, 100, 110), timestamp: Number.NaN },
+        bar(25, 100, 110, 120),
+      ],
+      baseOptions,
+    )!;
+    expect(profile.bars).toBe(3);
+    expect(profile.from).toBe(T0);
+    expect(profile.to).toBe(T0 + 24 * HOUR_MS);
+    expect(profile.spot).toBe(115);
+    expect(profile.dailyCloses).toEqual([
+      { ts: T0, close: 100 },
+      { ts: T0 + 24 * HOUR_MS, close: 115 },
+    ]);
+    expect(profile.dailyActivity[0]!.hourlyRanges[23]).toBe(0);
+    expect(profile.dailyActivity[0]!.hourlyRanges[1]).toBeNull();
+    expect(profile.dailyActivity[1]!.hourlyRanges[0]).toBeCloseTo(0.2);
+  });
+});

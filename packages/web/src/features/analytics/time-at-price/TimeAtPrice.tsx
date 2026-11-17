@@ -22,6 +22,7 @@ import analyticsStyles from '../AnalyticsView.module.css';
 import cardStyles from '../BreakEvenForecast.module.css';
 import { TimeAtPricePrimitive } from './TimeAtPricePrimitive';
 import styles from './TimeAtPrice.module.css';
+import { DailyActivity } from './DailyActivity';
 
 const PATH_COLOR = '#E8ECEB';
 const DAY_MS = 86_400_000;
@@ -38,7 +39,7 @@ const messages = defineMessages(
     title: 'Time at Price',
     unsupported: 'Built from perpetual candles, so it is available for BTC, ETH and HYPE only.',
     subtitle:
-      '{underlying}-PERPETUAL hourly bars · shade = hours traded through each level · line = daily close',
+      '{underlying}-PERPETUAL hourly bars · shade = hours traded through each level · line = last close per UTC day',
     lookback: 'Lookback',
     lb90: '90D',
     lb180: '180D',
@@ -48,23 +49,23 @@ const messages = defineMessages(
     loading: 'Loading price history…',
     unavailable: 'Price history is unavailable right now.',
     price: 'Price',
-    volTitle:
-      'Mean trailing {n}-day Parkinson vol (annualized) of the hours spent in the bin',
+    volTitle: 'Mean trailing {n}-day Parkinson vol (annualized) of the hours spent in the bin',
     vol: 'Vol {n}d',
     time: 'Time',
+    hours: 'Hours',
     timeTitle: 'Share of hours whose mid sat in the bin',
     shade:
       'Shade = share of the {bars} hourly bars from {from} to {to} whose high–low range crossed each {bin} level.',
     shortHistory: 'The venue serves less history than the selected lookback.',
     volNote:
-      "Vol = mean trailing {n}-day Parkinson (high–low) volatility, annualized, of the hours whose mid sat in each {bin} bin. Bins with little time are noisy. Spot's bin is outlined.",
+      "Vol = mean trailing {n}-day Parkinson (high–low) volatility, annualized, of the hours whose mid sat in each {bin} bin. Bins with little time are noisy. The latest completed hourly close's bin is outlined.",
   },
   {
     title: 'Tiempo en precio',
     unsupported:
       'Se construye con velas de perpetuos, así que solo está disponible para BTC, ETH y HYPE.',
     subtitle:
-      'Barras horarias de {underlying}-PERPETUAL · sombra = horas negociadas en cada nivel · línea = cierre diario',
+      'Barras horarias de {underlying}-PERPETUAL · sombra = horas negociadas en cada nivel · línea = último cierre por día UTC',
     lookback: 'Periodo',
     lb90: '90D',
     lb180: '180D',
@@ -74,16 +75,16 @@ const messages = defineMessages(
     loading: 'Cargando historial de precios…',
     unavailable: 'El historial de precios no está disponible ahora.',
     price: 'Precio',
-    volTitle:
-      'Vol Parkinson móvil media de {n} días (anualizada) de las horas pasadas en el rango',
+    volTitle: 'Vol Parkinson móvil media de {n} días (anualizada) de las horas pasadas en el rango',
     vol: 'Vol {n}d',
     time: 'Tiempo',
+    hours: 'Horas',
     timeTitle: 'Proporción de horas cuyo precio medio estuvo en el rango',
     shade:
       'Sombra = proporción de las {bars} barras horarias del {from} al {to} cuyo rango máx–mín cruzó cada nivel de {bin}.',
     shortHistory: 'El exchange ofrece menos historial que el periodo seleccionado.',
     volNote:
-      'Vol = volatilidad Parkinson (máx–mín) móvil media de {n} días, anualizada, de las horas cuyo precio medio estuvo en cada rango de {bin}. Los rangos con poco tiempo son ruidosos. El rango del spot está resaltado.',
+      'Vol = volatilidad Parkinson (máx–mín) móvil media de {n} días, anualizada, de las horas cuyo precio medio estuvo en cada rango de {bin}. Los rangos con poco tiempo son ruidosos. El rango del último cierre horario completo está resaltado.',
   },
 );
 
@@ -132,7 +133,8 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
     const container = containerRef.current;
     if (!container) return;
     const chart = createChart(container, {
-      autoSize: true,
+      width: container.clientWidth,
+      height: container.clientHeight,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#878C8F',
@@ -160,7 +162,16 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
     chartRef.current = chart;
     seriesRef.current = series;
     primitiveRef.current = primitive;
+    const resize = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width <= 0 || height <= 0) return;
+      chart.resize(Math.floor(width), Math.floor(height));
+      chart.timeScale().fitContent();
+    });
+    resize.observe(container);
     return () => {
+      resize.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -196,12 +207,13 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    const total = data.volByLevel.reduce((sum, bin) => sum + bin.bars, 0);
     const maxVol = data.volByLevel.reduce((max, bin) => Math.max(max, bin.vol), 0);
-    return [...data.volByLevel].reverse().map((bin) => ({
+    const volByPrice = new Map(data.volByLevel.map((bin) => [bin.price, bin.vol]));
+    return [...data.hoursByLevel].reverse().map((bin) => ({
       ...bin,
-      share: total > 0 ? bin.bars / total : 0,
-      barWidth: maxVol > 0 ? bin.vol / maxVol : 0,
+      vol: volByPrice.get(bin.price),
+      share: data.bars > 0 ? bin.bars / data.bars : 0,
+      barWidth: maxVol > 0 ? (volByPrice.get(bin.price) ?? 0) / maxVol : 0,
       containsSpot: data.spot >= bin.price && data.spot < bin.price + data.volBinSize,
     }));
   }, [data]);
@@ -237,17 +249,15 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
         </label>
       </div>
 
-      <div className={cardStyles.body}>
-        <div className={cardStyles.chartArea}>
+      <div className={styles.body}>
+        <div className={styles.chartArea}>
           <div className={cardStyles.chart} ref={containerRef} />
           {isLoading && <div className={cardStyles.overlay}>{t('loading')}</div>}
-          {isError && !data && (
-            <div className={cardStyles.overlay}>{t('unavailable')}</div>
-          )}
+          {isError && !data && <div className={cardStyles.overlay}>{t('unavailable')}</div>}
         </div>
 
         {data && (
-          <div className={cardStyles.side}>
+          <div className={styles.side}>
             <table className={cardStyles.table}>
               <thead>
                 <tr>
@@ -255,6 +265,7 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
                   <th title={t('volTitle', { n: data.volWindowHours / 24 })}>
                     {t('vol', { n: data.volWindowHours / 24 })}
                   </th>
+                  <th>{t('hours')}</th>
                   <th title={t('timeTitle')}>{t('time')}</th>
                 </tr>
               </thead>
@@ -282,9 +293,10 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
                             style={{ width: `${(row.barWidth * 100).toFixed(1)}%` }}
                           />
                         </span>
-                        {(row.vol * 100).toFixed(0)}%
+                        {row.vol == null ? '—' : `${(row.vol * 100).toFixed(0)}%`}
                       </span>
                     </td>
+                    <td>{row.bars.toLocaleString('en-US')}</td>
                     <td>{(row.share * 100).toFixed(row.share < 0.1 ? 1 : 0)}%</td>
                   </tr>
                 ))}
@@ -294,12 +306,12 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
         )}
       </div>
 
+      {data && <DailyActivity key={underlying} data={data} />}
+
       {data && (
         <div className={cardStyles.notes}>
           <p>{historyNote(data, t)}</p>
-          <p>
-            {t('volNote', { n: data.volWindowHours / 24, bin: fmtPrice(data.volBinSize) })}
-          </p>
+          <p>{t('volNote', { n: data.volWindowHours / 24, bin: fmtPrice(data.volBinSize) })}</p>
         </div>
       )}
     </div>

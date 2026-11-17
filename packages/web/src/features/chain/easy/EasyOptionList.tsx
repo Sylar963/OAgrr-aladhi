@@ -1,12 +1,12 @@
-import { Fragment, useMemo, useState, type DragEvent } from 'react';
-
-import type { EnrichedStrike } from '@shared/enriched';
-import { fmtUsd } from '@lib/format';
+import { fmtPct, fmtUsd, fmtUsdPrice } from '@lib/format';
 import { useT } from '@lib/i18n';
+import type { EnrichedStrike } from '@shared/enriched';
+import { type DragEvent, Fragment, useMemo, useState } from 'react';
 import { bestBidAsk } from '../quote-selection';
-import { EASY_OPTION_MIME, encodeDraft, type EasyLegDraft } from './easy-explain';
-import { easyMessages } from './i18n';
 import styles from './EasyChain.module.css';
+import { EASY_OPTION_MIME, type EasyLegDraft, encodeDraft } from './easy-explain';
+import { type EasyBuyPreview, easyBuyPreview, fmtTollMove } from './easy-toll';
+import { easyMessages } from './i18n';
 
 interface EasyOptionListProps {
   type: 'call' | 'put';
@@ -18,6 +18,8 @@ interface EasyOptionListProps {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onAdd: (draft: EasyLegDraft) => void;
+  preview: EasyBuyPreview | null;
+  onPreview: (draft: EasyLegDraft) => void;
 }
 
 const WINDOW_EACH_SIDE = 7;
@@ -36,6 +38,8 @@ export default function EasyOptionList({
   collapsed,
   onToggleCollapsed,
   onAdd,
+  preview,
+  onPreview,
 }: EasyOptionListProps) {
   const t = useT(easyMessages);
   const [showAll, setShowAll] = useState(false);
@@ -53,6 +57,7 @@ export default function EasyOptionList({
           buy: bba.ask,
           sell: bba.bid,
           odds: ref?.delta != null ? Math.abs(ref.delta) : null,
+          preview: easyBuyPreview(type, s.strike, side, activeSet, indexPrice, now),
         };
       })
       .filter((r) => r.buy != null || r.sell != null);
@@ -98,9 +103,7 @@ export default function EasyOptionList({
           <div className={styles.listTitle}>
             {isUp ? t('betUp', { underlying }) : t('betDown', { underlying })}
           </div>
-          <div className={styles.listSub}>
-            {isUp ? t('callsSub') : t('putsSub')}
-          </div>
+          <div className={styles.listSub}>{isUp ? t('callsSub') : t('putsSub')}</div>
         </div>
         <button
           type="button"
@@ -134,9 +137,15 @@ export default function EasyOptionList({
               <div
                 className={styles.optRow}
                 data-held={held}
+                data-preview={preview?.type === type && preview.strike === r.strike}
+                onPointerEnter={() => onPreview(buyDraft)}
+                onFocusCapture={() => onPreview(buyDraft)}
                 draggable={r.buy != null}
                 onDragStart={(e) => startDrag(e, buyDraft)}
-                title={t(isUp ? 'dragAbove' : 'dragBelow', { underlying, strike: fmtUsd(r.strike) })}
+                title={t(isUp ? 'dragAbove' : 'dragBelow', {
+                  underlying,
+                  strike: fmtUsd(r.strike),
+                })}
               >
                 <span className={styles.grip} aria-hidden>
                   ⠿
@@ -178,6 +187,24 @@ export default function EasyOptionList({
                     {t('sell')}
                   </button>
                 </span>
+                <button
+                  type="button"
+                  className={styles.rowBreakeven}
+                  onClick={() => onPreview(buyDraft)}
+                  aria-label={t('previewBuyBe', { type, strike: fmtUsdPrice(r.strike) })}
+                >
+                  <span>
+                    {t('rowBe', { price: r.preview ? fmtUsdPrice(r.preview.breakeven) : '–' })}
+                    {r.preview && <b>{fmtPct(r.preview.movePct)}</b>}
+                  </span>
+                  <span data-tone="toll">
+                    {r.preview?.toll
+                      ? t('rowToll', {
+                          move: fmtTollMove(r.preview.toll.movePct),
+                        })
+                      : t('rowTollUnavailable')}
+                  </span>
+                </button>
               </div>
             </Fragment>
           );

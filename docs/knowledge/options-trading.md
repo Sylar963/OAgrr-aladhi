@@ -18,6 +18,23 @@ read, a trained model, a validated trading system, or personalized investment ad
 
 ## Source and reading ledger
 
+2026-11-17 Easy Mode underlying-move toll: reviewed
+[OIC long call](https://prd-web.optionseducation.org/strategies/all-strategies/long-call) and
+[Montréal Exchange long put](https://www.m-x.ca/f_publications_en/strategy_long_put_en.pdf).
+Engineering derivation within the existing fixed-USD-premium expiry model: buy call BE = K + A,
+buy put BE = K − A; midpoint reference BE = K ± M, where M = (B + A)/2.
+Crossing the ask therefore adds (A − B)/2 dollars to the required underlying movement,
+or 100 × (A − B)/(2S) percentage points relative to the displayed underlying reference S.
+This is distinct from toll as a percentage of option midpoint premium. The ask already includes
+the toll; never add it again. Use the buy venue's own bid and ask, not a synthetic cross-venue
+midpoint. Invalid/missing pairs withhold toll, while a usable ask can still show expiry BE.
+The UI previews a single buy separately from the held strategy, with a proportional premium
+breakdown and amber chart band between midpoint and ask BEs. Excludes fees, extra slippage,
+size and pre-expiry repricing; fixed-USD premium is not an unhedged coin-settlement forecast.
+Regression tests reconcile both rights to zero expiry P&L, distinguish percentage denominators,
+and cover venue filters, stale/missing/crossed quotes, locked markets and pointer/keyboard preview.
+Status: sourced mechanics and engineering arithmetic. No new book chapters or trading edge.
+
 2026-11-17 TradFi activity and pricing consistency: reviewed
 [dxFeed Trade](https://docs.dxfeed.com/dxfeed/api/com/dxfeed/event/market/Trade.html),
 [dxFeed Quote](https://docs.dxfeed.com/dxfeed/api/com/dxfeed/event/market/Quote.html),

@@ -1,33 +1,33 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Spinner } from '@components/ui';
 import {
-  createChart,
-  CandlestickSeries,
-  LineSeries,
-  LineStyle,
-  ColorType,
-  type AutoscaleInfo,
-  type IChartApi,
-  type ISeriesApi,
-  type IPriceLine,
-  type UTCTimestamp,
-} from 'lightweight-charts';
-
-import {
-  pnlAtPrice,
-  useSpotCandles,
   isSpotCandleCurrency,
   type Leg,
   type PriceZone,
+  pnlAtPrice,
+  useSpotCandles,
 } from '@features/architect';
-import { Spinner } from '@components/ui';
 import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fmtUsd } from '@lib/format';
-import { intlLocale, useLocale, useT, type Locale, type Translate } from '@lib/i18n';
+import { intlLocale, type Locale, type Translate, useLocale, useT } from '@lib/i18n';
+import {
+  type AutoscaleInfo,
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
+  LineSeries,
+  LineStyle,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { DeadlinePrimitive } from './deadline-primitive';
-import { EASY_OPTION_MIME, decodeDraft, type EasyLegDraft } from './easy-explain';
-import { TIMEFRAMES, easyCandleSpec, futureTimes, type EasyTimeframe } from './future-axis';
-import { easyMessages } from './i18n';
 import styles from './EasyChain.module.css';
+import { decodeDraft, EASY_OPTION_MIME, type EasyLegDraft } from './easy-explain';
+import type { EasyBuyPreview } from './easy-toll';
+import { type EasyTimeframe, easyCandleSpec, futureTimes, TIMEFRAMES } from './future-axis';
+import { easyMessages } from './i18n';
 
 interface EasyPayoffChartProps {
   underlying: string;
@@ -38,6 +38,7 @@ interface EasyPayoffChartProps {
   breakevens: number[];
   spot: number | null;
   onDropDraft: (draft: EasyLegDraft) => void;
+  preview: EasyBuyPreview | null;
 }
 
 interface HoverReadout {
@@ -95,6 +96,7 @@ export default function EasyPayoffChart({
   breakevens,
   spot,
   onDropDraft,
+  preview,
 }: EasyPayoffChartProps) {
   const t = useT(easyMessages);
   const locale = useLocale();
@@ -105,6 +107,7 @@ export default function EasyPayoffChart({
   const deadlineRef = useRef<DeadlinePrimitive | null>(null);
   const linesRef = useRef<IPriceLine[]>([]);
   const extraPricesRef = useRef<number[]>([]);
+  const framedLevelsRef = useRef('');
   const legsRef = useRef<Leg[]>(legs);
   const lastWindowRef = useRef('');
   const [lastCandleSec, setLastCandleSec] = useState<number | null>(null);
@@ -112,6 +115,21 @@ export default function EasyPayoffChart({
   const [dragActive, setDragActive] = useState(false);
   const [timeframe, setTimeframe] = useState<EasyTimeframe>('auto');
   const [kind, setKind] = useState<ChartKind>('candles');
+  const previewType = preview?.type ?? null;
+  const previewStrike = preview?.strike ?? null;
+  const previewBreakeven = preview?.breakeven ?? null;
+  const previewMidBreakeven = preview?.toll?.breakeven ?? null;
+  const tollBand = useMemo(
+    () =>
+      previewMidBreakeven != null && previewBreakeven != null
+        ? {
+            from: previewMidBreakeven,
+            to: previewBreakeven,
+            label: t('chartToll'),
+          }
+        : null,
+    [previewMidBreakeven, previewBreakeven, t],
+  );
 
   legsRef.current = legs;
 
@@ -140,15 +158,14 @@ export default function EasyPayoffChart({
   );
   const spec = easyCandleSpec(timeframe, specLegs);
   const available = isSpotCandleCurrency(underlying);
-  const { data: candleData, isLoading, isError, isPlaceholderData } = useSpotCandles(
-    underlying,
-    spec.resolutionSec,
-    spec.buckets,
-    spec.refetchIntervalMs,
-  );
+  const {
+    data: candleData,
+    isLoading,
+    isError,
+    isPlaceholderData,
+  } = useSpotCandles(underlying, spec.resolutionSec, spec.buckets, spec.refetchIntervalMs);
   const deadlineSec = Math.floor(expiryMs / 1000);
-  const noHistory =
-    !available || (!isLoading && (isError || candleData?.candles.length === 0));
+  const noHistory = !available || (!isLoading && (isError || candleData?.candles.length === 0));
 
   useEffect(() => {
     const container = containerRef.current;
@@ -168,7 +185,12 @@ export default function EasyPayoffChart({
         vertLine: { color: '#2A2A2A', labelBackgroundColor: '#1F1F1F' },
       },
       rightPriceScale: { borderColor: '#1F2937', scaleMargins: { top: 0.08, bottom: 0.1 } },
-      timeScale: { borderColor: '#1F2937', timeVisible: true, secondsVisible: false, rightOffset: 2 },
+      timeScale: {
+        borderColor: '#1F2937',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 2,
+      },
     });
 
     const candles = chart.addSeries(CandlestickSeries, {
@@ -231,6 +253,7 @@ export default function EasyPayoffChart({
       deadlineRef.current = null;
       linesRef.current = [];
       lastWindowRef.current = '';
+      framedLevelsRef.current = '';
     };
   }, []);
 
@@ -310,8 +333,9 @@ export default function EasyPayoffChart({
       label: t('deadline', { date: fmtDeadline(expiryMs, locale) }),
       profitLabel: t('profitZone'),
       lossLabel: t('lossZone'),
+      tollBand,
     });
-  }, [zones, legs, lastCandleSec, deadlineSec, expiryMs, t, locale]);
+  }, [zones, legs, lastCandleSec, deadlineSec, expiryMs, t, locale, tollBand]);
 
   useEffect(() => {
     const candles = candleRef.current;
@@ -344,9 +368,39 @@ export default function EasyPayoffChart({
       );
     }
 
-    extraPricesRef.current = [...legs.map((l) => l.strike), ...breakevens];
-    chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
-  }, [legs, breakevens, t]);
+    if (previewStrike != null && previewBreakeven != null) {
+      const levels = [
+        { price: previewStrike, title: t('previewTarget'), color: '#9CA3AF' },
+        ...(previewMidBreakeven != null
+          ? [{ price: previewMidBreakeven, title: t('previewMidBe'), color: '#A38D55' }]
+          : []),
+        { price: previewBreakeven, title: t('previewAskBe'), color: '#F0B90B' },
+      ];
+      for (const level of levels) {
+        linesRef.current.push(
+          candles.createPriceLine({
+            ...level,
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+          }),
+        );
+      }
+    }
+
+    extraPricesRef.current = [
+      ...legs.map((l) => l.strike),
+      ...breakevens,
+      ...(previewStrike != null && previewBreakeven != null
+        ? [previewStrike, previewBreakeven]
+        : []),
+    ];
+    const frameKey = JSON.stringify([legs, breakevens, previewType, previewStrike]);
+    if (frameKey !== framedLevelsRef.current) {
+      framedLevelsRef.current = frameKey;
+      chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
+    }
+  }, [legs, breakevens, t, previewType, previewStrike, previewBreakeven, previewMidBreakeven]);
 
   function acceptsDrag(e: DragEvent): boolean {
     return e.dataTransfer.types.includes(EASY_OPTION_MIME);
@@ -390,7 +444,15 @@ export default function EasyPayoffChart({
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
                 <path d="M4 2v3M4 11v3M12 1v4M12 10v5" stroke="currentColor" strokeWidth="1.3" />
                 <rect x="2.5" y="5" width="3" height="6" fill="currentColor" />
-                <rect x="10.5" y="5" width="3" height="5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                <rect
+                  x="10.5"
+                  y="5"
+                  width="3"
+                  height="5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
               </svg>
             </button>
             <button
@@ -401,7 +463,12 @@ export default function EasyPayoffChart({
               aria-label={t('line')}
             >
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-                <path d="M1 12l4-5 3 3 3-6 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                <path
+                  d="M1 12l4-5 3 3 3-6 4 4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
               </svg>
             </button>
           </div>
@@ -421,14 +488,14 @@ export default function EasyPayoffChart({
               </button>
             ))}
           </div>
-          {spot != null && <span className={styles.toolSpot}>{underlying} {fmtUsd(spot)}</span>}
+          {spot != null && (
+            <span className={styles.toolSpot}>
+              {underlying} {fmtUsd(spot)}
+            </span>
+          )}
         </div>
 
-        {noHistory && (
-          <div className={styles.chartNotice}>
-            {t('noHistory', { underlying })}
-          </div>
-        )}
+        {noHistory && <div className={styles.chartNotice}>{t('noHistory', { underlying })}</div>}
         {available && isLoading && (
           <div className={styles.chartNotice}>
             <Spinner size="lg" />

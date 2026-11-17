@@ -1,3 +1,4 @@
+import type { PriceZone } from '@features/architect';
 import type {
   IPrimitivePaneRenderer,
   IPrimitivePaneView,
@@ -8,8 +9,6 @@ import type {
   SeriesType,
   Time,
 } from 'lightweight-charts';
-
-import type { PriceZone } from '@features/architect';
 
 type DrawTarget = Parameters<IPrimitivePaneRenderer['draw']>[0];
 
@@ -35,6 +34,13 @@ interface Geometry {
   profitLabel: string;
   lossLabel: string;
   markers: { y: number; side: 'up' | 'down'; sell: boolean }[];
+  tollBand: { top: number; bottom: number; label: string } | null;
+}
+
+interface TollBand {
+  from: number;
+  to: number;
+  label: string;
 }
 
 const PROFIT = '0, 233, 151';
@@ -45,8 +51,7 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly geo: Geometry) {}
 
   drawBackground(target: DrawTarget): void {
-    const { zones, nowX, deadlineX } = this.geo;
-    if (zones.length === 0) return;
+    const { zones, nowX, deadlineX, tollBand } = this.geo;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       const futureLeft = nowX ?? mediaSize.width;
       const futureRight = deadlineX ?? mediaSize.width;
@@ -58,7 +63,11 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
         const weak = z.profit ? 0.04 : 0.02;
         const grad = ctx.createLinearGradient(0, z.top, 0, z.bottom);
         const [startA, endA] =
-          z.innerEdge === 'bottom' ? [strong, weak] : z.innerEdge === 'top' ? [weak, strong] : [strong, strong];
+          z.innerEdge === 'bottom'
+            ? [strong, weak]
+            : z.innerEdge === 'top'
+              ? [weak, strong]
+              : [strong, strong];
         grad.addColorStop(0, `rgba(${rgb}, ${startA})`);
         grad.addColorStop(1, `rgba(${rgb}, ${endA})`);
         ctx.fillStyle = grad;
@@ -70,11 +79,20 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
         }
         ctx.globalAlpha = 1;
       }
+      if (tollBand && futureRight > futureLeft) {
+        ctx.fillStyle = 'rgba(240, 185, 11, 0.24)';
+        ctx.fillRect(
+          futureLeft,
+          tollBand.top,
+          futureRight - futureLeft,
+          tollBand.bottom - tollBand.top,
+        );
+      }
     });
   }
 
   draw(target: DrawTarget): void {
-    const { zones, deadlineX, nowX, label, profitLabel, lossLabel, markers } = this.geo;
+    const { zones, deadlineX, nowX, label, profitLabel, lossLabel, markers, tollBand } = this.geo;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.font = "700 10px 'IBM Plex Mono', monospace";
 
@@ -86,6 +104,31 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
         ctx.textAlign = 'left';
         ctx.fillStyle = `rgba(${z.profit ? PROFIT : LOSS}, 0.85)`;
         ctx.fillText(z.profit ? profitLabel : lossLabel, 10, y);
+      }
+
+      if (tollBand && deadlineX != null && nowX != null && deadlineX > nowX) {
+        const x = Math.min(deadlineX - 12, mediaSize.width - 12);
+        if (x > Math.max(nowX, 0)) {
+          ctx.strokeStyle = '#F0B90B';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x - 5, tollBand.top);
+          ctx.lineTo(x, tollBand.top);
+          ctx.lineTo(x, tollBand.bottom);
+          ctx.lineTo(x - 5, tollBand.bottom);
+          ctx.stroke();
+          if (tollBand.bottom - tollBand.top > 18) {
+            ctx.fillStyle = '#F0B90B';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              tollBand.label,
+              x - 8,
+              (tollBand.top + tollBand.bottom) / 2,
+              Math.max(0, x - Math.max(nowX, 0) - 14),
+            );
+          }
+        }
       }
 
       if (deadlineX != null && deadlineX <= mediaSize.width + BAR_W) {
@@ -146,6 +189,7 @@ class DeadlinePaneView implements IPrimitivePaneView {
     profitLabel: '',
     lossLabel: '',
     markers: [],
+    tollBand: null,
   };
 
   zOrder(): PrimitivePaneViewZOrder {
@@ -170,6 +214,7 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
   private label = '';
   private profitLabel = '';
   private lossLabel = '';
+  private tollBand: TollBand | null = null;
   private param: SeriesAttachedParameter<Time, SeriesType> | null = null;
   private readonly view = new DeadlinePaneView();
   private readonly views: readonly IPrimitivePaneView[] = [this.view];
@@ -191,6 +236,7 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
     label: string;
     profitLabel: string;
     lossLabel: string;
+    tollBand?: TollBand | null;
   }): void {
     this.zones = state.zones;
     this.markers = state.markers;
@@ -199,6 +245,7 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
     this.label = state.label;
     this.profitLabel = state.profitLabel;
     this.lossLabel = state.lossLabel;
+    this.tollBand = state.tollBand ?? null;
     this.refresh();
     this.param?.requestUpdate();
   }
@@ -227,6 +274,8 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
       const y = series.priceToCoordinate(m.price);
       if (y != null) markers.push({ y: Number(y), side: m.side, sell: m.sell });
     }
+    const tollFrom = this.tollBand ? series.priceToCoordinate(this.tollBand.from) : null;
+    const tollTo = this.tollBand ? series.priceToCoordinate(this.tollBand.to) : null;
 
     this.view.geo = {
       zones: pixelZones(this.zones, series, height),
@@ -236,6 +285,14 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
       profitLabel: this.profitLabel,
       lossLabel: this.lossLabel,
       markers,
+      tollBand:
+        this.tollBand && tollFrom != null && tollTo != null
+          ? {
+              top: Math.min(height, Math.max(0, Math.min(Number(tollFrom), Number(tollTo)))),
+              bottom: Math.max(0, Math.min(height, Math.max(Number(tollFrom), Number(tollTo)))),
+              label: this.tollBand.label,
+            }
+          : null,
     };
   }
 }

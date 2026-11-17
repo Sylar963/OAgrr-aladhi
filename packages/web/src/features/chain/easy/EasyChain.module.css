@@ -158,7 +158,10 @@
 }
 
 .optRow {
-  height: 38px;
+  min-height: 62px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  row-gap: 3px;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
@@ -177,6 +180,43 @@
 .optRow[data-held="true"] {
   background: color-mix(in srgb, var(--side) 12%, transparent);
   box-shadow: inset 2px 0 0 var(--side);
+}
+
+.optRow[data-preview="true"] {
+  outline: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--color-warning) 5%, transparent);
+}
+
+.rowBreakeven {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowBreakeven b {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.rowBreakeven [data-tone="toll"] {
+  color: var(--color-warning);
+}
+
+.rowBreakeven:focus-visible {
+  outline: 1px solid var(--color-warning);
+  outline-offset: 3px;
 }
 
 .grip {
@@ -297,6 +337,122 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+.tollPreview {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 3%, var(--bg-surface));
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tollHeader,
+.tollBreakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  font-size: var(--text-2xs);
+}
+
+.tollEyebrow {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.tollVenue {
+  margin-left: 10px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.tollMove {
+  color: var(--text-tertiary);
+}
+
+.tollMove b {
+  margin-left: 6px;
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+}
+
+.tollLevels {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tollLevels div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tollLevels div:nth-child(2) {
+  text-align: center;
+}
+
+.tollLevels div:last-child {
+  text-align: right;
+}
+
+.tollLevels span {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+.tollLevels b {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.tollLevels [data-tone="toll"] b,
+.tollBreakdown b {
+  color: var(--color-warning);
+}
+
+.tollRail {
+  display: flex;
+  height: 7px;
+  gap: 2px;
+  margin: 6px 0;
+}
+
+.tollRail span:first-child {
+  background: var(--text-dim);
+}
+
+.tollRail span:last-child:not(:first-child) {
+  background: repeating-linear-gradient(
+    120deg,
+    var(--color-warning) 0 3px,
+    color-mix(in srgb, var(--color-warning) 45%, transparent) 3px 6px
+  );
+}
+
+.tollRail[data-unavailable="true"] span {
+  background: var(--border-default);
+}
+
+.tollBreakdown {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.tollNote {
+  margin: 5px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
 }
 
 .chartFrame {

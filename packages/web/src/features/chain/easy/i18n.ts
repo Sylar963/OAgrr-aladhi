@@ -30,6 +30,28 @@ export const easyMessages = defineMessages(
     sell: 'sell',
     showFewer: 'Show fewer targets ▴',
     showAll: 'Show all targets ▾',
+    tollPreview: 'Toll & break-even preview',
+    tollChoose:
+      'Point to a target or focus its break-even button to preview the cost of buying it.',
+    buyPreview: 'BUY PREVIEW · {type} {strike}',
+    moveToBe: '{underlying} move to break even',
+    midBe: 'Break-even at mid',
+    buyBe: 'Break-even at ask',
+    premiumToRecover: 'Target → break-even: {price} premium',
+    extraTollMove: 'TOLL {price} · {move} extra underlying move',
+    tollUnavailable: 'TOLL unavailable',
+    tollBasis:
+      'One option at expiry, USD premium held fixed · midpoint reference, not a guaranteed fill. Amber = same-venue half-spread already in the ask. Fees and extra slippage excluded; coin-settled outcomes can differ.',
+    tollMissingBasis:
+      'One option at expiry, USD premium held fixed · valid same-venue bid/ask required to isolate the toll. Fees and extra slippage excluded; coin-settled outcomes can differ.',
+    previewBuyBe: 'Preview buying {type} {strike}: break-even and toll',
+    rowBe: 'BE {price}',
+    rowToll: 'Toll adds {move} move',
+    rowTollUnavailable: 'Toll –',
+    previewTarget: 'PREVIEW TARGET',
+    previewMidBe: 'PREVIEW MID BE',
+    previewAskBe: 'PREVIEW BUY BE',
+    chartToll: 'BUY PREVIEW TOLL',
 
     step1Title: 'Pick a direction.',
     step1Use: 'Use the',
@@ -82,7 +104,8 @@ export const easyMessages = defineMessages(
     blurbLongPut: 'A bet that the price goes down. Your risk is limited to what you paid.',
     blurbShortCall:
       'You get paid to bet the price will NOT rise much. Losses can be unlimited if it rallies.',
-    blurbShortPut: 'You get paid to bet the price will NOT fall much. A big drop can mean a big loss.',
+    blurbShortPut:
+      'You get paid to bet the price will NOT fall much. A big drop can mean a big loss.',
     blurbBullCallSpread:
       'A cheaper bet on the price going up. Both your profit and your loss are capped.',
     blurbBearCallSpread:
@@ -91,7 +114,8 @@ export const easyMessages = defineMessages(
       'A cheaper bet on the price going down. Both your profit and your loss are capped.',
     blurbBullPutSpread:
       'You get paid upfront if the price stays above a level. Both profit and loss are capped.',
-    blurbLongStraddle: 'A bet on a BIG move in either direction. You lose if the price stays still.',
+    blurbLongStraddle:
+      'A bet on a BIG move in either direction. You lose if the price stays still.',
     blurbLongStrangle:
       'A cheaper bet on a BIG move in either direction. The move needs to be bigger.',
     blurbShortStraddle:
@@ -146,17 +170,41 @@ export const easyMessages = defineMessages(
     collapseList: 'Contraer lista',
     collapse: 'Contraer',
     target: 'Objetivo',
-    oddsTip: 'Probabilidad implícita del mercado de que esta opción termine in the money (según delta)',
+    oddsTip:
+      'Probabilidad implícita del mercado de que esta opción termine in the money (según delta)',
     odds: 'Prob.',
     cost: 'Costo',
     spotNow: '{underlying} ahora {price}',
-    dragAbove: 'Arrástrala al gráfico para comprar. Paga si {underlying} termina por encima de {strike}.',
-    dragBelow: 'Arrástrala al gráfico para comprar. Paga si {underlying} termina por debajo de {strike}.',
+    dragAbove:
+      'Arrástrala al gráfico para comprar. Paga si {underlying} termina por encima de {strike}.',
+    dragBelow:
+      'Arrástrala al gráfico para comprar. Paga si {underlying} termina por debajo de {strike}.',
     buyTip: 'Comprar: pagas esta prima y tu riesgo se limita a ella',
     sellTip: 'Vender: cobras {price} ahora, pero asumes el riesgo',
     sell: 'vender',
     showFewer: 'Mostrar menos objetivos ▴',
     showAll: 'Mostrar todos los objetivos ▾',
+    tollPreview: 'Vista previa del peaje y breakeven',
+    tollChoose: 'Señala un objetivo o enfoca su botón de breakeven para ver el costo de comprarlo.',
+    buyPreview: 'VISTA DE COMPRA · {type} {strike}',
+    moveToBe: 'Movimiento de {underlying} al breakeven',
+    midBe: 'Breakeven al punto medio',
+    buyBe: 'Breakeven al ask',
+    premiumToRecover: 'Objetivo → breakeven: {price} de prima',
+    extraTollMove: 'PEAJE {price} · {move} de movimiento adicional',
+    tollUnavailable: 'PEAJE no disponible',
+    tollBasis:
+      'Una opción al vencimiento, prima USD fija · punto medio de referencia, sin ejecución garantizada. Ámbar = medio spread del mismo venue ya incluido en el ask. Excluye comisiones y deslizamiento adicional; la liquidación en cripto puede diferir.',
+    tollMissingBasis:
+      'Una opción al vencimiento, prima USD fija · se requiere bid/ask válido del mismo venue para aislar el peaje. Excluye comisiones y deslizamiento adicional; la liquidación en cripto puede diferir.',
+    previewBuyBe: 'Vista de compra {type} {strike}: breakeven y peaje',
+    rowBe: 'BE {price}',
+    rowToll: 'Peaje añade {move} de movimiento',
+    rowTollUnavailable: 'Peaje –',
+    previewTarget: 'OBJETIVO PREVIO',
+    previewMidBe: 'BE MEDIO PREVIO',
+    previewAskBe: 'BE COMPRA PREVIO',
+    chartToll: 'PEAJE DE COMPRA',
 
     step1Title: 'Elige una dirección.',
     step1Use: 'Usa la lista',

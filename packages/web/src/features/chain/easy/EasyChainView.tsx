@@ -1,22 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-
-import {
-  computeMetrics,
-  detectStrategy,
-  useStrategyStore,
-  type Leg,
-} from '@features/architect';
-import type { EnrichedChainResponse } from '@shared/enriched';
-import { useAppStore } from '@stores/app-store';
+import { computeMetrics, detectStrategy, type Leg, useStrategyStore } from '@features/architect';
 import { dteDays } from '@lib/format';
 import { useT } from '@lib/i18n';
+import type { EnrichedChainResponse } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bestBidAsk } from '../quote-selection';
+import styles from './EasyChain.module.css';
 import EasyOptionList, { draftKey } from './EasyOptionList';
 import EasyPayoffChart from './EasyPayoffChart';
 import EasyPositionPanel from './EasyPositionPanel';
-import { chanceOfProfit, profitZones, type EasyLegDraft } from './easy-explain';
+import EasyTollPreview from './EasyTollPreview';
+import { chanceOfProfit, type EasyLegDraft, profitZones } from './easy-explain';
+import { easyBuyPreview } from './easy-toll';
 import { easyMessages } from './i18n';
-import styles from './EasyChain.module.css';
 
 interface EasyChainViewProps {
   chain: EnrichedChainResponse;
@@ -39,6 +35,12 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
   const [upCollapsed, setUpCollapsed] = useState(false);
   const [downCollapsed, setDownCollapsed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<{
+    underlying: string;
+    expiry: string;
+    type: 'call' | 'put';
+    strike: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!notice) return;
@@ -53,6 +55,40 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
   const activeSet = useMemo(() => new Set(activeVenues), [activeVenues]);
   const spot = chain.stats.indexPriceUsd ?? chain.stats.forwardPriceUsd;
   const forward = chain.stats.forwardPriceUsd ?? spot;
+  const preview = useMemo(() => {
+    const target =
+      previewTarget?.underlying === underlying && previewTarget.expiry === chain.expiry
+        ? previewTarget
+        : null;
+    if (target) {
+      const row = chain.strikes.find((s) => s.strike === target.strike);
+      return row
+        ? easyBuyPreview(target.type, row.strike, row[target.type], activeSet, spot)
+        : null;
+    }
+    if (spot == null) return null;
+    const nearest = [...chain.strikes].sort(
+      (a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot),
+    );
+    for (const row of nearest) {
+      const available = easyBuyPreview('call', row.strike, row.call, activeSet, spot);
+      if (available) return available;
+    }
+    return null;
+  }, [previewTarget, underlying, chain, activeSet, spot]);
+  const handlePreview = useCallback(
+    (draft: EasyLegDraft) => {
+      setPreviewTarget((current) =>
+        current?.underlying === underlying &&
+        current.expiry === chain.expiry &&
+        current.type === draft.type &&
+        current.strike === draft.strike
+          ? current
+          : { underlying, expiry: chain.expiry, type: draft.type, strike: draft.strike },
+      );
+    },
+    [underlying, chain.expiry],
+  );
 
   const quote = useCallback(
     (draft: EasyLegDraft): Omit<Leg, 'id'> | null => {
@@ -109,7 +145,9 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
     (leg: Leg) => {
       const direction = leg.direction === 'buy' ? 'sell' : 'buy';
       const fresh =
-        leg.expiry === chain.expiry ? quote({ type: leg.type, direction, strike: leg.strike }) : null;
+        leg.expiry === chain.expiry
+          ? quote({ type: leg.type, direction, strike: leg.strike })
+          : null;
       if (leg.expiry === chain.expiry && !fresh) {
         setNotice(
           t('noLiveQuoteFlip', {
@@ -171,6 +209,8 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
         collapsed={upCollapsed}
         onToggleCollapsed={() => setUpCollapsed((v) => !v)}
         onAdd={handleAdd}
+        preview={preview}
+        onPreview={handlePreview}
       />
 
       <div className={styles.center}>
@@ -183,7 +223,9 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
           breakevens={breakevens}
           spot={spot}
           onDropDraft={handleAdd}
+          preview={preview}
         />
+        <EasyTollPreview preview={preview} underlying={underlying} />
         <EasyPositionPanel
           underlying={underlying}
           legs={legs}
@@ -210,6 +252,8 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
         collapsed={downCollapsed}
         onToggleCollapsed={() => setDownCollapsed((v) => !v)}
         onAdd={handleAdd}
+        preview={preview}
+        onPreview={handlePreview}
       />
     </div>
   );

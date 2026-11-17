@@ -1,33 +1,30 @@
+import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
+import { fetchJson } from '@lib/http';
+import { defineMessages, useT } from '@lib/i18n';
+import type { GexWallHistoryResponse } from '@oggregator/protocol';
+import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@shared/common';
+import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CandlestickSeries,
   ColorType,
-  LineStyle,
-  LineSeries,
   createChart,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  LineSeries,
+  LineStyle,
+  type MouseEventParams,
   type Time,
 } from 'lightweight-charts';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
-
-import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
-import { fetchJson } from '@lib/http';
-import { defineMessages, useT } from '@lib/i18n';
-import type {
-  SpotCandleCurrency,
-  SpotCandleResolutionSec,
-} from '@shared/common';
-import type { GexProfilePoint, GexStrike } from '@shared/enriched';
-import type { GexWallHistoryResponse } from '@oggregator/protocol';
-
-import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
-import { alignWallHistory, gexKeltner } from './gex-wall-history';
-import { computeGammaWalls } from './gex-wall-utils';
 import { atrChannel } from './atr-channel';
+import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
 import styles from './GexView.module.css';
+import { gammaAtPrice, gammaHeatmap } from './gamma-heatmap';
+import { alignWallHistory, gexKeltner } from './gex-wall-history';
+import { computeGammaWalls, formatGexM } from './gex-wall-utils';
 
 type Timeframe = '1d' | '3d' | '7d' | '30d' | '90d';
 
@@ -48,21 +45,33 @@ const DEFAULT_TIMEFRAME: Timeframe = '3d';
 const EMPTY_WALLS = { callWall: null, putWall: null, gammaFlip: null };
 const CandleResponseSchema = z.object({
   currency: z.string(),
-  resolution: z.union([z.literal(60), z.literal(300), z.literal(900), z.literal(1800), z.literal(3600), z.literal(14400), z.literal(86400)]),
+  resolution: z.union([
+    z.literal(60),
+    z.literal(300),
+    z.literal(900),
+    z.literal(1800),
+    z.literal(3600),
+    z.literal(14400),
+    z.literal(86400),
+  ]),
   count: z.number().int().nonnegative(),
-  candles: z.array(z.object({
-    timestamp: z.number().int(),
-    open: z.number().positive(),
-    high: z.number().positive(),
-    low: z.number().positive(),
-    close: z.number().positive(),
-    volume: z.number().nonnegative().optional(),
-  }).refine(c => c.low <= Math.min(c.open, c.close) && c.high >= Math.max(c.open, c.close))),
+  candles: z.array(
+    z
+      .object({
+        timestamp: z.number().int(),
+        open: z.number().positive(),
+        high: z.number().positive(),
+        low: z.number().positive(),
+        close: z.number().positive(),
+        volume: z.number().nonnegative().optional(),
+      })
+      .refine((c) => c.low <= Math.min(c.open, c.close) && c.high >= Math.max(c.open, c.close)),
+  ),
 });
 
 const SPOT_COLOR = '#50D2C1';
 // Share of the visible window reserved right of the last candle for the live walls.
-const PROJECTION_FRACTION = 0.15;
+const PROJECTION_FRACTION = 0.3;
 const MIN_PROJECTION_BARS = 8;
 // Counted in candles, like a chart-platform Keltner length.
 const KELTNER_LENGTH = 130;
@@ -75,9 +84,11 @@ function useGexSpotCandles(
   return useQuery({
     queryKey: ['spot-candles', currency, resolution, buckets],
     queryFn: async () =>
-      CandleResponseSchema.parse(await fetchJson<unknown>(
-        `/spot-candles?currency=${currency}&resolution=${resolution}&buckets=${buckets}`,
-      )),
+      CandleResponseSchema.parse(
+        await fetchJson<unknown>(
+          `/spot-candles?currency=${currency}&resolution=${resolution}&buckets=${buckets}`,
+        ),
+      ),
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: (prev) => prev,
@@ -113,7 +124,19 @@ const messages = defineMessages(
     length: 'EMA / ATR length',
     multiplier: 'ATR multiplier',
     gammaOverlay: 'Live gamma levels',
-    noteAtr: 'EMA {length} ± {multiplier} × Wilder ATR {length} · {interval} candles · fixed from previous close',
+    heatmap: 'Heatmap',
+    levels: 'Levels',
+    opacity: 'Heatmap opacity',
+    heatmapScale: 'Net GEX · $M / 1% move',
+    heatmapNote:
+      'Right of candles: latest net gamma across simulated spot prices · IV and positions fixed · no historical heatmap',
+    heatmapUnavailable: 'Gamma profile unavailable · showing levels only',
+    heatmapRange:
+      'Color scale uses the full price profile; brightness shows magnitude, with one scale for both signs.',
+    heatmapHover: 'Hover or tap the heatmap to inspect gamma at a price',
+    heatmapValue: 'Net Γ at {price}',
+    noteAtr:
+      'EMA {length} ± {multiplier} × Wilder ATR {length} · {interval} candles · fixed from previous close',
   },
   {
     callWall: 'Γ POSITIVO ARRIBA',
@@ -131,7 +154,19 @@ const messages = defineMessages(
     length: 'Períodos EMA / ATR',
     multiplier: 'Multiplicador ATR',
     gammaOverlay: 'Niveles gamma en vivo',
-    noteAtr: 'EMA {length} ± {multiplier} × ATR Wilder {length} · velas {interval} · fijado al cierre anterior',
+    heatmap: 'Mapa de calor',
+    levels: 'Niveles',
+    opacity: 'Opacidad del mapa de calor',
+    heatmapScale: 'GEX neto · $M / movimiento del 1%',
+    heatmapNote:
+      'A la derecha de las velas: gamma neto actual por precio spot simulado · IV y posiciones fijas · sin mapa histórico',
+    heatmapUnavailable: 'Perfil gamma no disponible · solo niveles',
+    heatmapRange:
+      'La escala usa el perfil de precios completo; el brillo indica magnitud, con la misma escala para ambos signos.',
+    heatmapHover: 'Pasa el cursor o toca el mapa para consultar el gamma a un precio',
+    heatmapValue: 'Γ neto a {price}',
+    noteAtr:
+      'EMA {length} ± {multiplier} × ATR Wilder {length} · velas {interval} · fijado al cierre anterior',
   },
 );
 
@@ -158,17 +193,25 @@ export default function GexBandsChart({
   const [draftLength, setDraftLength] = useState('60');
   const [draftMultiplier, setDraftMultiplier] = useState('3');
   const [gammaOverlay, setGammaOverlay] = useState(true);
+  const [gammaDisplay, setGammaDisplay] = useState<'heatmap' | 'levels'>('heatmap');
+  const [heatmapOpacity, setHeatmapOpacity] = useState(65);
+  const [hoverPrice, setHoverPrice] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
   const bandsRef = useRef<GammaBandsPrimitive | null>(null);
-  const atrSeriesRef = useRef<Record<'basis' | 'upper' | 'lower', ISeriesApi<'Line', Time>> | null>(null);
+  const atrSeriesRef = useRef<Record<'basis' | 'upper' | 'lower', ISeriesApi<'Line', Time>> | null>(
+    null,
+  );
   const spotLineRef = useRef<IPriceLine | null>(null);
   const didFitRef = useRef(false);
 
   const tfSpec = TIMEFRAMES[timeframe];
-  const buckets = Math.min(3000, Math.max(tfSpec.buckets, Math.ceil(tfSpec.windowSec / tfSpec.resolution) + length * 5));
+  const buckets = Math.min(
+    3000,
+    Math.max(tfSpec.buckets, Math.ceil(tfSpec.windowSec / tfSpec.resolution) + length * 5),
+  );
   const {
     data: candleData,
     isLoading: candlesLoading,
@@ -181,6 +224,10 @@ export default function GexBandsChart({
     () => computeGammaWalls(gex, spotPrice, gexProfile),
     [gex, spotPrice, gexProfile],
   );
+  const heatmap = useMemo(() => gammaHeatmap(gexProfile, spotPrice), [gexProfile, spotPrice]);
+  const showHeatmap = gammaOverlay && gammaDisplay === 'heatmap' && !candlesStale;
+  const hoverGamma =
+    showHeatmap && hoverPrice != null ? gammaAtPrice(heatmap.points, hoverPrice) : null;
 
   const { data: historyData } = useGexWallHistory(
     currency,
@@ -201,7 +248,7 @@ export default function GexBandsChart({
   );
   const candleTimes = useMemo(() => candleCloses.map((c) => c.time), [candleCloses]);
   const volatilityChannel = useMemo(
-    () => candlesStale ? [] : atrChannel(candleCloses, length, multiplier, tfSpec.resolution),
+    () => (candlesStale ? [] : atrChannel(candleCloses, length, multiplier, tfSpec.resolution)),
     [candlesStale, candleCloses, length, multiplier, tfSpec.resolution],
   );
   const history = useMemo(
@@ -253,7 +300,11 @@ export default function GexBandsChart({
     chartRef.current = chart;
     seriesRef.current = series;
     bandsRef.current = bands;
-    const lineOptions = { lineWidth: 2 as const, priceLineVisible: false, crosshairMarkerVisible: true };
+    const lineOptions = {
+      lineWidth: 2 as const,
+      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+    };
     atrSeriesRef.current = {
       upper: chart.addSeries(LineSeries, { ...lineOptions, color: CALL_WALL_COLOR }),
       lower: chart.addSeries(LineSeries, { ...lineOptions, color: PUT_WALL_COLOR }),
@@ -317,17 +368,63 @@ export default function GexBandsChart({
   }, [candleData, candlesStale, tfSpec]);
 
   useEffect(() => {
-    const anchor = candleTimes.length > 0 ? candleTimes[candleTimes.length - 1]! : null;
-    bandsRef.current?.update(mode === 'gamma' ? history : [], gammaOverlay ? walls : EMPTY_WALLS, anchor);
+    const anchor =
+      !candlesStale && candleTimes.length > 0 ? candleTimes[candleTimes.length - 1]! : null;
+    bandsRef.current?.update(
+      mode === 'gamma' ? history : [],
+      gammaOverlay ? walls : EMPTY_WALLS,
+      anchor,
+    );
+    bandsRef.current?.setHeatmap(
+      showHeatmap ? { ...heatmap, opacity: heatmapOpacity / 100 } : null,
+    );
     const series = atrSeriesRef.current;
     if (!series) return;
     for (const key of ['basis', 'upper', 'lower'] as const) {
       series[key].applyOptions({ visible: mode === 'atr' });
-      series[key].setData(mode === 'atr' ? volatilityChannel.map(point => point[key] == null
-        ? { time: point.time as Time }
-        : { time: point.time as Time, value: point[key] }) : []);
+      series[key].setData(
+        mode === 'atr'
+          ? volatilityChannel.map((point) =>
+              point[key] == null
+                ? { time: point.time as Time }
+                : { time: point.time as Time, value: point[key] },
+            )
+          : [],
+      );
     }
-  }, [history, walls, candleTimes, mode, gammaOverlay, volatilityChannel]);
+  }, [
+    history,
+    walls,
+    candleTimes,
+    mode,
+    gammaOverlay,
+    volatilityChannel,
+    candlesStale,
+    showHeatmap,
+    heatmap,
+    heatmapOpacity,
+  ]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+    const onCrosshair = (event: MouseEventParams<Time>) => {
+      const anchor = candleTimes.at(-1);
+      const x = anchor == null ? null : chart.timeScale().timeToCoordinate(anchor as Time);
+      if (!showHeatmap || !event.point || x == null || event.point.x < x) {
+        setHoverPrice(null);
+        return;
+      }
+      setHoverPrice(series.coordinateToPrice(event.point.y));
+    };
+    chart.subscribeCrosshairMove(onCrosshair);
+    chart.subscribeClick(onCrosshair);
+    return () => {
+      chart.unsubscribeCrosshairMove(onCrosshair);
+      chart.unsubscribeClick(onCrosshair);
+    };
+  }, [candleTimes, showHeatmap]);
 
   useEffect(() => {
     bandsRef.current?.setLabels({
@@ -361,48 +458,120 @@ export default function GexBandsChart({
     <div>
       <div className={styles.bandsControls}>
         <div className={styles.bandsToggle}>
-          {(['atr', 'gamma'] as const).map(value => (
-            <button key={value} type="button" className={styles.bandsTab}
-              data-active={mode === value || undefined} aria-pressed={mode === value}
-              onClick={() => setMode(value)}>
+          {(['atr', 'gamma'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={styles.bandsTab}
+              data-active={mode === value || undefined}
+              aria-pressed={mode === value}
+              onClick={() => setMode(value)}
+            >
               {t(value === 'atr' ? 'atrChannel' : 'gammaHistory')}
             </button>
           ))}
         </div>
-        {mode === 'atr' && <>
-          <label className={styles.bandsField}>
-            {t('length')}
-            <input type="number" min={2} max={250} step={1} value={draftLength}
-              onChange={event => {
-                setDraftLength(event.target.value);
-                const value = Number(event.target.value);
-                if (Number.isInteger(value) && value >= 2 && value <= 250) setLength(value);
-              }} onBlur={() => setDraftLength(String(length))} />
-          </label>
-          <label className={styles.bandsField}>
-            {t('multiplier')}
-            <input type="number" min={0.5} max={10} step={0.25} value={draftMultiplier}
-              onChange={event => {
-                setDraftMultiplier(event.target.value);
-                const value = Number(event.target.value);
-                if (Number.isFinite(value) && value >= 0.5 && value <= 10) setMultiplier(value);
-              }} onBlur={() => setDraftMultiplier(String(multiplier))} />
-          </label>
-          <div className={styles.bandsToggle}>
-            {([[60, 3], [130, 4]] as const).map(([period, factor]) => (
-              <button key={`${period}/${factor}`} type="button" className={styles.bandsTab}
-                data-active={length === period && multiplier === factor || undefined}
-                onClick={() => {
-                  setLength(period); setDraftLength(String(period));
-                  setMultiplier(factor); setDraftMultiplier(String(factor));
-                }}>{period} / {factor}</button>
-            ))}
-          </div>
-        </>}
+        {mode === 'atr' && (
+          <>
+            <label className={styles.bandsField}>
+              {t('length')}
+              <input
+                type="number"
+                min={2}
+                max={250}
+                step={1}
+                value={draftLength}
+                onChange={(event) => {
+                  setDraftLength(event.target.value);
+                  const value = Number(event.target.value);
+                  if (Number.isInteger(value) && value >= 2 && value <= 250) setLength(value);
+                }}
+                onBlur={() => setDraftLength(String(length))}
+              />
+            </label>
+            <label className={styles.bandsField}>
+              {t('multiplier')}
+              <input
+                type="number"
+                min={0.5}
+                max={10}
+                step={0.25}
+                value={draftMultiplier}
+                onChange={(event) => {
+                  setDraftMultiplier(event.target.value);
+                  const value = Number(event.target.value);
+                  if (Number.isFinite(value) && value >= 0.5 && value <= 10) setMultiplier(value);
+                }}
+                onBlur={() => setDraftMultiplier(String(multiplier))}
+              />
+            </label>
+            <div className={styles.bandsToggle}>
+              {(
+                [
+                  [60, 3],
+                  [130, 4],
+                ] as const
+              ).map(([period, factor]) => (
+                <button
+                  key={`${period}/${factor}`}
+                  type="button"
+                  className={styles.bandsTab}
+                  data-active={(length === period && multiplier === factor) || undefined}
+                  onClick={() => {
+                    setLength(period);
+                    setDraftLength(String(period));
+                    setMultiplier(factor);
+                    setDraftMultiplier(String(factor));
+                  }}
+                >
+                  {period} / {factor}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <label className={styles.bandsField}>
-          <input type="checkbox" checked={gammaOverlay} onChange={event => setGammaOverlay(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={gammaOverlay}
+            onChange={(event) => setGammaOverlay(event.target.checked)}
+          />
           {t('gammaOverlay')}
         </label>
+        {gammaOverlay && (
+          <>
+            <div className={styles.bandsToggle}>
+              {(['heatmap', 'levels'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={styles.bandsTab}
+                  data-active={gammaDisplay === value || undefined}
+                  aria-pressed={gammaDisplay === value}
+                  onClick={() => setGammaDisplay(value)}
+                >
+                  {t(value)}
+                </button>
+              ))}
+            </div>
+            {gammaDisplay === 'heatmap' && (
+              <label className={styles.bandsField}>
+                {t('opacity')}
+                <input
+                  type="range"
+                  aria-label={t('opacity')}
+                  aria-valuetext={`${heatmapOpacity}%`}
+                  min={10}
+                  max={90}
+                  step={5}
+                  value={heatmapOpacity}
+                  onChange={(event) => setHeatmapOpacity(Number(event.target.value))}
+                />
+                <span className={styles.heatmapOpacity}>{heatmapOpacity}%</span>
+              </label>
+            )}
+          </>
+        )}
       </div>
       <div className={styles.bandsControls}>
         <div className={styles.bandsToggle}>
@@ -420,16 +589,57 @@ export default function GexBandsChart({
         </div>
         <span className={styles.bandsNote}>
           {mode === 'atr'
-            ? t('noteAtr', { length, multiplier, interval: tfSpec.resolution < 3600 ? `${tfSpec.resolution / 60}m` : `${tfSpec.resolution / 3600}h` })
-            : showHistory ? t('noteHistory') : t('noteLive')}
+            ? t('noteAtr', {
+                length,
+                multiplier,
+                interval:
+                  tfSpec.resolution < 3600
+                    ? `${tfSpec.resolution / 60}m`
+                    : `${tfSpec.resolution / 3600}h`,
+              })
+            : showHistory
+              ? t('noteHistory')
+              : t('noteLive')}
         </span>
       </div>
 
+      {showHeatmap && (
+        <div className={styles.heatmapLegend}>
+          {heatmap.points.length > 1 ? (
+            <>
+              <span>{t('heatmapScale')}</span>
+              <div className={styles.heatmapScale} title={t('heatmapRange')}>
+                <span>{formatGexM(-heatmap.maxMagnitude)}</span>
+                <span
+                  className={styles.heatmapRamp}
+                  style={{ opacity: heatmapOpacity / 100 }}
+                  aria-hidden="true"
+                />
+                <span>{formatGexM(heatmap.maxMagnitude)}</span>
+              </div>
+              <span
+                className={styles.heatmapReadout}
+                data-sign={
+                  hoverGamma == null ? undefined : hoverGamma < 0 ? 'negative' : 'positive'
+                }
+              >
+                {hoverGamma != null && hoverPrice != null
+                  ? `${t('heatmapValue', { price: hoverPrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) })}: ${formatGexM(hoverGamma)}`
+                  : t('heatmapHover')}
+              </span>
+            </>
+          ) : (
+            <span>{t('heatmapUnavailable')}</span>
+          )}
+          {heatmap.points.length > 1 && (
+            <span className={styles.heatmapNote}>{t('heatmapNote')}</span>
+          )}
+        </div>
+      )}
+
       <div className={styles.bandsChartWrap}>
         <div className={styles.bandsChartCanvas} ref={containerRef} />
-        {candlesLoading && !candleData && (
-          <div className={styles.bandsOverlay}>{t('loading')}</div>
-        )}
+        {candlesLoading && !candleData && <div className={styles.bandsOverlay}>{t('loading')}</div>}
         {candlesError && (
           <div className={styles.bandsOverlay}>
             <div>{t('unavailable')}</div>

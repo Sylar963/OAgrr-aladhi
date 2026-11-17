@@ -516,6 +516,68 @@
   accent-color: #50d2c1;
 }
 
+.bandsField input[type="range"] {
+  width: 88px;
+  accent-color: #50d2c1;
+  cursor: pointer;
+}
+
+.heatmapOpacity {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmapLegend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.heatmapScale {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmapRamp {
+  width: 140px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #ef4665, transparent 50%, #00e997);
+}
+
+.heatmapReadout {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmapReadout[data-sign="positive"] {
+  color: #00e997;
+}
+
+.heatmapReadout[data-sign="negative"] {
+  color: #ef4665;
+}
+
+.heatmapNote {
+  flex-basis: 100%;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+@container widget (max-width: 640px) {
+  .heatmapReadout {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
 .bandsToggle {
   display: flex;
   border: 1px solid var(--border-subtle);

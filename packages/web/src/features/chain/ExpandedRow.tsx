@@ -1,19 +1,21 @@
 import { ForwardDeltaPill, IvChip, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
-import { fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
+import { fmtDelta, fmtIv, fmtNum, fmtUsd, fmtUsdPrice } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, VenueId, VenueQuote } from '@shared/enriched';
-import { useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useChartPanelsStore } from './chart-panels-store.js';
 import { openChartPopout } from './chart-popout-url.js';
 import styles from './ExpandedRow.module.css';
+import { executionToll } from './execution-toll';
 import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
 import {
   isChartSupportedVenue,
   NotSupportedVenueError,
   toVenueSymbol,
 } from './instrument-symbol.js';
+import { isActionableQuote } from './quote-selection';
 
 const messages = defineMessages(
   {
@@ -22,6 +24,20 @@ const messages = defineMessages(
     noQuotes: 'No quotes',
     venue: 'VENUE',
     cost: 'COST',
+    toll: 'TOLL %',
+    maxToll: 'MAX TOLL %',
+    maxTollTip:
+      'Optional cap for this expanded strike. Flags the quoted one-way crossing toll above your limit. Leave blank for no cap. This does not place or restrict orders.',
+    tollGuide: 'Start at MID → work a limit → walk away if the fill toll exceeds your cap.',
+    tollNote: 'Fees extra. MID fills are not guaranteed.',
+    spreadTip: 'Full bid–ask gap / midpoint × 100. This is twice the one-way TOLL %, before fees.',
+    tollTip:
+      'One-way crossing toll = (ask − bid) / (2 × midpoint) × 100, where midpoint = (bid + ask) / 2. Buy at ask or sell at bid: the same distance from midpoint. A fill at midpoint has zero toll against that reference.\n\nBid $2.00 / ask $2.20: midpoint $2.10; toll 4.76%; full spread 9.52%. The 10% figure uses bid as the denominator. These are percentages of option premium, not the underlying move.\n\nQuoted prices only; excludes fees, size and additional slippage. Missing, invalid or stale quotes show —.',
+    tollValueTip: '{pct}% of midpoint ({mid}), or {usd} per quoted unit, each way before fees.',
+    tollUnavailable: 'Toll unavailable: needs a fresh, positive, non-crossed bid and ask.',
+    overCap: 'OVER CAP',
+    overCapTip:
+      'Quoted crossing exceeds your cap. Work inside the spread or walk away if no fill is available within your limit.',
     deltaTip:
       'Δ DELTA — price sensitivity of this option to the underlying.\n\n' +
       '• Magnitude: option moves ~Δ dollars for each $1 move in spot. 0.50 Δ → option moves $0.50 per $1 move.\n' +
@@ -54,6 +70,23 @@ const messages = defineMessages(
     noQuotes: 'Sin cotizaciones',
     venue: 'EXCHANGE',
     cost: 'COSTO',
+    toll: 'PEAJE %',
+    maxToll: 'PEAJE MÁX %',
+    maxTollTip:
+      'Tope opcional para este strike expandido. Marca el peaje cotizado por lado que supera tu límite. Déjalo vacío para no fijar tope. No coloca ni restringe órdenes.',
+    tollGuide:
+      'Empieza en MID → trabaja una orden limitada → retírate si el peaje del fill supera tu tope.',
+    tollNote: 'Comisiones aparte. No se garantiza un fill en MID.',
+    spreadTip:
+      'Distancia completa bid–ask / punto medio × 100. Es el doble del PEAJE % por lado, antes de comisiones.',
+    tollTip:
+      'Peaje por cruzar un lado = (ask − bid) / (2 × punto medio) × 100, donde punto medio = (bid + ask) / 2. Comprar al ask o vender al bid: la misma distancia al punto medio. Un fill en el punto medio tiene peaje cero respecto de esa referencia.\n\nBid $2.00 / ask $2.20: punto medio $2.10; peaje 4.76%; spread completo 9.52%. El 10% usa el bid como denominador. Son porcentajes de la prima de la opción, no del movimiento del subyacente.\n\nSolo precios cotizados; excluye comisiones, tamaño y slippage adicional. Cotizaciones ausentes, inválidas o vencidas muestran —.',
+    tollValueTip:
+      '{pct}% del punto medio ({mid}), o {usd} por unidad cotizada, por lado antes de comisiones.',
+    tollUnavailable: 'Peaje no disponible: requiere bid y ask recientes, positivos y no cruzados.',
+    overCap: 'SUPERA TOPE',
+    overCapTip:
+      'Cruzar la cotización supera tu tope. Trabaja dentro del spread o retírate si no hay fill dentro de tu límite.',
     deltaTip:
       'Δ DELTA — sensibilidad del precio de esta opción al subyacente.\n\n' +
       '• Magnitud: la opción se mueve ~Δ dólares por cada $1 del spot. 0.50 Δ → la opción se mueve $0.50 por cada $1.\n' +
@@ -121,6 +154,7 @@ interface VenueRowProps {
   forwardCell: ForwardCell | undefined;
   atmStrike: number | null;
   underlying: string;
+  maxTollPct: number | null;
 }
 
 // Strip the linear-product tail (e.g. "BTC_USDC" → "BTC") so the badge shows
@@ -139,6 +173,7 @@ function VenueRow({
   forwardCell,
   atmStrike,
   underlying,
+  maxTollPct,
 }: VenueRowProps) {
   const t = useT(messages);
   const meta = VENUES[venueId];
@@ -147,6 +182,16 @@ function VenueRow({
   const edge = myIv != null && quote.markIv != null ? myIv - quote.markIv : null;
   const mirror = type === 'put';
   const inverseLabel = quote.inverse ? inverseBaseLabel(underlying) : null;
+  const toll = isActionableQuote(quote) ? executionToll(quote.bid, quote.ask) : null;
+  const overCap = toll != null && maxTollPct != null && toll.pct > maxTollPct;
+  const tollTitle =
+    toll == null
+      ? t('tollUnavailable')
+      : t('tollValueTip', {
+          pct: toll.pct.toFixed(2),
+          mid: fmtUsdPrice(toll.mid),
+          usd: fmtUsdPrice(toll.usd),
+        });
 
   const cells = [
     <td key="venue" className={styles.tdVenue} data-mirror={mirror || undefined}>
@@ -154,10 +199,7 @@ function VenueRow({
         {meta?.logo && <img src={meta.logo} className={styles.venueLogo} alt="" />}
         <span className={styles.venueLabel}>{meta?.shortLabel ?? venueId}</span>
         {inverseLabel && (
-          <span
-            className={styles.inverseTag}
-            title={t('inverseTip', { coin: inverseLabel })}
-          >
+          <span className={styles.inverseTag} title={t('inverseTip', { coin: inverseLabel })}>
             {inverseLabel}
           </span>
         )}
@@ -186,6 +228,24 @@ function VenueRow({
     </td>,
     <td key="spread" className={styles.tdChip}>
       <SpreadPill spreadPct={quote.spreadPct} />
+    </td>,
+    <td key="toll" className={styles.tdChip}>
+      <span
+        className={styles.tollPill}
+        data-status={
+          toll == null
+            ? 'unavailable'
+            : overCap
+              ? 'over'
+              : maxTollPct != null
+                ? 'within'
+                : 'uncapped'
+        }
+        title={overCap ? `${tollTitle}\n${t('overCapTip')}` : tollTitle}
+      >
+        {toll == null ? '—' : `${toll.pct.toFixed(2)}%`}
+        {overCap && <span className={styles.tollStatus}>{t('overCap')}</span>}
+      </span>
     </td>,
     <td key="delta" className={styles.tdNum}>
       {fmtDelta(quote.delta)}
@@ -233,6 +293,7 @@ interface SideTableProps {
   forwardsByVenue: Map<VenueId, ForwardCell>;
   atmStrike: number | null;
   underlying: string;
+  maxTollPct: number | null;
 }
 
 function SideTable({
@@ -243,6 +304,7 @@ function SideTable({
   forwardsByVenue,
   atmStrike,
   underlying,
+  maxTollPct,
 }: SideTableProps) {
   const t = useT(messages);
   const entries = Object.entries(side.venues) as [VenueId, VenueQuote][];
@@ -278,21 +340,16 @@ function SideTable({
     <th key="askIv" className={styles.th}>
       IV ASK
     </th>,
-    <th key="spread" className={styles.th}>
+    <th key="spread" className={styles.th} title={t('spreadTip')}>
       SPREAD
     </th>,
-    <th
-      key="delta"
-      className={styles.th}
-      title={t('deltaTip')}
-    >
+    <th key="toll" className={styles.th} title={t('tollTip')}>
+      {t('toll')}
+    </th>,
+    <th key="delta" className={styles.th} title={t('deltaTip')}>
       Δ
     </th>,
-    <th
-      key="theta"
-      className={styles.th}
-      title={t('thetaTip')}
-    >
+    <th key="theta" className={styles.th} title={t('thetaTip')}>
       THETA
     </th>,
     <th key="oi" className={styles.th}>
@@ -304,18 +361,10 @@ function SideTable({
     <th key="cost" className={styles.th}>
       {t('cost')}
     </th>,
-    <th
-      key="cons"
-      className={styles.th}
-      title={t('consTip')}
-    >
+    <th key="cons" className={styles.th} title={t('consTip')}>
       Δ CONS
     </th>,
-    <th
-      key="edge"
-      className={styles.th}
-      title={t('edgeTip')}
-    >
+    <th key="edge" className={styles.th} title={t('edgeTip')}>
       EDGE
     </th>,
   ];
@@ -337,6 +386,7 @@ function SideTable({
             forwardCell={forwardsByVenue.get(venueId)}
             atmStrike={atmStrike}
             underlying={underlying}
+            maxTollPct={maxTollPct}
           />
         ))}
       </tbody>
@@ -357,6 +407,16 @@ export default function ExpandedRow({
   chartOverride,
 }: ExpandedRowProps) {
   const t = useT(messages);
+  const maxTollId = useId();
+  const [maxTollInput, setMaxTollInput] = useState('');
+  const parsedMaxToll = maxTollInput.trim() === '' ? null : Number(maxTollInput);
+  const maxTollPct =
+    parsedMaxToll != null &&
+    Number.isFinite(parsedMaxToll) &&
+    parsedMaxToll >= 0 &&
+    parsedMaxToll <= 100
+      ? parsedMaxToll
+      : null;
   const forwardsByVenue = useMemo<Map<VenueId, ForwardCell>>(() => {
     const map = new Map<VenueId, ForwardCell>();
     const ids = new Set<VenueId>([
@@ -399,6 +459,24 @@ export default function ExpandedRow({
         </div>
       )}
 
+      <div className={styles.tollGuide}>
+        <span title={t('tollTip')}>{t('tollGuide')}</span>
+        <label className={styles.tollControl} htmlFor={maxTollId} title={t('maxTollTip')}>
+          {t('maxToll')}
+          <input
+            id={maxTollId}
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            placeholder="—"
+            value={maxTollInput}
+            onChange={(event) => setMaxTollInput(event.target.value)}
+          />
+        </label>
+        <span className={styles.tollNote}>{t('tollNote')}</span>
+      </div>
+
       <div className={styles.sides}>
         <div className={styles.side} data-type="call">
           <div className={styles.sideHeader}>
@@ -422,6 +500,7 @@ export default function ExpandedRow({
               forwardsByVenue={forwardsByVenue}
               atmStrike={atmStrike}
               underlying={underlying}
+              maxTollPct={maxTollPct}
             />
           </div>
         </div>
@@ -457,6 +536,7 @@ export default function ExpandedRow({
               forwardsByVenue={forwardsByVenue}
               atmStrike={atmStrike}
               underlying={underlying}
+              maxTollPct={maxTollPct}
             />
           </div>
         </div>

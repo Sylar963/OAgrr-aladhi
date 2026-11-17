@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-11-12. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-11-17. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -17,6 +17,26 @@ read, a trained model, a validated trading system, or personalized investment ad
    a hypothesis to a validated strategy based on one profitable trade.
 
 ## Source and reading ledger
+
+2026-11-17 quote-toll display: reviewed [OIC bid/ask and limit-order execution](https://prd-web.optionseducation.org/news/understanding-the-bid-and-ask-prices-for-options)
+and [OIC trade entry and execution](https://prd-web.optionseducation.org/referencelibrary/faq/trade-entry-execution).
+Marketable buys generally cross to ask and sells to bid; limit orders can improve price but
+may remain unfilled. Engineering derivation for positive non-crossed quotes: M = (B + A)/2,
+one-way quoted toll = (A − B)/2, toll % = 100 × (A − B)/(2M). Existing SPREAD uses
+100 × (A − B)/M. At B = 2 and A = 2.20 these are 4.76% and 9.52%; the alternative
+10% uses bid as denominator. None measures the underlying return needed to recover costs.
+The midpoint is a quote reference, not proven fair value or an available fill. Toll excludes
+fees, size and extra slippage; currency conversion must use the same reference for both sides.
+Expanded call/put tables for crypto and TradFi show the quote-derived toll independently of
+venue mark/mid fields, with no toll for missing, nonfinite, nonpositive, crossed or stale
+quotes under the existing quote-age policy. An optional cap applies only to the expanded
+strike and flags the quoted crossing cost; it neither submits nor enforces an order limit.
+There is no default cap or validated acceptable-cost threshold. A wide quote can still admit
+a fill inside the spread; walk away when the available fill exceeds the chosen cap.
+Tests: `execution-toll.test.ts` covers denominators, buy/sell symmetry, currency-scale
+invariance and invalid markets; `ExpandedRow.test.tsx` covers both rights, mirrored column
+alignment, crypto/TradFi, cap changes and unavailable quotes. Status: sourced execution
+mechanics and engineering arithmetic, not a trading edge. No new book chapters reviewed.
 
 2026-11-10 Alpha context review: [OIC bull call spread](https://www.optionseducation.org/strategies/all-strategies/bull-call-spread-debit-call-spread),
 [CME bull spread](https://www.cmegroup.com/education/courses/option-strategies/bull-spread),

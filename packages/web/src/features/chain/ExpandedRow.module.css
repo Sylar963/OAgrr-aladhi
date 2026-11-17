@@ -31,6 +31,81 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.tollGuide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--space-4);
+  padding: 6px var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tollControl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.tollControl input {
+  width: 64px;
+  padding: 3px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.tollControl input:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.tollControl input:invalid {
+  border-color: var(--color-loss);
+}
+
+.tollNote {
+  color: var(--text-dim);
+}
+
+.tollPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.tollPill[data-status="over"] {
+  color: var(--color-loss);
+  background: color-mix(in srgb, var(--color-loss) 12%, transparent);
+}
+
+.tollPill[data-status="within"] {
+  color: var(--color-profit);
+  background: color-mix(in srgb, var(--color-profit) 12%, transparent);
+}
+
+.tollPill[data-status="unavailable"] {
+  color: var(--text-dim);
+}
+
+.tollStatus {
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+
 /* ── Sides grid: calls │ strike │ puts ───────────────────────────────────── */
 /* The 100px center channel mirrors the data row's STRIKE column so the      */
 /* vertical borders continue straight down from the data row above.          */

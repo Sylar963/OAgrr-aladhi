@@ -1,4 +1,5 @@
-export { type ExitBookRuntime, ThalexExitBooks } from './exit-books.js';
+export { type ExitBookRuntime, ThalexExitBooks, ParadexExitBooks } from './exit-books.js';
+export { ParadexBookRuntime, type ParadexBookRuntimeOptions } from './paradex-book-runtime.js';
 export {
   OrderBookCapacityError,
   type OrderBookLease,

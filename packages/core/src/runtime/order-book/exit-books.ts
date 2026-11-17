@@ -22,11 +22,11 @@ export type ExitBookRuntime = Pick<OrderBookRuntime, 'acquire' | 'getBook' | 'is
  * given, so the shared order-book runtime only streams what is held; released books linger
  * there before unsubscribing, which absorbs a leg briefly dropping out of the list.
  */
-export class ThalexExitBooks implements ExitBookSource {
+export class VenueExitBooks implements ExitBookSource {
   private readonly leases = new Map<string, OrderBookLease>();
   private readonly failed = new Map<string, CloseNowUnavailableReason>();
 
-  constructor(private readonly runtime: ExitBookRuntime) {}
+  constructor(private readonly runtime: ExitBookRuntime, private readonly venue: 'thalex' | 'paradex') {}
 
   sync(legs: readonly PositionLeg[]): void {
     const wanted = new Set<string>();
@@ -71,6 +71,14 @@ export class ThalexExitBooks implements ExitBookSource {
 
   private instrumentOf(leg: PositionLeg): string | null {
     const venue = exitVenueOf(leg);
-    return venue === 'thalex' ? exitInstrumentOf(leg, venue) : null;
+    return venue === this.venue ? exitInstrumentOf(leg, venue) : null;
   }
+}
+
+export class ThalexExitBooks extends VenueExitBooks {
+  constructor(runtime: ExitBookRuntime) { super(runtime, 'thalex'); }
+}
+
+export class ParadexExitBooks extends VenueExitBooks {
+  constructor(runtime: ExitBookRuntime) { super(runtime, 'paradex'); }
 }

@@ -27,6 +27,7 @@ import type {
   PortfolioPnlCurve,
   PortfolioPnlPoint,
   PortfolioSource,
+  ParadexAccountSummary,
   PortfolioTotals,
   ShockGridCell,
   ShockGridMeta,
@@ -177,13 +178,15 @@ export interface PortfolioAssistantCashTransactionFact {
 }
 
 export interface PortfolioAssistantAccountEquityFacts {
-  venue: 'thalex';
+  venue: 'thalex' | 'paradex';
+  venueAccount?: string | undefined;
+  maintenanceMarginUsd?: number | null;
   network: 'mainnet' | 'testnet';
   asOf: string;
   basis: string;
   equityUsd: number;
-  cashUsd: number;
-  unrealisedPnlUsd: number;
+  cashUsd: number | null;
+  unrealisedPnlUsd: number | null;
   sessionRealisedPnlUsd: number | null;
   marginUsd: number | null;
   requiredMarginUsd: number | null;
@@ -302,7 +305,7 @@ export const PORTFOLIO_ASSISTANT_TOOL_HINTS: readonly string[] = [
 ];
 
 function isLedgerVenue(source: PortfolioSource): source is ExchangePortfolioVenue {
-  return source === 'thalex' || source === 'derive';
+  return source === 'thalex' || source === 'derive' || source === 'paradex';
 }
 
 const TRADE_TOTALS_SCOPE =
@@ -936,12 +939,35 @@ export class PortfolioAssistantContextBuilder {
       accountId: string,
       source: PortfolioSource,
     ) => 'mainnet' | 'testnet' | null = () => null,
+    private readonly ledgerAccountId: (accountId: string, source: PortfolioSource) => string = (accountId) => accountId,
+    private readonly paradexAccount: ((accountId: string) => Promise<ParadexAccountSummary | null>) | null = null,
   ) {}
 
   private async buildAccountEquity(
     input: BuildPortfolioAssistantContextInput,
     limitations: string[],
   ): Promise<PortfolioAssistantAccountEquityFacts | null> {
+    if (input.source === 'paradex' && this.paradexAccount != null) {
+      try {
+        const account = await this.paradexAccount(input.accountId);
+        if (account == null) return null;
+        limitations.push('Paradex account facts cover all assets. Cash movements, funding history and hypothetical-order margin are not included in this account snapshot.');
+        return {
+          venue: 'paradex', venueAccount: account.venueAccount,
+          network: account.environment === 'test' ? 'testnet' : 'mainnet', asOf: new Date(account.fetchedAt).toISOString(),
+          basis: 'Venue-reported account_value includes unrealized P&L. Total collateral is reported separately; it is not a transaction ledger. Settlement asset is displayed at 1:1 USD.',
+          equityUsd: account.equityUsd, cashUsd: account.totalCollateralUsd ?? null,
+          unrealisedPnlUsd: account.totalCollateralUsd == null ? null : account.equityUsd - account.totalCollateralUsd,
+          sessionRealisedPnlUsd: null, marginUsd: account.equityUsd,
+          requiredMarginUsd: account.initialMarginUsd, remainingMarginUsd: account.freeCollateralUsd,
+          maintenanceMarginUsd: account.maintenanceMarginUsd, cash: [], dailyEquity: [],
+          transactions: [], transactionsTruncated: false, windowDays: 0,
+        };
+      } catch {
+        limitations.push('Paradex account equity and margin could not be read.');
+        return null;
+      }
+    }
     if (input.source !== 'thalex' || this.accountLedger == null) return null;
     try {
       const result = await this.accountLedger.fetchAccountLedger(
@@ -1078,7 +1104,7 @@ export class PortfolioAssistantContextBuilder {
     }
     try {
       const trades = await this.tradeLedger.loadTrades(
-        input.accountId,
+        this.ledgerAccountId(input.accountId, input.source),
         input.source,
         TRADE_LOAD_LIMIT,
       );

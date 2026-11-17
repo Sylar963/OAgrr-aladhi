@@ -48,7 +48,8 @@ const VENUE_STORES = {
 
 // Social reads only mainnet sessions; a testnet session must never reach the leaderboard.
 const onTestnet = (accountId: string, venue: SocialVenue) =>
-  venue === 'thalex' && thalexPositionStore.environment(accountId) === 'test';
+  (venue === 'thalex' && thalexPositionStore.environment(accountId) === 'test') ||
+  (venue === 'paradex' && paradexPositionStore.environment(accountId) === 'test');
 
 const venueAccess: VenueAccountAccess = {
   isConnected: (accountId, venue) => isMainnetVenueConnected(accountId, venue),
@@ -57,8 +58,8 @@ const venueAccess: VenueAccountAccess = {
   listLegs: (accountId, venue) =>
     onTestnet(accountId, venue) ? [] : VENUE_STORES[venue].list(accountId),
   listLinear: (accountId, venue) =>
-    venue === 'thalex' && !onTestnet(accountId, venue)
-      ? thalexPositionStore.listLinear(accountId)
+    (venue === 'thalex' || venue === 'paradex') && !onTestnet(accountId, venue)
+      ? VENUE_STORES[venue].listLinear(accountId)
       : [],
   fetchEquityHistory: async (accountId, venue, fromMs) =>
     onTestnet(accountId, venue) ? null : VENUE_STORES[venue].fetchEquityHistory(accountId, fromMs),

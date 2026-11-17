@@ -390,6 +390,8 @@ export {
   ThalexKeySlotSchema,
   type ThalexKeySlots,
   ThalexKeySlotsSchema,
+  ParadexKeySlotsSchema,
+  type ParadexKeySlots,
   type VenueActivate,
   VenueActivateSchema,
   type VenueEnvironment,

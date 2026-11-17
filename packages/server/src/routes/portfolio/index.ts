@@ -23,6 +23,7 @@ export async function portfolioRoutes(app: FastifyInstance) {
     const paradexRead =
       url.pathname.includes('/portfolio/paradex/') ||
       url.searchParams.get('source') === 'paradex' ||
+      url.searchParams.get('venue') === 'paradex' ||
       (url.pathname.endsWith('/portfolio/equity-history') &&
         url.searchParams.get('venue') === 'paradex');
     if (!paradexRead) return;

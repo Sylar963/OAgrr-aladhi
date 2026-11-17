@@ -113,6 +113,7 @@ function toPersistedTrade(trade: ExchangePortfolioTrade): PersistedExchangeTrade
     realizedPnlUsd: trade.realizedPnlUsd,
     liquidityRole: trade.liquidityRole,
     timestampMs: trade.timestampMs,
+    underlyingPriceUsd: trade.underlyingPriceUsd ?? null,
   };
 }
 
@@ -142,7 +143,7 @@ export class VenuePositionPersistence {
   ): Promise<Map<string, EntryAnchor>> {
     const resolved = new Map<string, EntryAnchor>();
     const priceAt = this.priceAt;
-    if (!this.ledger.enabled || priceAt == null || legs.length === 0) return resolved;
+    if (!this.ledger.enabled || legs.length === 0) return resolved;
 
     const trades = await this.ledger.loadTrades(accountId, this.venue, FILL_HISTORY_LIMIT);
     const tradesByInstrument = new Map<string, PersistedExchangeTrade[]>();
@@ -162,7 +163,8 @@ export class VenuePositionPersistence {
           amount: trade.amount,
           priceUsd: trade.priceUsd,
           timestampMs: trade.timestampMs,
-          underlyingPriceUsd: await priceAt(trade.underlying, trade.timestampMs).catch(() => null),
+          underlyingPriceUsd: trade.underlyingPriceUsd ??
+            (priceAt == null ? null : await priceAt(trade.underlying, trade.timestampMs).catch(() => null)),
         })),
       );
       const anchor = entryAnchorFromFills(leg, fills);

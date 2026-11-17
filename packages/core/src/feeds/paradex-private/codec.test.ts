@@ -4,6 +4,8 @@ import {
   decodeParadexJwtClaims,
   paradexPositionToLeg,
   parseParadexOptionSymbol,
+  paradexPositionsToLinear,
+  paradexFillToTrade,
 } from './codec.js';
 import { ParadexPositionsResponseSchema } from './types.js';
 
@@ -56,6 +58,41 @@ describe('parseParadexOptionSymbol', () => {
   it('rejects perps and spot', () => {
     expect(parseParadexOptionSymbol('BTC-USD-PERP')).toBeNull();
     expect(parseParadexOptionSymbol('ETH-USDC')).toBeNull();
+  });
+});
+
+describe('Paradex portfolio parity normalization', () => {
+  it('imports signed perpetual exposure without duplicating options', () => {
+    expect(paradexPositionsToLinear([
+      { ...docParsed, average_entry_price_usd: '60000', unrealized_pnl: '357.234' },
+      { ...docParsed, market: 'BTC-USD-27NOV26-120000-C' },
+      { ...docParsed, status: 'CLOSED' },
+    ])).toEqual([{
+      instrumentName: 'BTC-USD-PERP', underlying: 'BTC', kind: 'perpetual', expiry: null,
+      sizeCoin: -0.345, entryPriceUsd: 60000, markPriceUsd: 59000, source: 'paradex',
+    }]);
+  });
+
+  it('retains fill IDs, fees, rebates, realized P&L, and entry underlying', () => {
+    expect(paradexFillToTrade({
+      id: 'fill-1', order_id: 'order-1', market: 'BTC-USD-27NOV26-80000-P',
+      side: 'SELL', size: '0.1', price: '500', fee: '-0.25', fee_currency: 'USDC',
+      realized_pnl: '12', liquidity: 'MAKER', created_at: 1790000000000,
+      underlying_price: '81000',
+    })).toMatchObject({
+      venue: 'paradex', tradeId: 'fill-1', orderId: 'order-1', direction: 'sell',
+      amount: 0.1, priceUsd: 500, feeUsd: -0.25, realizedPnlUsd: 12,
+      liquidityRole: 'maker', underlyingPriceUsd: 81000,
+    });
+  });
+
+  it('withholds non-USD fees and excludes perpetual fills from option accounting', () => {
+    const fill = {
+      id: 'f', market: 'BTC-USD-27NOV26-80000-P', side: 'BUY' as const,
+      size: '1', price: '10', fee: '2', fee_currency: 'BTC', created_at: 1,
+    };
+    expect(paradexFillToTrade(fill)?.feeUsd).toBeNull();
+    expect(paradexFillToTrade({ ...fill, market: 'BTC-USD-PERP' })).toBeNull();
   });
 });
 

@@ -77,6 +77,12 @@ export const ThalexKeySlotsSchema = z.object({
 });
 export type ThalexKeySlots = z.infer<typeof ThalexKeySlotsSchema>;
 
+export const ParadexKeySlotsSchema = z.object({
+  venue: z.literal('paradex'),
+  slots: z.array(ThalexKeySlotSchema),
+});
+export type ParadexKeySlots = z.infer<typeof ParadexKeySlotsSchema>;
+
 export const VenueActivateSchema = z.object({ environment: VenueEnvironmentSchema });
 export type VenueActivate = z.infer<typeof VenueActivateSchema>;
 
@@ -98,6 +104,7 @@ export type DeriveSessionKeyConfirm = z.infer<typeof DeriveSessionKeyConfirmSche
 
 export const ParadexConnectSchema = z.object({
   readonlyToken: z.string().regex(/^[\w-]+\.[\w-]+\.[\w-]+$/, 'readonlyToken must be a JWT'),
+  env: VenueEnvironmentSchema.optional(),
 });
 export type ParadexConnect = z.infer<typeof ParadexConnectSchema>;
 

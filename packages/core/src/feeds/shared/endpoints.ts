@@ -97,6 +97,7 @@ export const GATEIO_OPTIONS_TRADES = '/api/v4/options/trades';
 // markets. Captured 2026-06-08 — see references/options-docs/paradex/.
 export const PARADEX_WS_URL = 'wss://ws.api.prod.paradex.trade/v1?sbeSchemaId=1&sbeSchemaVersion=1';
 export const PARADEX_REST_BASE_URL = 'https://api.prod.paradex.trade/v1';
+export const PARADEX_TESTNET_REST_BASE_URL = 'https://api.testnet.paradex.trade/v1';
 export const PARADEX_MARKETS = '/markets';
 export const PARADEX_MARKETS_SUMMARY = '/markets/summary';
 export const PARADEX_SYSTEM_TIME = '/system/time';

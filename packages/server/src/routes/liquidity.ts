@@ -28,12 +28,13 @@ export function buildLiquidityResponse(
   query: LiquidityQuery,
   now: number,
 ): LiquidityResponse {
+  if (book.venue !== 'thalex') throw new Error('This liquidity endpoint requires a Thalex book');
   const bestBid = book.bids[0]?.price ?? null;
   const bestAsk = book.asks[0]?.price ?? null;
   const spread = bestBid !== null && bestAsk !== null ? bestAsk - bestBid : null;
   const mid = bestBid !== null && bestAsk !== null ? (bestBid + bestAsk) / 2 : null;
   return {
-    venue: book.venue,
+    venue: 'thalex',
     instrument: book.instrument,
     priceUnit: book.priceUnit,
     quantityUnit: book.quantityUnit,

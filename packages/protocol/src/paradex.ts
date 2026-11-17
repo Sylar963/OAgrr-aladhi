@@ -9,6 +9,8 @@ export const ParadexAccountSummarySchema = z.object({
   settlementAsset: z.string().nullable(),
   updatedAt: z.number().int().nonnegative().nullable(),
   fetchedAt: z.number().int().nonnegative(),
+  totalCollateralUsd: z.number().finite().nullable().optional(),
+  environment: z.enum(['prod', 'test']).optional(),
 });
 export type ParadexAccountSummary = z.infer<typeof ParadexAccountSummarySchema>;
 

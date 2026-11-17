@@ -50,6 +50,27 @@ describe('ParadexPrivateClient', () => {
     await expect(client.start()).rejects.toBeInstanceOf(ParadexAuthError);
   });
 
+  it('reads all option-fill pages and deduplicates overlapping fill IDs', async () => {
+    const fill = { id: 'f1', market: option.market, side: 'BUY', size: '1', price: '10', created_at: 10 };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { results: [fill], next: 'a+=/b' }))
+      .mockResolvedValueOnce(jsonResponse(200, { results: [fill, { ...fill, id: 'f2' }], next: null }));
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
+    expect(await client.fetchOptionTrades(5)).toHaveLength(2);
+    const url = new URL(fetchImpl.mock.calls[1]![0]);
+    expect(url.searchParams.get('cursor')).toBe('a+=/b');
+    expect(url.searchParams.get('asset_kind')).toBe('OPTION');
+    expect(url.searchParams.get('start_at')).toBe('5');
+    await client.dispose();
+  });
+
+  it('rejects a looping fill cursor instead of reporting partial accounting', async () => {
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse(200, { results: [], next: 'same' }))));
+    await expect(client.fetchOptionTrades(0)).rejects.toThrow('repeated a cursor');
+    await client.dispose();
+  });
+
   it('requests the required history resolution and keeps only the requested window', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse(200, {

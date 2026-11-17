@@ -83,8 +83,8 @@ const messages = defineMessages(
     linearHint: ' Perps and futures are included as straight lines from their entry price.',
     builderLinear: ' Perp and future positions come along as hedge legs.',
     upsideUnbounded: 'Upside unbounded after {date}',
-    imTitle: 'Thalex account-wide initial margin requirement',
-    freeMarginTitle: 'Thalex account margin minus initial margin',
+    imTitle: 'Venue account-wide initial margin requirement',
+    freeMarginTitle: 'Available account collateral above initial margin',
     freeMargin: 'free margin {v}',
     imBreachTitle: 'Now-curve prices where account margin reaches IM, holding IM fixed',
     imBreach: 'IM breach',
@@ -94,13 +94,13 @@ const messages = defineMessages(
       'Multiple expiries: the expiry curve assumes the same settlement price at every date. Its low point is not a portfolio-wide maximum-loss or margin guarantee. Review each expiry separately.',
     imBreachLine: 'IM breach ≈ {v}',
     liquidationTitle:
-      'Now-curve prices where account margin reaches maintenance margin (70% of IM), holding IM fixed. Thalex liquidates below it.',
+      'Approximate now-curve prices where account collateral reaches maintenance margin, holding the requirement fixed.',
     liquidation: 'Liquidation',
     liquidationLine: 'Liquidation ≈ {v}',
     liquidationRow: 'To liquidation',
     hint: 'Hover to read P&L at any price. Break-even markers are based on the expiry curve; shading shows expiry gain and loss.',
     hintMargin:
-      " IM is Thalex's account-wide initial margin, covering every underlying. Below IM new risk is rejected; below maintenance margin (70% of IM) Thalex liquidates. Both lines hold IM fixed as price moves, so treat them as approximate.",
+      ' IM covers the whole venue account. Thresholds hold requirements fixed as price moves and are approximate. Paradex uses its reported maintenance requirement; Thalex uses 70% of IM. Other exposures, collateral changes, and changing requirements can move the thresholds.',
     freeMarginRow: 'Free margin',
   },
   {
@@ -142,8 +142,8 @@ const messages = defineMessages(
     linearHint: ' Los perpetuos y futuros se incluyen como líneas rectas desde su precio de entrada.',
     builderLinear: ' Las posiciones en perpetuos y futuros se trasladan como coberturas.',
     upsideUnbounded: 'Alza ilimitada después de {date}',
-    imTitle: 'Requerimiento de margen inicial de toda la cuenta de Thalex',
-    freeMarginTitle: 'Margen de la cuenta de Thalex menos el margen inicial',
+    imTitle: 'Margen inicial de toda la cuenta del exchange',
+    freeMarginTitle: 'Colateral disponible por encima del margen inicial',
     freeMargin: 'margen libre {v}',
     imBreachTitle:
       'Precios de la curva actual donde el margen de la cuenta llega al IM, manteniendo el IM fijo',
@@ -154,13 +154,13 @@ const messages = defineMessages(
       'Varios vencimientos: la curva al vencimiento asume el mismo precio de liquidación en cada fecha. Su punto mínimo no es una garantía de pérdida máxima ni de margen para todo el portafolio. Revisa cada vencimiento por separado.',
     imBreachLine: 'Ruptura de IM ≈ {v}',
     liquidationTitle:
-      'Precios de la curva actual donde el margen de la cuenta llega al margen de mantenimiento (70% del IM), manteniendo el IM fijo. Thalex liquida por debajo de él.',
+      'Precios aproximados donde el colateral llega al margen de mantenimiento, manteniendo fijo el requisito.',
     liquidation: 'Liquidación',
     liquidationLine: 'Liquidación ≈ {v}',
     liquidationRow: 'Hasta liquidación',
     hint: 'Pasa el cursor para leer el P&L a cualquier precio. Los marcadores de breakeven se basan en la curva al vencimiento; el sombreado muestra ganancia y pérdida al vencimiento.',
     hintMargin:
-      ' El IM es el margen inicial de toda la cuenta de Thalex, que cubre todos los subyacentes. Por debajo del IM se rechaza riesgo nuevo; por debajo del margen de mantenimiento (70% del IM) Thalex liquida. Ambas líneas mantienen el IM fijo mientras se mueve el precio, así que tómalas como aproximadas.',
+      ' El IM cubre toda la cuenta. Los umbrales mantienen fijos los requisitos y son aproximados. Paradex usa el mantenimiento informado; Thalex usa el 70% del IM. Otras exposiciones y cambios de colateral o requisitos pueden moverlos.',
     freeMarginRow: 'Margen libre',
   },
 );
@@ -373,7 +373,10 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
   const liquidation = useMemo(() => {
     const spotUsd = displayCurve.currentSpotUsd;
     if (margin == null || spotUsd == null || displayCurve.status !== 'ok') return null;
-    const bufferUsd = liquidationBufferUsd(margin.marginUsd, margin.initialMarginUsd);
+    const bufferUsd = margin.venue === 'thalex'
+      ? liquidationBufferUsd(margin.marginUsd, margin.initialMarginUsd)
+      : margin.maintenanceMarginUsd == null ? null : margin.marginUsd - margin.maintenanceMarginUsd;
+    if (bufferUsd == null) return null;
     if (bufferUsd <= 0) return null;
     const level = marginCallPnl(displayCurve.points, spotUsd, bufferUsd);
     if (level == null) return null;

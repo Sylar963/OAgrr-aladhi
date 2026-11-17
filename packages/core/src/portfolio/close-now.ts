@@ -12,6 +12,7 @@ import type {
 
 import { cappedTakerFeeUsd, THALEX_OPTION_FEE_RATE, VENUE_FEE_CAP } from '../core/fees.js';
 import { formatThalexOptionInstrument } from '../feeds/thalex-private/codec.js';
+import { formatParadexOptionSymbol } from '../feeds/paradex-private/codec.js';
 import { costToFill } from '../liquidity/analytics.js';
 import type { OrderBookSnapshot } from '../liquidity/types.js';
 import { VENUE_IDS, type VenueId } from '../types/common.js';
@@ -61,10 +62,11 @@ export function exitVenueOf(leg: PositionLeg): VenueId {
 // TODO(close-now): Deribit/OKX premiums are coin-quoted; their books need the canonicalUsdMid
 // conversion (premium × canonical forward / venue underlying) before walking, and Deribit's
 // per-instrument taker_commission instead of a static rate.
-// TODO(close-now): Derive and Paradex are USDC-linear; they need an L2 book feed and their
+// TODO(close-now): Derive is USDC-linear; it needs an L2 book feed and its
 // instrument naming here before they can leave 'unsupported_venue'.
 export function exitInstrumentOf(leg: PositionLeg, venue: VenueId): string | null {
   if (venue === 'thalex') return formatThalexOptionInstrument(leg);
+  if (venue === 'paradex') return formatParadexOptionSymbol(leg);
   return null;
 }
 
@@ -158,7 +160,7 @@ export function evaluateCloseNowLeg(
   const side = long ? 'sell' : 'buy';
   const size = Math.abs(leg.size);
   const fill = costToFill(book, side, size);
-  const schedule = takerFeeSchedule(venue);
+  const schedule = venue === 'paradex' ? book.takerFee ?? null : takerFeeSchedule(venue);
   const underlying = book.mark?.indexPrice ?? mark.underlyingPriceUsd;
   const feesUsd =
     fill.vwap != null && schedule != null
@@ -320,6 +322,10 @@ export class CloseNowTracker {
     const instrument = exitInstrumentOf(input.leg, venue);
     if (lookup.kind === 'unsupported') {
       return emptyLeg(input, venue, instrument, 'unsupported_venue', null);
+    }
+    if (lookup.kind === 'book' && (lookup.book.venue !== venue ||
+      lookup.book.instrument !== instrument || (venue === 'paradex' && lookup.book.takerFee == null))) {
+      return this.staleOrEmpty(input, venue, instrument, 'unsynchronized', nowMs);
     }
     const problem = lookup.kind === 'book' ? bookProblem(lookup.book, nowMs) : lookup.reason;
     if (lookup.kind === 'unavailable' || problem != null) {

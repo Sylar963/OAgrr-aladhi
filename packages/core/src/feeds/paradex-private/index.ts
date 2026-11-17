@@ -9,5 +9,7 @@ export {
   paradexPositionToLeg,
   paradexPositionsToLegs,
   parseParadexOptionSymbol,
+  paradexPositionsToLinear,
+  paradexFillToTrade,
 } from './codec.js';
 export { type ParadexJwtClaims, type ParadexPosition } from './types.js';

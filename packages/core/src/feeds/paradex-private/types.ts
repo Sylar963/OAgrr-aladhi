@@ -25,6 +25,27 @@ export const ParadexPositionsResponseSchema = z.object({
   results: z.array(ParadexPositionSchema),
 });
 
+export const ParadexFillSchema = z.object({
+  id: z.string().min(1),
+  order_id: z.string().nullish(),
+  market: z.string().min(1),
+  side: z.enum(['BUY', 'SELL']),
+  size: z.string(),
+  price: z.string(),
+  fee: numStr,
+  fee_currency: z.string().optional(),
+  realized_pnl: numStr,
+  underlying_price: numStr,
+  liquidity: z.enum(['MAKER', 'TAKER']).optional(),
+  created_at: z.number().int().nonnegative(),
+});
+export type ParadexFill = z.infer<typeof ParadexFillSchema>;
+
+export const ParadexFillsResponseSchema = z.object({
+  next: z.string().nullish(),
+  results: z.array(ParadexFillSchema),
+});
+
 // Readonly tokens are JWTs; `sub` is the Paradex account address, `exp` unix seconds.
 export const ParadexJwtClaimsSchema = z
   .object({ sub: z.string().min(1), exp: z.number().int().positive() })
@@ -56,6 +77,7 @@ const timestamp = z
 export const ParadexAccountSchema = z.object({
   account: z.string().min(1).optional(),
   account_value: decimal,
+  total_collateral: optionalDecimal,
   free_collateral: optionalDecimal,
   initial_margin_requirement: optionalDecimal,
   maintenance_margin_requirement: optionalDecimal,

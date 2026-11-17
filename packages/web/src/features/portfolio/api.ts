@@ -558,6 +558,7 @@ export function fetchPositions(
 const ExchangePortfolioVenueValues = [
   'derive',
   'thalex',
+  'paradex',
 ] as const satisfies readonly ExchangePortfolioVenue[];
 
 const ExchangeTradesResponseSchema: z.ZodType<ExchangeTradesResponse> = z.object({
@@ -635,10 +636,11 @@ export function fetchEquityHistory(
 
 const VenueMarginResponseSchema: z.ZodType<VenueMarginResponse> = z.object({
   accountId: z.string(),
-  venue: z.literal('thalex'),
+  venue: z.enum(['thalex', 'paradex']),
   initialMarginUsd: z.number(),
   marginUsd: z.number(),
   remainingMarginUsd: z.number(),
+  maintenanceMarginUsd: z.number().nullable().optional(),
   updatedAt: z.number(),
 });
 

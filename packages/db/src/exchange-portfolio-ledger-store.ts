@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { createPgPool } from './pg-pool.js';
 
-export type ExchangePortfolioVenue = 'derive' | 'thalex';
+export type ExchangePortfolioVenue = 'derive' | 'thalex' | 'paradex';
 
 export interface PersistedExchangePosition {
   legId: string;
@@ -17,6 +17,7 @@ export interface PersistedExchangePosition {
 }
 
 export interface PersistedExchangeTrade {
+  underlyingPriceUsd?: number | null;
   tradeId: string;
   orderId: string | null;
   groupId: string | null;
@@ -134,6 +135,7 @@ interface PositionRow {
 }
 
 interface TradeRow {
+  underlying_price_usd?: number | null;
   trade_id: string;
   order_id: string | null;
   group_id: string | null;
@@ -263,17 +265,18 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
           `INSERT INTO exchange_portfolio_trades (
              account_id, venue, trade_id, order_id, group_id, instrument_name, underlying,
              expiry, strike, option_right, direction, amount, price_usd, fee_usd,
-             realized_pnl_usd, liquidity_role, traded_at
+             realized_pnl_usd, liquidity_role, traded_at, underlying_price_usd
            ) VALUES (
              $1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13, $14,
-             $15, $16, $17
+             $15, $16, $17, $18
            )
            ON CONFLICT (account_id, venue, trade_id) DO UPDATE SET
              order_id = EXCLUDED.order_id,
              group_id = EXCLUDED.group_id,
              fee_usd = EXCLUDED.fee_usd,
              realized_pnl_usd = EXCLUDED.realized_pnl_usd,
-             liquidity_role = EXCLUDED.liquidity_role`,
+             liquidity_role = EXCLUDED.liquidity_role,
+             underlying_price_usd = EXCLUDED.underlying_price_usd`,
           [
             accountId,
             venue,
@@ -292,6 +295,7 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
             trade.realizedPnlUsd,
             trade.liquidityRole,
             new Date(trade.timestampMs),
+            trade.underlyingPriceUsd ?? null,
           ],
         );
       }
@@ -327,7 +331,7 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
     const result = await this.getPool().query<TradeRow>(
       `SELECT trade_id, order_id, group_id, instrument_name, underlying, expiry::text,
               strike, option_right, direction, amount, price_usd, fee_usd,
-              realized_pnl_usd, liquidity_role, traded_at
+              realized_pnl_usd, liquidity_role, traded_at, underlying_price_usd
        FROM exchange_portfolio_trades
        WHERE account_id = $1 AND venue = $2
        ORDER BY traded_at DESC
@@ -350,6 +354,7 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
       realizedPnlUsd: row.realized_pnl_usd,
       liquidityRole: row.liquidity_role,
       timestampMs: row.traded_at.getTime(),
+      underlyingPriceUsd: row.underlying_price_usd ?? null,
     }));
   }
 

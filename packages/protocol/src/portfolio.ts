@@ -94,7 +94,7 @@ export const DeltaExposureSchema = z.object({
 });
 export type DeltaExposure = z.infer<typeof DeltaExposureSchema>;
 
-export const ExchangePortfolioVenueSchema = z.enum(['derive', 'thalex']);
+export const ExchangePortfolioVenueSchema = z.enum(['derive', 'thalex', 'paradex']);
 export type ExchangePortfolioVenue = z.infer<typeof ExchangePortfolioVenueSchema>;
 
 export const ExchangePortfolioTradeSchema = z.object({
@@ -114,6 +114,7 @@ export const ExchangePortfolioTradeSchema = z.object({
   realizedPnlUsd: z.number().nullable(),
   liquidityRole: z.enum(['maker', 'taker']).nullable(),
   timestampMs: z.number().int().nonnegative(),
+  underlyingPriceUsd: z.number().finite().positive().nullable().optional(),
 });
 export type ExchangePortfolioTrade = z.infer<typeof ExchangePortfolioTradeSchema>;
 
@@ -158,10 +159,11 @@ export type EquityHistoryResponse = z.infer<typeof EquityHistoryResponseSchema>;
 // Thalex `required_margin` is the initial margin; the API does not publish maintenance margin.
 export const VenueMarginResponseSchema = z.object({
   accountId: z.string(),
-  venue: z.literal('thalex'),
+  venue: z.enum(['thalex', 'paradex']),
   initialMarginUsd: z.number(),
   marginUsd: z.number(),
   remainingMarginUsd: z.number(),
+  maintenanceMarginUsd: z.number().finite().nonnegative().nullable().optional(),
   updatedAt: z.number(),
 });
 export type VenueMarginResponse = z.infer<typeof VenueMarginResponseSchema>;

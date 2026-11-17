@@ -45,6 +45,7 @@ import {
   setPortfolioAssistantFeedbackPending,
 } from './runtime-metrics.js';
 import { ledgerMatchesSession, thalexPositionStore } from './thalex-position-store.js';
+import { paradexPositionStore } from './paradex-position-store.js';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 
 const configuration = readPortfolioAssistantConfiguration(process.env);
@@ -115,14 +116,18 @@ const contextBuilder = new PortfolioAssistantContextBuilder(
   exchangePortfolioLedgerStore,
   Date.now,
   portfolioRefStore,
-  ledgerMatchesSession,
+  (accountId, venue) => ledgerMatchesSession(accountId, venue) &&
+    (venue !== 'paradex' || paradexPositionStore.environment(accountId) !== 'test'),
   thalexAccountLedger,
   (accountId, source) => {
     if (source === 'derive') return 'mainnet';
+    if (source === 'paradex') return paradexPositionStore.environment(accountId) === 'test' ? 'testnet' : 'mainnet';
     if (source !== 'thalex') return null;
     const environment = thalexPositionStore.environment(accountId);
     return environment == null ? null : environment === 'test' ? 'testnet' : 'mainnet';
   },
+  (accountId, source) => source === 'paradex' ? paradexPositionStore.ledgerAccountId(accountId) : accountId,
+  (accountId) => paradexPositionStore.fetchAccountSummary(accountId),
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();
 const usageLimiter = new PortfolioAssistantUsageLimiter(store, configuration);

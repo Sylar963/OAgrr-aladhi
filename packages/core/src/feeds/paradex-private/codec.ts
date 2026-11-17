@@ -1,4 +1,4 @@
-import type { EquityHistoryPoint, PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, ExchangePortfolioTrade, LinearPosition, PositionLeg } from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
 import {
@@ -6,6 +6,7 @@ import {
   type ParadexAccountHistory,
   type ParadexJwtClaims,
   type ParadexPosition,
+  type ParadexFill,
 } from './types.js';
 
 const MONTHS: Record<string, string> = {
@@ -97,6 +98,53 @@ export function paradexPositionsToLegs(
     const leg = paradexPositionToLeg(pos, nowMs);
     return leg == null ? [] : [leg];
   });
+}
+
+export function formatParadexOptionSymbol(leg: Pick<PositionLeg, 'underlying' | 'expiry' | 'strike' | 'optionRight'>): string {
+  const [year, month, day] = leg.expiry.split('-');
+  const monthName = Object.keys(MONTHS).find((key) => MONTHS[key] === month);
+  if (year == null || day == null || monthName == null) throw new Error('Invalid option expiry');
+  return `${leg.underlying}-USD-${Number(day)}${monthName}${year.slice(2)}-${String(leg.strike).replace('.', '_')}-${leg.optionRight === 'call' ? 'C' : 'P'}`;
+}
+
+export function paradexPositionsToLinear(positions: ParadexPosition[]): LinearPosition[] {
+  return positions.flatMap((pos): LinearPosition[] => {
+    const symbol = /^([A-Z0-9]+)-USD-PERP$/.exec(pos.market);
+    if (pos.status !== 'OPEN' || symbol == null) return [];
+    const size = finiteOrNull(pos.size);
+    const entry = finiteOrNull(pos.average_entry_price_usd ?? pos.average_entry_price);
+    if (size == null || size === 0 || entry == null || entry <= 0) return [];
+    const unrealized = finiteOrNull(pos.unrealized_pnl);
+    const funding = finiteOrNull(pos.unrealized_funding_pnl) ?? 0;
+    const mark = unrealized == null ? null : entry + (unrealized - funding) / size;
+    return [{
+      instrumentName: pos.market, underlying: symbol[1]!, kind: 'perpetual', expiry: null,
+      sizeCoin: size, entryPriceUsd: entry,
+      markPriceUsd: mark != null && Number.isFinite(mark) && mark >= 0 ? mark : null,
+      source: 'paradex',
+    }];
+  });
+}
+
+export function paradexFillToTrade(fill: ParadexFill): ExchangePortfolioTrade | null {
+  const parsed = parseParadexOptionSymbol(fill.market);
+  if (parsed == null) return null;
+  const amount = finiteOrNull(fill.size);
+  const price = finiteOrNull(fill.price);
+  if (amount == null || amount <= 0 || price == null || price < 0) {
+    throw new Error('Invalid Paradex option fill price or size');
+  }
+  const underlying = finiteOrNull(fill.underlying_price);
+  return {
+    venue: 'paradex', tradeId: fill.id, orderId: fill.order_id ?? null, groupId: null,
+    instrumentName: fill.market, ...parsed, direction: fill.side === 'BUY' ? 'buy' : 'sell',
+    amount, priceUsd: price,
+    feeUsd: ['USD', 'USDC', 'USDT'].includes(fill.fee_currency ?? '') ? finiteOrNull(fill.fee) : null,
+    realizedPnlUsd: finiteOrNull(fill.realized_pnl),
+    liquidityRole: fill.liquidity === 'MAKER' ? 'maker' : fill.liquidity === 'TAKER' ? 'taker' : null,
+    timestampMs: fill.created_at,
+    underlyingPriceUsd: underlying != null && underlying > 0 ? underlying : null,
+  };
 }
 
 export function decodeParadexJwtClaims(token: string): ParadexJwtClaims | null {

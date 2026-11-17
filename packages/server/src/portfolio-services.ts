@@ -4,6 +4,8 @@ import {
   type ExitBookRuntime,
   PortfolioRuntime,
   ThalexExitBooks,
+  ParadexExitBooks,
+  ParadexBookRuntime,
   VENUE_IDS,
   delta76,
   fitSvi,
@@ -517,6 +519,7 @@ const portfolioRuntimes = new Map<string, RuntimeEntry>();
 // Set once at boot from the shared order-book runtime; null when ORDER_BOOK=0, which leaves
 // close-now P&L off. Each portfolio runtime gets its own lease holder over the same books.
 let exitBookRuntime: ExitBookRuntime | null = null;
+const paradexExitBookRuntime = new ParadexBookRuntime();
 
 export function setPortfolioExitBookRuntime(runtime: ExitBookRuntime | null): void {
   exitBookRuntime = runtime;
@@ -558,7 +561,9 @@ export function getOrCreatePortfolioRuntime(
     markProvider: portfolioMarkProvider,
     chainSurface: portfolioChainSurface,
     ...(underlying != null ? { underlyingFilter: underlying } : {}),
-    ...(exitBookRuntime != null ? { exitBooks: new ThalexExitBooks(exitBookRuntime) } : {}),
+    ...(source === 'paradex' && process.env['PARADEX_EXIT_BOOKS'] !== '0'
+      ? { exitBooks: new ParadexExitBooks(paradexExitBookRuntime) }
+      : exitBookRuntime != null ? { exitBooks: new ThalexExitBooks(exitBookRuntime) } : {}),
   });
 
   const unsubscribe = store.subscribe((event) => {
@@ -605,6 +610,7 @@ export async function disposePortfolioServices(): Promise<void> {
   await derivePositionStore.dispose();
   await thalexPositionStore.dispose();
   await paradexPositionStore.dispose();
+  await paradexExitBookRuntime.dispose();
   const refs = [...chainRefs.values()];
   chainRefs.clear();
   await Promise.allSettled(

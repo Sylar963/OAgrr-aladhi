@@ -2,8 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 
 const { thalexMock } = vi.hoisted(() => ({ thalexMock: { getMargin: vi.fn() } }));
+const { paradexMock } = vi.hoisted(() => ({ paradexMock: {
+  retain: vi.fn(), release: vi.fn(), fetchAccountSummary: vi.fn(),
+} }));
 
 vi.mock('../../thalex-position-store.js', () => ({ thalexPositionStore: thalexMock }));
+vi.mock('../../paradex-position-store.js', () => ({ paradexPositionStore: paradexMock }));
 vi.mock('../../user-service.js', () => ({
   getRequestAccountId: (req: { headers: Record<string, string | undefined> }, fallback: string) =>
     req.headers['x-account'] ?? fallback,
@@ -62,5 +66,23 @@ describe('GET /portfolio/venue-margin', () => {
       remainingMarginUsd: 600,
       updatedAt: 5,
     });
+  });
+
+  it('returns Paradex reported maintenance margin without applying the Thalex ratio', async () => {
+    paradexMock.fetchAccountSummary.mockResolvedValueOnce({
+      equityUsd: 1000, initialMarginUsd: 400, freeCollateralUsd: 600,
+      maintenanceMarginUsd: 180, fetchedAt: 5,
+    });
+    const res = await app.inject({ method: 'GET', url: '/portfolio/venue-margin?venue=paradex', headers: { 'x-account': 'acct-p' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ venue: 'paradex', marginUsd: 1000, maintenanceMarginUsd: 180 });
+    expect(paradexMock.fetchAccountSummary).toHaveBeenCalledWith('acct-p');
+    expect(paradexMock.release).toHaveBeenCalledWith('acct-p');
+  });
+
+  it('withholds missing Paradex margin instead of inventing a zero', async () => {
+    paradexMock.fetchAccountSummary.mockResolvedValueOnce({ equityUsd: 1000, initialMarginUsd: null, freeCollateralUsd: null });
+    const res = await app.inject({ method: 'GET', url: '/portfolio/venue-margin?venue=paradex' });
+    expect(res.statusCode).toBe(503);
   });
 });

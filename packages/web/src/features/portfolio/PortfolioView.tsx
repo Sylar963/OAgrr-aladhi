@@ -82,6 +82,7 @@ const messages = defineMessages(
     manualNote: 'Hand-entered legs',
     paperNote: 'Live paper trading book',
     venueLiveNote: 'Live {venue} book via private WS',
+    paradexLiveNote: 'Paradex positions refreshed every 15 seconds via read-only REST',
     venuePendingNote: 'Adapter {status} — keys are stored but not wired yet',
     builderEmpty: 'Add option positions to explore them in Builder V2.',
     builderPickUnderlying: 'Select one underlying above to open its positions in Builder V2.',
@@ -103,6 +104,7 @@ const messages = defineMessages(
     venueNoteBefore: 'Showing live',
     venueNoteAfter:
       'positions from your private WS feed. Trade on the venue directly to change the book.',
+    paradexNote: 'Showing Paradex positions refreshed every 15 seconds. Trade on Paradex directly to change the book.',
   },
   {
     manual: 'Manual',
@@ -110,6 +112,7 @@ const messages = defineMessages(
     manualNote: 'Legs ingresados a mano',
     paperNote: 'Libro de paper trading en vivo',
     venueLiveNote: 'Libro de {venue} en vivo vía WS privado',
+    paradexLiveNote: 'Posiciones de Paradex actualizadas cada 15 segundos vía REST de solo lectura',
     venuePendingNote: 'Adaptador {status} — las claves están guardadas pero aún no conectadas',
     builderEmpty: 'Agrega posiciones de opciones para explorarlas en Builder V2.',
     builderPickUnderlying:
@@ -133,6 +136,7 @@ const messages = defineMessages(
     venueNoteBefore: 'Mostrando posiciones en vivo de',
     venueNoteAfter:
       'desde tu feed WS privado. Opera directamente en el exchange para cambiar el libro.',
+    paradexNote: 'Posiciones de Paradex actualizadas cada 15 segundos. Opera directamente en Paradex para cambiar el libro.',
   },
 );
 
@@ -161,7 +165,7 @@ function venueSourceOptions(t: T): SourceOption[] {
       ready: spec.status === 'available',
       note:
         spec.status === 'available'
-          ? t('venueLiveNote', { venue: VENUES[venue]?.label ?? venue })
+          ? venue === 'paradex' ? t('paradexLiveNote') : t('venueLiveNote', { venue: VENUES[venue]?.label ?? venue })
           : t('venuePendingNote', { status: spec.status }),
     };
   });
@@ -182,7 +186,7 @@ export default function PortfolioView() {
     underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
   const { data: positionsData } = usePortfolioPositions(source, positionsOpts);
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
-  const { data: venueMargin } = useVenueMargin(source === 'thalex' ? 'thalex' : null);
+  const { data: venueMargin } = useVenueMargin(source === 'thalex' || source === 'paradex' ? source : null);
 
   const sourceOptions = useMemo(() => [...baseSources(t), ...venueSourceOptions(t)], [t]);
   const activeNote = sourceOptions.find((o) => o.value === source)?.note ?? '';
@@ -313,7 +317,7 @@ export default function PortfolioView() {
               builderDisabledReason={builderDisabledReason}
               mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
               equityVenue={isEquityHistoryVenue(source) ? source : null}
-              margin={source === 'thalex' ? (venueMargin ?? null) : null}
+              margin={venueMargin ?? null}
               strategies={metrics?.strategies}
               positions={positions}
               totals={metrics?.totals ?? null}
@@ -377,6 +381,8 @@ export default function PortfolioView() {
               {t('paperNoteBefore')} <strong>{t('paper')}</strong>
               {t('paperNoteAfter')}
             </div>
+          ) : source === 'paradex' ? (
+            <div className={styles.readOnlyNote}>{t('paradexNote')}</div>
           ) : (
             <div className={styles.readOnlyNote}>
               {t('venueNoteBefore')} <strong>{VENUES[source as VenueId]?.label ?? source}</strong>{' '}

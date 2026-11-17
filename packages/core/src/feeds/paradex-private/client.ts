@@ -3,24 +3,28 @@ import type {
   PositionLeg,
   ParadexAccountSummary,
   ParadexRfq,
+  LinearPosition,
+  ExchangePortfolioTrade,
 } from '@oggregator/protocol';
 
 import { feedLogger } from '../../utils/logger.js';
-import { PARADEX_REST_BASE_URL } from '../shared/endpoints.js';
-import { paradexAccountHistoryToPoints, paradexPositionsToLegs } from './codec.js';
+import { PARADEX_REST_BASE_URL, PARADEX_TESTNET_REST_BASE_URL } from '../shared/endpoints.js';
+import { paradexAccountHistoryToPoints, paradexPositionsToLegs, paradexPositionsToLinear, paradexFillToTrade } from './codec.js';
 import {
   ParadexAccountHistorySchema,
   ParadexPositionsResponseSchema,
   ParadexAccountSchema,
   ParadexRfqListSchema,
   ParadexRfqBboSchema,
+  ParadexFillsResponseSchema,
 } from './types.js';
 
 export interface ParadexPrivateCreds {
   readonlyToken: string;
+  env?: 'prod' | 'test';
 }
 
-export type ParadexPositionsListener = (legs: PositionLeg[]) => void;
+export type ParadexPositionsListener = (legs: PositionLeg[], linear: LinearPosition[]) => void;
 
 export class ParadexAuthError extends Error {
   constructor(status: number) {
@@ -36,6 +40,7 @@ const POSITIONS_REFRESH_MS = 15_000;
 export class ParadexPrivateClient {
   private readonly listeners = new Set<ParadexPositionsListener>();
   private latestLegs: PositionLeg[] = [];
+  private latestLinear: LinearPosition[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private refreshInFlight: Promise<void> | null = null;
   private disposed = false;
@@ -58,7 +63,7 @@ export class ParadexPrivateClient {
     this.listeners.add(listener);
     if (this.latestLegs.length > 0) {
       try {
-        listener(this.latestLegs);
+        listener(this.latestLegs, this.latestLinear);
       } catch {}
     }
     return () => {
@@ -68,6 +73,26 @@ export class ParadexPrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  async fetchOptionTrades(fromMs: number): Promise<ExchangePortfolioTrade[]> {
+    const trades = new Map<string, ExchangePortfolioTrade>();
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const params = new URLSearchParams({ asset_kind: 'OPTION', page_size: '1000', start_at: String(fromMs) });
+      if (cursor != null) params.set('cursor', cursor);
+      const result = ParadexFillsResponseSchema.parse(await this.read(`/fills?${params}`));
+      for (const fill of result.results) {
+        const trade = paradexFillToTrade(fill);
+        if (trade != null) trades.set(trade.tradeId, trade);
+      }
+      if (!result.next) return [...trades.values()];
+      if (cursors.has(result.next)) throw new Error('Paradex fill history repeated a cursor');
+      cursors.add(result.next);
+      cursor = result.next;
+    }
+    throw new Error('Paradex fill history exceeded the page limit');
   }
 
   async fetchAccountSummary(): Promise<ParadexAccountSummary> {
@@ -81,6 +106,8 @@ export class ParadexPrivateClient {
       settlementAsset: account.settlement_asset ?? null,
       updatedAt: account.updated_at,
       fetchedAt: Date.now(),
+      totalCollateralUsd: account.total_collateral,
+      environment: this.creds.env ?? 'prod',
     };
   }
 
@@ -148,7 +175,8 @@ export class ParadexPrivateClient {
   }
 
   private async read(path: string): Promise<unknown> {
-    const res = await this.fetchImpl(`${PARADEX_REST_BASE_URL}${path}`, {
+    const baseUrl = this.creds.env === 'test' ? PARADEX_TESTNET_REST_BASE_URL : PARADEX_REST_BASE_URL;
+    const res = await this.fetchImpl(`${baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${this.creds.readonlyToken}` },
       signal: AbortSignal.any([this.abortController.signal, AbortSignal.timeout(10_000)]),
     });
@@ -213,10 +241,12 @@ export class ParadexPrivateClient {
     if (this.disposed) return;
     if (!parsed.success) throw new Error(`Paradex positions parse failed: ${parsed.error.message}`);
     const legs = paradexPositionsToLegs(parsed.data.results);
+    const linear = paradexPositionsToLinear(parsed.data.results);
     this.latestLegs = legs;
+    this.latestLinear = linear;
     for (const listener of this.listeners) {
       try {
-        listener(legs);
+        listener(legs, linear);
       } catch {}
     }
   }

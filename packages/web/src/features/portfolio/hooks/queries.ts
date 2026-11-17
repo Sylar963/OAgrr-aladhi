@@ -37,13 +37,13 @@ export const PORTFOLIO_QKEY = {
     ] as const,
   equityHistory: (accountId: string, venue: EquityHistoryVenue, range: EquityHistoryRange) =>
     ['account', accountId, 'portfolio', 'equity-history', venue, range] as const,
-  venueMargin: (accountId: string, venue: 'thalex') =>
+  venueMargin: (accountId: string, venue: 'thalex' | 'paradex') =>
     ['account', accountId, 'portfolio', 'venue-margin', venue] as const,
   thalexKeys: (accountId: string) => ['account', accountId, 'portfolio', 'thalex-keys'] as const,
   liveTrading: (accountId: string) => ['account', accountId, 'live-trading'] as const,
 };
 
-export function useVenueMargin(venue: 'thalex' | null) {
+export function useVenueMargin(venue: 'thalex' | 'paradex' | null) {
   const session = useAccountSession();
   const accountId = session.accountId ?? 'unresolved';
   return useQuery({

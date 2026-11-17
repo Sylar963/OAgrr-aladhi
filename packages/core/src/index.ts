@@ -354,6 +354,9 @@ export {
   type OrderBookRuntimeOptions,
   OrderBookUnavailableError,
   ThalexExitBooks,
+  ParadexExitBooks,
+  ParadexBookRuntime,
+  type ParadexBookRuntimeOptions,
 } from './runtime/order-book/index.js';
 export type {
   BookLevel,

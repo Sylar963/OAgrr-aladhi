@@ -1106,3 +1106,12 @@ queries use the intersection with the selected window, retaining the original bu
 Candle requests include the bucket covering an unaligned custom start.
 Regression coverage checks single-candle rendering, partial buckets, selection, boundaries,
 and unchanged-OI labels. These changes do not establish complete tape coverage or OI latency.
+
+
+### FLOW display scope (2026-11-17, client date)
+
+Roberto requested removal of the position-effect datapoint. Flow rows and expanded execution
+leg tables now display structure, execution side, instruments, and quantities without inferred
+opening/closing labels or unknown position-effect placeholders. Expanded evidence retains the
+observed OI samples and timestamps as market context. Automatic OI-refresh sockets for row
+labels were removed; opening evidence still fetches the recorded metadata and sample context.

@@ -21,17 +21,6 @@
 .labels small {
   color: var(--text-tertiary);
 }
-.unknown {
-  color: var(--text-secondary);
-}
-.verdict[data-effect="inferred_open"],
-.verdict[data-effect="opening_component"] {
-  color: var(--color-profit);
-}
-.verdict[data-effect="inferred_close"],
-.verdict[data-effect="closing_component"] {
-  color: var(--color-warning, #d7ae67);
-}
 .calculation {
   margin: 6px 0;
   font-size: 10px;

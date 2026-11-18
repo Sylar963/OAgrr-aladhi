@@ -40,73 +40,18 @@ const analysis: FlowAnalysis = {
 };
 
 describe('FLOW evidence presentation', () => {
-  it.each([
-    'ambiguous',
-    'offsetting',
-  ] as const)('keeps unchanged sampled OI distinct from the trade position effect (%s)', (status) => {
-    render(
-      <FlowLabels
-        analysis={{
-          ...analysis,
-          legs: [
-            {
-              ...analysis.legs[0]!,
-              position: {
-                status,
-                action: null,
-                basis: 'oi_reconciliation',
-                quantity: 9,
-                minOpening: 0,
-                minClosing: 0,
-                intervalVolume: 9,
-                otherVolume: 0,
-                tradeCount: 1,
-                coverage: 'recorded',
-                reason: 'no_net_oi_change',
-              },
-            },
-          ],
-        }}
-      />,
-    );
-    expect(screen.getByText('Unknown')).toBeTruthy();
-    expect(screen.getByText(/sampled OI unchanged/)).toBeTruthy();
-    expect(screen.getByTitle(/reporting lag/)).toBeTruthy();
-    expect(screen.queryByText('No net OI change')).toBeNull();
-  });
-  it('does not use the first leg verdict as the position effect of an unknown multi-leg group', () => {
-    render(
-      <FlowLabels
-        analysis={{
-          ...analysis,
-          legs: analysis.legs.map((leg) => ({
-            ...leg,
-            position: {
-              status: 'ambiguous',
-              action: null,
-              basis: 'oi_reconciliation',
-              quantity: leg.quantity,
-              minOpening: 0,
-              minClosing: 0,
-              intervalVolume: 9,
-              otherVolume: 0,
-              tradeCount: 1,
-              coverage: 'recorded',
-              reason: 'no_net_oi_change',
-            },
-          })),
-        }}
-      />,
-    );
-    expect(screen.getByText('Unknown')).toBeTruthy();
-    expect(screen.queryByText(/sampled OI unchanged/)).toBeNull();
-  });
-  it('shows an unknown position effect without implying OI reconciliation is running', () => {
-    render(<FlowLabels analysis={analysis} />);
-    expect(screen.getByText('Put Spread')).toBeTruthy();
-    expect(screen.getByText('Bought + sold legs')).toBeTruthy();
-    expect(screen.getByText('Unknown')).toBeTruthy();
-  });
+  it.each(['unknown', 'inferred_open', 'inferred_close', 'mixed', 'partial'] as const)(
+    'shows structure and execution without position-effect labels (%s)',
+    (positionEffect) => {
+      render(<FlowLabels analysis={{ ...analysis, positionEffect }} />);
+      expect(screen.getByText('Put Spread')).toBeTruthy();
+      expect(screen.getByText('Bought + sold legs')).toBeTruthy();
+      expect(screen.queryByText('Position effect')).toBeNull();
+      expect(screen.queryByText('Unknown')).toBeNull();
+      expect(screen.queryByText(/inferred/i)).toBeNull();
+      expect(fetchJson).not.toHaveBeenCalled();
+    },
+  );
   it('shows interval timing and unverified coverage next to increasing OI', async () => {
     const response: FlowEvidenceResponse = {
       analysis,
@@ -143,40 +88,13 @@ describe('FLOW evidence presentation', () => {
     expect(await screen.findByText('Samples bracket this trade')).toBeTruthy();
     expect(screen.getByText('+9')).toBeTruthy();
     expect(screen.getByText(/1.5 sec/)).toBeTruthy();
-    expect(screen.getByText(/assume complete tape coverage/)).toBeTruthy();
+    expect(screen.getByText(/OI samples describe the market-wide change/)).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Position effect' })).toBeNull();
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Action', 'Instrument', 'Quantity (ETH)',
+    ]);
     expect(screen.queryByText(/confirmed buy to open/i)).toBeNull();
     expect(fetchJson).toHaveBeenCalledWith(expect.stringContaining('mode=institutional'));
     client.clear();
-  });
-  it('shows an actionable inferred closing label with the trade-side direction', () => {
-    render(
-      <FlowLabels
-        analysis={{
-          ...analysis,
-          positionEffect: 'inferred_close',
-          legs: [
-            {
-              ...analysis.legs[0]!,
-              position: {
-                status: 'inferred_close',
-                action: 'buy_to_close',
-                basis: 'oi_reconciliation',
-                quantity: 9,
-                minOpening: 0,
-                minClosing: 9,
-                intervalVolume: 9,
-                otherVolume: 0,
-                tradeCount: 1,
-                coverage: 'recorded',
-                reason: 'all_volume_closing',
-              },
-            },
-          ],
-        }}
-      />,
-    );
-    expect(screen.getByText('Buy to close')).toBeTruthy();
-    expect(screen.getByText(/inferred/)).toBeTruthy();
-    expect(screen.queryByText('Unknown')).toBeNull();
   });
 });

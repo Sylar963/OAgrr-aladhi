@@ -1,13 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
   FlowEvidenceResponseSchema,
   type ExchangeTradeEvidence,
   type FlowAnalysis,
   type FlowOiContext,
-  type FlowPositionAssessment,
 } from '@oggregator/protocol';
-import { fetchJson, wsUrl } from '@lib/http';
+import { fetchJson } from '@lib/http';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { getStrategyLabel } from './StrategyIcon';
 import styles from './FlowEvidence.module.css';
@@ -16,29 +15,7 @@ const messages = defineMessages(
   {
     structure: 'Structure',
     side: 'Execution',
-    position: 'Position effect',
-    unknown: 'Unknown',
-    inferred_open: 'Opening · inferred',
-    inferred_close: 'Closing · inferred',
-    partialEffect: 'Opening / closing components',
-    mixedEffect: 'Opening + closing legs · inferred',
-    inferred: 'inferred',
-    buy_to_open: 'Buy to open',
-    sell_to_open: 'Sell to open',
-    buy_to_close: 'Buy to close',
-    sell_to_close: 'Sell to close',
-    opening_component: 'Opening ≥ {value}',
-    closing_component: 'Closing ≥ {value}',
-    offsetting: 'Unknown · sampled OI unchanged',
-    unchangedOi: 'sampled OI unchanged',
-    unchangedOiDetail: 'OI is unchanged between these samples. Transfers, offsetting trades, or reporting lag can produce this result; the execution’s opening or closing effect is unknown.',
-    ambiguous: 'Other trades can explain OI',
-    inconsistent: 'OI / tape mismatch',
-    incompleteTape: 'Incomplete tape match',
-    loadingEvidence: 'Loading OI evidence…',
-    intervalVolume: 'Interval volume',
-    otherVolume: 'Other volume',
-    prints: '{value} prints',
+    loadingEvidence: 'Loading execution evidence…',
     recorded: 'Recorded tape · completeness unverified',
     sequence_contiguous: 'Recorded sequences continuous · interval edges unverified',
     tapeGap: 'Trade sequence gap',
@@ -59,13 +36,13 @@ const messages = defineMessages(
     loading: 'Loading execution evidence and OI…',
     failed: 'Evidence unavailable in local capture.',
     detail: 'Trade evidence',
-    note: 'Opening / closing is inferred by reconciling this execution with OI and all recorded trades in the interval. Legs are assessed separately.',
+    note: 'Observed execution legs and exchange-provided grouping metadata.',
     instrument: 'Instrument',
     quantity: 'Quantity ({unit})',
     action: 'Action',
     oi: 'Open-interest context',
     oiNote:
-      'Inferred results and minimum quantities assume complete tape coverage and current exchange OI. Reporting lag or missing prints can change the result. This is retrospective evidence, not account-level confirmation.',
+      'OI samples describe the market-wide change between the displayed timestamps. Exchange reporting can lag executions.',
     unavailable: 'No usable OI bracket',
     pending: 'Waiting for the next OI sample',
     gap: 'Gap between samples',
@@ -92,29 +69,7 @@ const messages = defineMessages(
   {
     structure: 'Estructura',
     side: 'Ejecución',
-    position: 'Efecto en posición',
-    unknown: 'Desconocido',
-    inferred_open: 'Apertura · inferida',
-    inferred_close: 'Cierre · inferido',
-    partialEffect: 'Componentes de apertura / cierre',
-    mixedEffect: 'Patas de apertura + cierre · inferidas',
-    inferred: 'inferido',
-    buy_to_open: 'Compra para abrir',
-    sell_to_open: 'Venta para abrir',
-    buy_to_close: 'Compra para cerrar',
-    sell_to_close: 'Venta para cerrar',
-    opening_component: 'Apertura ≥ {value}',
-    closing_component: 'Cierre ≥ {value}',
-    offsetting: 'Desconocido · OI muestreado sin cambios',
-    unchangedOi: 'OI muestreado sin cambios',
-    unchangedOiDetail: 'El OI no cambia entre estas muestras. Las transferencias, trades compensados o demoras pueden producir este resultado; se desconoce si la ejecución abre o cierra una posición.',
-    ambiguous: 'Otros trades pueden explicar el OI',
-    inconsistent: 'OI y tape no coinciden',
-    incompleteTape: 'Tape incompleto para conciliar',
-    loadingEvidence: 'Cargando evidencia de OI…',
-    intervalVolume: 'Volumen del intervalo',
-    otherVolume: 'Otro volumen',
-    prints: '{value} prints',
+    loadingEvidence: 'Cargando evidencia de ejecución…',
     recorded: 'Tape registrado · integridad no verificada',
     sequence_contiguous: 'Secuencias continuas · extremos del intervalo no verificados',
     tapeGap: 'Hueco en la secuencia de trades',
@@ -135,13 +90,13 @@ const messages = defineMessages(
     loading: 'Cargando evidencia de ejecución y OI…',
     failed: 'Evidencia no disponible en la captura local.',
     detail: 'Evidencia del trade',
-    note: 'La apertura / cierre se infiere conciliando esta ejecución con el OI y todos los trades registrados en el intervalo. Cada pata se evalúa por separado.',
+    note: 'Patas de ejecución observadas y metadatos de agrupación proporcionados por el exchange.',
     instrument: 'Instrumento',
     quantity: 'Cantidad ({unit})',
     action: 'Acción',
     oi: 'Contexto de interés abierto',
     oiNote:
-      'Los resultados inferidos y cantidades mínimas suponen un tape completo y OI actualizado. Las demoras o prints faltantes pueden cambiar el resultado. Es evidencia retrospectiva, no confirmación de una cuenta.',
+      'Las muestras de OI describen el cambio del mercado entre las horas mostradas. El reporte del exchange puede demorarse respecto de las ejecuciones.',
     unavailable: 'Sin muestras de OI suficientes',
     pending: 'Esperando la siguiente muestra de OI',
     gap: 'Hueco entre muestras',
@@ -192,21 +147,6 @@ export function FlowLabels({ analysis }: { analysis?: FlowAnalysis | undefined }
           <small> · {t(analysis.sideBasis)}</small>
         ) : null}
       </span>
-      <span className={styles.unknown}>
-        <span className={styles.caption}>{t('position')}</span>
-        {analysis?.legs.length === 1 ? (
-          <PositionVerdict position={analysis.legs[0]?.position} />
-        ) : analysis?.positionEffect === 'inferred_open' ||
-          analysis?.positionEffect === 'inferred_close' ? (
-          t(analysis.positionEffect)
-        ) : analysis?.positionEffect === 'mixed' ? (
-          t('mixedEffect')
-        ) : analysis?.positionEffect === 'partial' ? (
-          t('partialEffect')
-        ) : (
-          t('unknown')
-        )}
-      </span>
     </div>
   );
 }
@@ -242,7 +182,6 @@ export function FlowRowLabels({
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const t = useT(messages);
-  const queryClient = useQueryClient();
   useEffect(() => {
     if (!ref.current || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(([entry]) =>
@@ -252,42 +191,6 @@ export function FlowRowLabels({
     return () => observer.disconnect();
   }, []);
   const { data, isFetching, error } = useFlowEvidence(target, visible);
-  const awaitingOi =
-    target.timestamp > Date.now() - 30 * 60_000 &&
-    (data?.oi.some((context) => context.status === 'pending' || context.status === 'unavailable') ?? false);
-  const queryKey = ['flow-evidence', target.mode, target.venue, target.tradeUid, target.timestamp];
-  useEffect(() => {
-    if (!visible || !awaitingOi) return;
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let reconnect: ReturnType<typeof setTimeout> | null = null;
-    const connect = () => {
-      if (stopped) return;
-      const params = new URLSearchParams({ ...target, timestamp: String(target.timestamp) });
-      socket = new WebSocket(`${wsUrl('/ws/flow-evidence')}?${params}`);
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(String(event.data)) as { type?: unknown; evidence?: unknown };
-          if (message.type !== 'evidence') return;
-          queryClient.setQueryData(
-            queryKey,
-            FlowEvidenceResponseSchema.parse(message.evidence),
-          );
-        } catch {
-          return;
-        }
-      };
-      socket.onclose = () => {
-        if (!stopped) reconnect = setTimeout(connect, 1_000);
-      };
-    };
-    connect();
-    return () => {
-      stopped = true;
-      if (reconnect) clearTimeout(reconnect);
-      socket?.close();
-    };
-  }, [visible, awaitingOi, queryClient, target.mode, target.venue, target.tradeUid, target.underlying, target.instrument, target.timestamp]);
   return (
     <div ref={ref}>
       <FlowLabels analysis={data?.analysis ?? analysis} />
@@ -297,41 +200,6 @@ export function FlowRowLabels({
         <small>{t('failed')}</small>
       ) : null}
     </div>
-  );
-}
-
-function PositionVerdict({ position }: { position?: FlowPositionAssessment | undefined }) {
-  const t = useT(messages);
-  if (!position) return <span>{t('unknown')}</span>;
-  const { status, action } = position;
-  if (status === 'offsetting' || (status === 'ambiguous' && position.reason === 'no_net_oi_change'))
-    return (
-      <span className={styles.verdict} data-effect="ambiguous" title={t('unchangedOiDetail')}>
-        {t('unknown')} <small>· {t('unchangedOi')}</small>
-      </span>
-    );
-  return (
-    <span className={styles.verdict} data-effect={status}>
-      {action ? (
-        <>
-          {t(action)} <small>· {t('inferred')}</small>
-        </>
-      ) : status === 'opening_component' ? (
-        <>
-          {t(status, { value: formatNumber(position.minOpening ?? 0) })}{' '}
-          <small>· {t('inferred')}</small>
-        </>
-      ) : status === 'closing_component' ? (
-        <>
-          {t(status, { value: formatNumber(position.minClosing ?? 0) })}{' '}
-          <small>· {t('inferred')}</small>
-        </>
-      ) : status === 'incomplete' ? (
-        t('incompleteTape')
-      ) : (
-        t(status)
-      )}
-    </span>
   );
 }
 
@@ -384,7 +252,6 @@ export function FlowEvidencePanel({
                 <th>{t('action')}</th>
                 <th>{t('instrument')}</th>
                 <th>{t('quantity', { unit: target.underlying })}</th>
-                <th>{t('position')}</th>
               </tr>
             </thead>
             <tbody>
@@ -393,21 +260,6 @@ export function FlowEvidencePanel({
                   <td data-side={leg.side}>{t(leg.side)}</td>
                   <td>{leg.instrument}</td>
                   <td>{formatNumber(leg.quantity)}</td>
-                  <td>
-                    <PositionVerdict position={leg.position} />
-                    {leg.position?.intervalVolume != null ? (
-                      <div className={styles.calculation}>
-                        {t('intervalVolume')}: {formatNumber(leg.position.intervalVolume)} ·{' '}
-                        {t('prints', { value: leg.position.tradeCount })}
-                        {leg.position.otherVolume != null ? (
-                          <>
-                            {' '}
-                            · {t('otherVolume')}: {formatNumber(leg.position.otherVolume)}
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </td>
                 </tr>
               ))}
             </tbody>

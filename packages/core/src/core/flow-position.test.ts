@@ -65,14 +65,14 @@ describe('OI and tape position reconciliation', () => {
   });
   it('does not claim a side opens or closes from unchanged OI', () => {
     expect(reconcileFlowPosition(leg, context(0), tape)).toMatchObject({
-      status: 'offsetting',
+      status: 'ambiguous',
       action: null,
     });
   });
   it('does not let numerical tolerance classify tiny unchanged-OI prints as opening', () => {
     expect(
       reconcileFlowPosition({ ...leg, quantity: 1e-10 }, context(0), { ...tape, volume: 1e-10 }),
-    ).toMatchObject({ status: 'offsetting', action: null });
+    ).toMatchObject({ status: 'ambiguous', action: null });
   });
   it('rejects mismatched units, missing target executions, gaps and truncated tape', () => {
     expect(reconcileFlowPosition(leg, context(2), tape).status).toBe('inconsistent');

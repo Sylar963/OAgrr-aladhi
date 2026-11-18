@@ -85,6 +85,13 @@ export function defaultExpiry(instruments: readonly InstrumentRow[]): string | n
   )[0]?.[0] ?? null;
 }
 
+export function flowBucketRange(bucketTs: number, resolution: number, range: HistoryRange) {
+  const start = Math.max(bucketTs, range.start ? Date.parse(range.start) : bucketTs);
+  const bucketEnd = bucketTs + resolution * 1000;
+  const end = Math.min(bucketEnd, range.end ? Date.parse(range.end) : bucketEnd);
+  return { start, end, midpoint: start + (end - start) / 2 };
+}
+
 export function flowResolution(range: HistoryRange): number {
   if (!range.start || !range.end) return 900;
   const durationMs = new Date(range.end).getTime() - new Date(range.start).getTime();

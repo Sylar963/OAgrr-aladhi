@@ -1084,3 +1084,25 @@ production and testnet API responses. See [implementation and limits](../paradex
   fixed while moving spot is an approximation, not native post-trade margin approval. No
   hypothetical-order margin preview is claimed. Thalex's maintenance ratio does not transfer.
 - Mainnet/testnet tokens, histories, depth estimates and leaderboard eligibility are isolated.
+
+
+## FLOW history and unchanged OI review (2026-11-17, client date)
+
+Engineering diagnosis, not a new book review or trading edge. Local API reproduction found
+identical OI readings bracketing Bybit prints over 1–2 seconds. The ticker envelope timestamp
+is when Bybit generates the message, not a guarantee that OI reflects every contemporaneous
+execution ([official ticker contract](https://bybit-exchange.github.io/docs/v5/websocket/public/ticker)).
+Unchanged sampled OI leaves the target position effect ambiguous. Position transfer, offsetting
+opening/closing volume, and reporting lag cannot be distinguished from those samples alone.
+The UI now reports an unknown position effect with unchanged sampled OI as context. Legacy
+`offsetting` responses receive the same presentation; no transfer or account action is asserted.
+A multi-leg group with unknown effect does not inherit its first leg's verdict. Sub-minute
+OI intervals display in seconds, so a one-second bracket is not rounded to `0.0 min`.
+
+The early-UTC-day historical chart also had a reproducible rendering defect: a single candle
+produced only an SVG move command, and the 15-minute flow bucket midpoint could lie beyond
+the selected end time. A single candle now has a visible marker. Bucket placement and execution
+queries use the intersection with the selected window, retaining the original bucket identity.
+Candle requests include the bucket covering an unaligned custom start.
+Regression coverage checks single-candle rendering, partial buckets, selection, boundaries,
+and unchanged-OI labels. These changes do not establish complete tape coverage or OI latency.

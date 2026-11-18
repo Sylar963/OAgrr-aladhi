@@ -186,7 +186,9 @@ export function useSpotCandleRange(args: SpotCandleRangeQueryArgs, enabled = tru
       new URLSearchParams({
         currency: args.underlying,
         resolution: String(args.resolution),
-        start: args.range.start ?? '',
+        start: args.range.start
+          ? new Date(Math.floor(Date.parse(args.range.start) / (args.resolution * 1000)) * args.resolution * 1000).toISOString()
+          : '',
         end: args.range.end ?? '',
         source: 'perp',
       }),

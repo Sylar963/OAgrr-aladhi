@@ -71,7 +71,7 @@ export function reconcileFlowPosition(
     return { ...bounds, status: 'closing_component', reason: 'closing_lower_bound' };
   return {
     ...bounds,
-    status: Math.abs(delta) <= tolerance ? 'offsetting' : 'ambiguous',
+    status: 'ambiguous',
     reason: Math.abs(delta) <= tolerance ? 'no_net_oi_change' : 'other_trades_can_explain_oi',
   };
 }

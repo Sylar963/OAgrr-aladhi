@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FlowIvSmile, FlowSpotChart, FlowStrikeLadder } from './FlowMarketCharts';
 import {
   defaultExpiry,
+  flowBucketRange,
   flowRangeIsSupported,
   flowResolution,
   formatExpiry,
@@ -229,8 +230,8 @@ export default function FlowChartsView({
     () =>
       selectedPoint
         ? {
-            start: new Date(selectedPoint.bucketTs).toISOString(),
-            end: new Date(selectedPoint.bucketTs + resolution * 1000).toISOString(),
+            start: new Date(flowBucketRange(selectedPoint.bucketTs, resolution, historyRange).start).toISOString(),
+            end: new Date(flowBucketRange(selectedPoint.bucketTs, resolution, historyRange).end).toISOString(),
           }
         : historyRange,
     [historyRange, resolution, selectedPoint],
@@ -400,6 +401,8 @@ export default function FlowChartsView({
               <div className={styles.mapGrid}>
                 <FlowSpotChart
                   candles={candles}
+                  candlesLoading={spotQuery.isPending}
+                  candlesFailed={spotQuery.isError}
                   points={flowMap.points}
                   range={historyRange}
                   resolution={resolution}
@@ -435,7 +438,7 @@ export default function FlowChartsView({
                             {t('selectedInterval', {
                               type: selectedPoint.optionType === 'call' ? t('c') : t('p'),
                               side: selectedPoint.side === 'buy' ? t('buy') : t('sell'),
-                              time: new Date(selectedPoint.bucketTs + resolution * 500).toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' }),
+                              time: new Date(flowBucketRange(selectedPoint.bucketTs, resolution, historyRange).midpoint).toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' }),
                             })}
                           </span>
                         </div>

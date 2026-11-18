@@ -29,7 +29,9 @@ const messages = defineMessages(
     sell_to_close: 'Sell to close',
     opening_component: 'Opening ≥ {value}',
     closing_component: 'Closing ≥ {value}',
-    offsetting: 'No net OI change',
+    offsetting: 'Unknown · sampled OI unchanged',
+    unchangedOi: 'sampled OI unchanged',
+    unchangedOiDetail: 'OI is unchanged between these samples. Transfers, offsetting trades, or reporting lag can produce this result; the execution’s opening or closing effect is unknown.',
     ambiguous: 'Other trades can explain OI',
     inconsistent: 'OI / tape mismatch',
     incompleteTape: 'Incomplete tape match',
@@ -84,6 +86,7 @@ const messages = defineMessages(
     partialNote: 'Some legs are missing. No complete structure is asserted.',
     unsupported: 'Some leg fields could not be validated.',
     minutes: '{value} min',
+    seconds: '{value} sec',
     noEvidence: 'No exchange grouping metadata was retained for this print.',
   },
   {
@@ -102,7 +105,9 @@ const messages = defineMessages(
     sell_to_close: 'Venta para cerrar',
     opening_component: 'Apertura ≥ {value}',
     closing_component: 'Cierre ≥ {value}',
-    offsetting: 'Sin cambio neto de OI',
+    offsetting: 'Desconocido · OI muestreado sin cambios',
+    unchangedOi: 'OI muestreado sin cambios',
+    unchangedOiDetail: 'El OI no cambia entre estas muestras. Las transferencias, trades compensados o demoras pueden producir este resultado; se desconoce si la ejecución abre o cierra una posición.',
     ambiguous: 'Otros trades pueden explicar el OI',
     inconsistent: 'OI y tape no coinciden',
     incompleteTape: 'Tape incompleto para conciliar',
@@ -157,6 +162,7 @@ const messages = defineMessages(
     partialNote: 'Faltan algunas patas. No se afirma una estructura completa.',
     unsupported: 'No se pudieron validar algunos campos de las patas.',
     minutes: '{value} min',
+    seconds: '{value} s',
     noEvidence: 'No se conservaron metadatos de agrupación del exchange para este print.',
   },
 );
@@ -198,7 +204,7 @@ export function FlowLabels({ analysis }: { analysis?: FlowAnalysis | undefined }
         ) : analysis?.positionEffect === 'partial' ? (
           t('partialEffect')
         ) : (
-          <PositionVerdict position={analysis?.legs[0]?.position} />
+          t('unknown')
         )}
       </span>
     </div>
@@ -298,6 +304,12 @@ function PositionVerdict({ position }: { position?: FlowPositionAssessment | und
   const t = useT(messages);
   if (!position) return <span>{t('unknown')}</span>;
   const { status, action } = position;
+  if (status === 'offsetting' || (status === 'ambiguous' && position.reason === 'no_net_oi_change'))
+    return (
+      <span className={styles.verdict} data-effect="ambiguous" title={t('unchangedOiDetail')}>
+        {t('unknown')} <small>· {t('unchangedOi')}</small>
+      </span>
+    );
   return (
     <span className={styles.verdict} data-effect={status}>
       {action ? (
@@ -474,7 +486,12 @@ function OiCard({ context }: { context: FlowOiContext }) {
             : `${context.delta > 0 ? '+' : ''}${formatNumber(context.delta)}`}
         </strong>
         {context.intervalMs != null ? (
-          <span> / {t('minutes', { value: (context.intervalMs / 60_000).toFixed(1) })}</span>
+          <span>
+            {' / '}
+            {context.intervalMs < 60_000
+              ? t('seconds', { value: (context.intervalMs / 1000).toFixed(1) })
+              : t('minutes', { value: (context.intervalMs / 60_000).toFixed(1) })}
+          </span>
         ) : null}
       </div>
       <dl className={styles.oiSamples}>

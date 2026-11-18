@@ -6,7 +6,7 @@ import type {
 } from '@oggregator/protocol';
 import { useMemo, type KeyboardEvent } from 'react';
 import type { HistoricalPriceCandle } from './chart-queries';
-import { formatMoney, type OptionFilter, type StrikeFlowProfile } from './flow-map-model';
+import { flowBucketRange, formatMoney, type OptionFilter, type StrikeFlowProfile } from './flow-map-model';
 import type { HistoryRange } from './queries';
 import styles from './FlowChartsView.module.css';
 
@@ -16,6 +16,8 @@ const messages = defineMessages(
     proxyDetail: 'Candle source is a venue perpetual, not the options index.',
     flowVolume: 'Recorded option flow · bubble size = total notional',
     noCandles: 'No underlying candles for this range',
+    loadingCandles: 'Loading underlying candles…',
+    candlesFailed: 'Could not load underlying candles. Try the range again.',
     buy: 'Buy',
     sell: 'Sell',
     calls: 'Calls',
@@ -37,6 +39,8 @@ const messages = defineMessages(
     proxyDetail: 'La fuente de velas es un perpetuo del venue, no el índice de opciones.',
     flowVolume: 'Flujo de opciones registrado · tamaño = nocional total',
     noCandles: 'No hay velas del subyacente en este período',
+    loadingCandles: 'Cargando velas del subyacente…',
+    candlesFailed: 'No se pudieron cargar las velas del subyacente. Vuelve a intentar el período.',
     buy: 'Compra',
     sell: 'Venta',
     calls: 'Calls',
@@ -57,6 +61,8 @@ const messages = defineMessages(
 
 interface FlowSpotChartProps {
   candles: readonly HistoricalPriceCandle[];
+  candlesLoading?: boolean;
+  candlesFailed?: boolean;
   points: readonly FlowStrikeMapPoint[];
   range: HistoryRange;
   resolution: number;
@@ -69,6 +75,8 @@ const CHART = { width: 1_000, height: 430, left: 72, right: 24, top: 22, bottom:
 
 export function FlowSpotChart({
   candles,
+  candlesLoading = false,
+  candlesFailed = false,
   points,
   range,
   resolution,
@@ -81,10 +89,10 @@ export function FlowSpotChart({
   const end = range.end ? Date.parse(range.end) : start + resolution * 1000;
   const priceData = useMemo(
     () => candles
-      .filter((candle) => candle.close > 0 && candle.timestamp >= start && candle.timestamp < end)
+      .filter((candle) => candle.close > 0 && candle.timestamp + resolution * 1000 > start && candle.timestamp < end)
       .slice()
       .sort((left, right) => left.timestamp - right.timestamp),
-    [candles, end, start],
+    [candles, end, resolution, start],
   );
   const data = useMemo(() => {
     if (priceData.length === 0) return null;
@@ -115,7 +123,7 @@ export function FlowSpotChart({
       return before.close + (after.close - before.close) * progress;
     };
     const linePath = priceData
-      .map((candle, index) => `${index === 0 ? 'M' : 'L'}${x(candle.timestamp).toFixed(2)},${y(candle.close).toFixed(2)}`)
+      .map((candle, index) => `${index === 0 ? 'M' : 'L'}${x(Math.max(start, candle.timestamp)).toFixed(2)},${y(candle.close).toFixed(2)}`)
       .join(' ');
     const tickPrices = Array.from({ length: 5 }, (_, index) => high - ((high - low) * index) / 4);
     const tickTimes = Array.from({ length: 6 }, (_, index) => start + ((end - start) * index) / 5);
@@ -127,6 +135,8 @@ export function FlowSpotChart({
   );
   const pointClusters = new Map<number, FlowStrikeMapPoint[]>();
   for (const point of visiblePoints) {
+    const window = flowBucketRange(point.bucketTs, resolution, range);
+    if (window.end <= window.start) continue;
     const cluster = pointClusters.get(point.bucketTs) ?? [];
     cluster.push(point);
     pointClusters.set(point.bucketTs, cluster);
@@ -179,8 +189,18 @@ export function FlowSpotChart({
               );
             })}
             <path d={data.linePath} className={styles.spotLine} />
+            {priceData.length === 1 ? (
+              <circle
+                cx={data.x(Math.max(start, priceData[0]!.timestamp))}
+                cy={data.y(priceData[0]!.close)}
+                r={3}
+                className={styles.spotPoint}
+              >
+                <title>{`${priceData[0]!.close.toLocaleString('en-US')} · ${new Date(priceData[0]!.timestamp).toISOString()}`}</title>
+              </circle>
+            ) : null}
             {[...pointClusters.entries()].map(([bucketTs, cluster]) => {
-              const centerTs = bucketTs + resolution * 500;
+              const centerTs = flowBucketRange(bucketTs, resolution, range).midpoint;
               const x = data.x(centerTs);
               const price = data.priceAt(centerTs);
               const y = data.y(price);
@@ -228,7 +248,9 @@ export function FlowSpotChart({
           <div className={styles.chartXAxis}>UTC</div>
         </div>
       ) : (
-        <div className={styles.chartEmpty}>{t('noCandles')}</div>
+        <div className={styles.chartEmpty} role="status">
+          {t(candlesFailed ? 'candlesFailed' : candlesLoading ? 'loadingCandles' : 'noCandles')}
+        </div>
       )}
     </section>
   );

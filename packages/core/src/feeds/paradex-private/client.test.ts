@@ -87,21 +87,75 @@ describe('ParadexPrivateClient', () => {
     await client.dispose();
   });
 
-  it('requests the required history resolution and keeps only the requested window', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      jsonResponse(200, {
-        data: [1000, 1100],
-        timestamps: [1_790_000_000_000, 1_791_000_000_000],
-      }),
-    );
+  it('merges finer equity history over coarse samples and appends current account equity', async () => {
+    const now = Date.UTC(2026, 10, 20, 12);
+    vi.useFakeTimers({ now });
+    const hour = 3_600_000;
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      if (url.pathname.endsWith('/account')) {
+        return jsonResponse(200, { account_value: '1005.75', total_collateral: '1200' });
+      }
+      const samples = {
+        alltime: {
+          data: [200, 1200, 1190, 1180, 1170],
+          timestamps: [
+            now - 1000 * hour,
+            now - 900 * hour,
+            now - 120 * hour,
+            now - 9 * hour,
+            now - 2 * hour,
+          ],
+        },
+        '8h': {
+          data: [1150, 1100, 1050],
+          timestamps: [now - 120 * hour, now - 8 * hour, now],
+        },
+        '1h': {
+          data: [1100, 1250, 900, 1000],
+          timestamps: [now - 10 * hour, now - 3 * hour, now - hour, now],
+        },
+      };
+      return jsonResponse(200, samples[url.searchParams.get('resolution') as keyof typeof samples]);
+    });
     const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
-    expect(await client.fetchEquityHistory(1_790_500_000_000)).toEqual([
-      { ts: 1_791_000_000_000, equityUsd: 1100 },
+    expect(await client.fetchEquityHistory(now - 950 * hour)).toEqual([
+      { ts: now - 900 * hour, equityUsd: 1200 },
+      { ts: now - 120 * hour, equityUsd: 1150 },
+      { ts: now - 10 * hour, equityUsd: 1100 },
+      { ts: now - 3 * hour, equityUsd: 1250 },
+      { ts: now - hour, equityUsd: 900 },
+      { ts: now, equityUsd: 1005.75 },
     ]);
-    const url = new URL(fetchImpl.mock.calls[0]![0]);
-    expect(url.searchParams.get('type')).toBe('value');
-    expect(url.searchParams.get('resolution')).toBe('alltime');
-    expect(fetchImpl.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+    const historyUrls = fetchImpl.mock.calls
+      .map(([input]) => new URL(input instanceof Request ? input.url : input))
+      .filter((url) => url.pathname.endsWith('/history'));
+    expect(historyUrls.map((url) => url.searchParams.get('resolution'))).toEqual([
+      'alltime', '8h', '1h',
+    ]);
+    expect(historyUrls.every((url) => url.searchParams.get('type') === 'value')).toBe(true);
+    expect(fetchImpl.mock.calls[0]![1]?.signal).toBeInstanceOf(AbortSignal);
+    await client.dispose();
+  });
+
+  it('keeps available equity history when finer resolutions are empty and preserves zero equity', async () => {
+    const now = Date.UTC(2026, 10, 20, 12);
+    vi.useFakeTimers({ now });
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      if (url.pathname.endsWith('/account')) return jsonResponse(200, { account_value: '0' });
+      return jsonResponse(
+        200,
+        url.searchParams.get('resolution') === 'alltime'
+          ? { data: [1000], timestamps: [(now - 86_400_000) / 1000] }
+          : { data: [], timestamps: [] },
+      );
+    });
+    const client = new ParadexPrivateClient({ readonlyToken: 'tok' }, fetchImpl);
+    expect(await client.fetchEquityHistory(now - 2 * 86_400_000)).toEqual([
+      { ts: now - 86_400_000, equityUsd: 1000 },
+      { ts: now, equityUsd: 0 },
+    ]);
     await client.dispose();
   });
 

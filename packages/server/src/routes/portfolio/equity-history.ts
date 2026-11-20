@@ -86,7 +86,7 @@ async function loadHistory(
         cache.delete(key);
         return null;
       }
-      const entry = { fetchedAt: nowMs, points: toDailyCloses(points) };
+      const entry = { fetchedAt: nowMs, points: venue === 'paradex' ? points : toDailyCloses(points) };
       cache.set(key, entry);
       return entry;
     })

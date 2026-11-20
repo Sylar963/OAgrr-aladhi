@@ -27,13 +27,13 @@ function loadRange(): EquityHistoryRange {
 }
 
 function fmtUsd(value: number): string {
-  return `$${Math.round(value).toLocaleString('en-US')}`;
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtSignedUsd(value: number): string {
-  const rounded = Math.round(value);
-  if (rounded === 0) return '$0';
-  return `${rounded > 0 ? '+' : '-'}$${Math.abs(rounded).toLocaleString('en-US')}`;
+  const rounded = Math.round(value * 100) / 100;
+  if (rounded === 0) return '$0.00';
+  return `${rounded > 0 ? '+' : '-'}${fmtUsd(Math.abs(rounded))}`;
 }
 
 interface Props {
@@ -52,6 +52,8 @@ const messages = defineMessages(
       "Daily cash balance at 00:00 UTC, rebuilt from {venue}'s transaction log (settlements, funding, deposits, withdrawals). The last point adds the current unrealised P&L. Non-USD collateral uses today's index price.",
     markToMarket:
       'Daily mark-to-market account value reported by {venue}. Deposits and withdrawals show up as equity changes.',
+    paradexHistory:
+      'Paradex account equity with hourly detail for recent history and coarser samples further back. The latest point includes current unrealised P&L. Refreshes every 5 minutes. Deposits and withdrawals change equity; the period change is not trading P&L.',
   },
   {
     rangeAria: 'Rango de equity',
@@ -64,6 +66,8 @@ const messages = defineMessages(
       'Saldo de efectivo diario a las 00:00 UTC, reconstruido desde el registro de transacciones de {venue} (liquidaciones, funding, depósitos, retiros). El último punto suma el P&L no realizado actual. El colateral que no es USD usa el precio índice de hoy.',
     markToMarket:
       'Valor diario de la cuenta a mercado reportado por {venue}. Los depósitos y retiros aparecen como cambios de equity.',
+    paradexHistory:
+      'Equity de Paradex con detalle horario reciente y muestras más espaciadas para el historial anterior. El último punto incluye el P&L no realizado actual. Se actualiza cada 5 minutos. Los depósitos y retiros cambian el equity; el cambio del período no es P&L de trading.',
   },
 );
 
@@ -100,7 +104,7 @@ export default function EquityHistoryChart({ venue }: Props) {
       bottomFillColor1: 'rgba(248, 113, 113, 0.02)',
       bottomFillColor2: 'rgba(248, 113, 113, 0.22)',
       lineWidth: 2,
-      priceFormat: { type: 'price', precision: 0, minMove: 1 },
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
     }) as ISeriesApi<'Baseline', Time>;
     chartRef.current = chart;
     seriesRef.current = series;
@@ -117,8 +121,9 @@ export default function EquityHistoryChart({ venue }: Props) {
     const start = points[0]?.equityUsd ?? 0;
     series.applyOptions({ baseValue: { type: 'price', price: start } });
     series.setData(points.map((p) => ({ time: Math.floor(p.ts / 1000) as Time, value: p.equityUsd })));
+    chartRef.current?.timeScale().applyOptions({ timeVisible: venue === 'paradex' });
     chartRef.current?.timeScale().fitContent();
-  }, [points]);
+  }, [points, venue]);
 
   const selectRange = (next: EquityHistoryRange) => {
     setRange(next);
@@ -177,7 +182,9 @@ export default function EquityHistoryChart({ venue }: Props) {
       <div className={styles.hint}>
         {data?.basis === 'cash_replay'
           ? t('cashReplay', { venue: venueLabel })
-          : t('markToMarket', { venue: venueLabel })}
+          : venue === 'paradex'
+            ? t('paradexHistory')
+            : t('markToMarket', { venue: venueLabel })}
       </div>
     </div>
   );

@@ -196,12 +196,37 @@ export class ParadexPrivateClient {
   }
 
   async fetchEquityHistory(fromMs: number): Promise<EquityHistoryPoint[]> {
-    // Paradex requires a resolution even though its OpenAPI spec omits it.
-    // Its portfolio uses alltime for windows longer than 800 hours.
-    const parsed = ParadexAccountHistorySchema.parse(
-      await this.read('/account/history?type=value&resolution=alltime'),
-    );
-    return paradexAccountHistoryToPoints(parsed).filter((point) => point.ts >= fromMs);
+    const [histories, account] = await Promise.all([
+      Promise.all(
+        ['alltime', '8h', '1h'].map(async (resolution) =>
+          paradexAccountHistoryToPoints(
+            ParadexAccountHistorySchema.parse(
+              await this.read(`/account/history?type=value&resolution=${resolution}`),
+            ),
+          ),
+        ),
+      ),
+      this.fetchAccountSummary(),
+    ]);
+    const currentTs = Math.floor(account.fetchedAt / 1000) * 1000;
+    const points = new Map<number, EquityHistoryPoint>();
+    for (const history of histories) {
+      const samples = history
+        .map((point) => ({ ...point, ts: Math.floor(point.ts / 1000) * 1000 }))
+        .filter((point) => point.ts >= fromMs && point.ts <= currentTs);
+      const first = samples[0];
+      const last = samples.at(-1);
+      if (first == null || last == null) continue;
+      // Replace the covered interval so coarse samples cannot distort finer history.
+      for (const ts of points.keys()) {
+        if (ts >= first.ts && ts <= last.ts) points.delete(ts);
+      }
+      for (const point of samples) points.set(point.ts, point);
+    }
+    if (currentTs >= fromMs) {
+      points.set(currentTs, { ts: currentTs, equityUsd: account.equityUsd });
+    }
+    return [...points.values()].sort((a, b) => a.ts - b.ts);
   }
 
   async fetchPnlHistory(fromMs: number): Promise<Array<{ ts: number; pnlUsd: number }>> {

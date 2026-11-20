@@ -125,6 +125,24 @@ describe('GET /portfolio/equity-history', () => {
     expect(failed.statusCode).toBe(502);
   });
 
+  it('preserves Paradex intraday equity changes instead of reducing them to daily closes', async () => {
+    const day = Math.floor(Date.now() / DAY_MS) * DAY_MS - DAY_MS;
+    const points = [
+      { ts: day, equityUsd: 1_000 },
+      { ts: day + 3_600_000, equityUsd: 1_150 },
+      { ts: day + 2 * 3_600_000, equityUsd: 950 },
+      { ts: day + 3 * 3_600_000, equityUsd: 1_000 },
+    ];
+    paradexMock.fetchEquityHistory.mockResolvedValueOnce(points);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/portfolio/equity-history?venue=paradex',
+      headers: { 'x-account': nextAccount() },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().points).toEqual(points);
+  });
+
   it('rejects venues without equity history', async () => {
     const res = await app.inject({ method: 'GET', url: '/portfolio/equity-history?venue=deribit' });
     expect(res.statusCode).toBe(400);

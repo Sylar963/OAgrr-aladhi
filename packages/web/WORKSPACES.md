@@ -313,3 +313,13 @@ compatible settlement timestamps and quote timestamps within 15 seconds across a
 points. Marks never replace missing bid/ask IV. Skew is stored in IV fractions and displayed
 in volatility points. Spot direction is context, not a trigger gate. No profitability or trade
 approval is inferred from a daily skew record. The existing Alpha view is preserved.
+
+Validation: an isolated feature checkout passed `VITEST_MAX_WORKERS=1
+npm_config_workspace_concurrency=1 pnpm precommit` with 4,919 tests across 603 files.
+The production web build passed into a temporary output directory. Chromium checks passed
+against development and production bundles for catalog discovery, four-tenor rendering,
+side/tenor filtering, narrow-panel overflow, layout restoration and Spanish labels, with no
+page errors. Web and server typechecks also passed in the concurrent shared checkout.
+The first gate attempt encountered an existing nondeterministic vault tampering fixture
+(its replacement character can equal the original); the complete rerun passed without
+changing that fixture. Validation did not publish live bundles or restart the backend.

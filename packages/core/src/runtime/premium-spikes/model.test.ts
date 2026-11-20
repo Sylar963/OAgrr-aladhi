@@ -58,6 +58,7 @@ describe('matched 25-delta skew quote', () => {
     expect(sample.callIv.bid).toBeCloseTo(0.55);
   });
   it.each([
+    'invalid-time',
     'stale',
     'future',
     'one-sided',
@@ -71,6 +72,7 @@ describe('matched 25-delta skew quote', () => {
   ])('rejects %s input', (kind) => {
     const input = chain();
     const put = input.contracts.put!;
+    if (kind === 'invalid-time') put.quote.timestamp = NaN;
     if (kind === 'stale') put.quote.timestamp = TEST_NOW - 60_001;
     if (kind === 'future') put.quote.timestamp = TEST_NOW + 1;
     if (kind === 'one-sided') put.greeks.askIv = null;

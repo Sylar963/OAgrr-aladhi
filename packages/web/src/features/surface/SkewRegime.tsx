@@ -1,19 +1,16 @@
-import { useState } from 'react';
-
 import InfoTip from '@components/ui/InfoTip';
 import { useLocale, useT } from '@lib/i18n';
 import type { IvTenor } from '@shared/enriched';
-
+import { useState } from 'react';
+import { skewMessages, surfaceMessages } from './i18n';
 import {
   CALL_PUT_FLOW_RESOLUTION_SEC,
   type IvHistoryWindow,
   useCallPutFlow,
   useIvHistory,
 } from './queries';
-import { skewMessages, surfaceMessages } from './i18n';
 import styles from './SkewRegime.module.css';
 import SkewRegimeChart, { REGIME_COLORS } from './SkewRegimeChart';
-import type { SurfaceMarket } from './surface-market';
 import {
   computeRegime,
   currentRun,
@@ -30,6 +27,7 @@ import {
   rrSeries,
   shareText,
 } from './skew-regime';
+import type { SurfaceMarket } from './surface-market';
 
 type SourceLabelKey = 'srcContracts' | 'srcNotional' | 'srcPremium' | 'srcRr';
 
@@ -96,13 +94,13 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
   const series =
     source === 'rr'
       ? rrSeries(iv.data?.tenors[tenor]?.series ?? [])
-      : flow.data
+      : flow.data?.buckets.length
         ? flowSeries(
             flow.data.buckets,
             source,
-            flow.data.start,
+            Math.max(flow.data.start, flow.data.buckets[0]!.ts),
             CALL_PUT_FLOW_RESOLUTION_SEC,
-            nowSec,
+            Math.min(nowSec, Math.floor((flow.data.updatedAt ?? Date.now()) / 1000), flow.data.end),
           )
         : [];
   const all = computeRegime(series, {
@@ -121,8 +119,12 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
 
   let status: string | null = null;
   if (unavailable) status = t('storeUnavailable');
-  else if (loading && points.length < 2) status = isFlow ? t('loadingFlow') : ts('loading');
   else if (flow.isError && isFlow) status = t('flowFailed');
+  else if (isFlow && flow.data?.stale)
+    status = t('flowCached', {
+      time: new Date(flow.data.updatedAt ?? flow.data.end * 1000).toLocaleString(),
+    });
+  else if (loading && points.length < 2) status = isFlow ? t('loadingFlow') : ts('loading');
   else if (points.length < 2) status = ts('insufficientHistory');
 
   return (
@@ -150,7 +152,21 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
         {last && (
           <span className={styles.value}>{formatRegimeValue(last.value, source, underlying)}</span>
         )}
-        {status && <span className={styles.muted}>{status}</span>}
+        {status && (
+          <span className={styles.muted} role="status">
+            {status}
+          </span>
+        )}
+        {isFlow && (flow.isError || flow.data?.stale) && (
+          <button
+            className={styles.toggleBtn}
+            type="button"
+            disabled={flow.isFetching}
+            onClick={() => void flow.refetch()}
+          >
+            {ts('retry')}
+          </button>
+        )}
       </div>
 
       <div className={styles.controls}>
@@ -201,9 +217,7 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
           <span className={styles.zoneSwatch} />
           {t('zonesLegend', { k: REGIME_K, label: zone.label })}
         </span>
-        <span className={styles.scope}>
-          {isFlow ? t('scopeFlow') : t('scopeRr', { tenor })}
-        </span>
+        <span className={styles.scope}>{isFlow ? t('scopeFlow') : t('scopeRr', { tenor })}</span>
       </div>
 
       <div className={styles.foot}>

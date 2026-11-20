@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { bucketCallPutMock, storeState } = vi.hoisted(() => ({
   bucketCallPutMock: vi.fn(),
@@ -88,6 +88,59 @@ describe('GET /flow/call-put-buckets', () => {
     bucketCallPutMock.mockResolvedValue([]);
     clearCallPutFlowCache();
     storeState.enabled = true;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('serves the last snapshot while a refresh fails, including across an hour boundary', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-20T12:59:30Z'));
+    const first = await app.inject({ method: 'GET', url: '/flow/call-put-buckets' });
+    const snapshot = first.json();
+    expect(snapshot.stale).toBe(false);
+
+    vi.setSystemTime(new Date('2026-11-20T13:01:00Z'));
+    bucketCallPutMock.mockRejectedValue(
+      new Error('Connection terminated due to connection timeout'),
+    );
+    const cached = await app.inject({ method: 'GET', url: '/flow/call-put-buckets' });
+    expect(cached.statusCode).toBe(200);
+    expect(cached.json()).toMatchObject({
+      stale: true,
+      updatedAt: snapshot.updatedAt,
+      start: snapshot.start,
+      end: snapshot.end,
+    });
+    const retry = await app.inject({ method: 'GET', url: '/flow/call-put-buckets' });
+    expect(retry.json().stale).toBe(true);
+    expect(bucketCallPutMock).toHaveBeenCalledTimes(2);
+
+    vi.setSystemTime(new Date('2026-11-20T13:02:00Z'));
+    bucketCallPutMock.mockResolvedValue([]);
+    await app.inject({ method: 'GET', url: '/flow/call-put-buckets' });
+    const recovered = await app.inject({ method: 'GET', url: '/flow/call-put-buckets' });
+    expect(recovered.json()).toMatchObject({ stale: false, end: snapshot.end + 3600 });
+  });
+
+  it('shares a cold request even when loading exceeds the cache lifetime', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let finish: (rows: []) => void = () => {};
+    bucketCallPutMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const first = app.inject({ method: 'GET', url: '/flow/call-put-buckets?days=7' });
+    const firstResult = first.then((response) => response);
+    await vi.waitFor(() => expect(bucketCallPutMock).toHaveBeenCalledTimes(1));
+    vi.setSystemTime(Date.now() + 120_000);
+    const second = app.inject({ method: 'GET', url: '/flow/call-put-buckets?days=30' });
+    const secondResult = second.then((response) => response);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(bucketCallPutMock).toHaveBeenCalledTimes(1);
+    finish([]);
+    expect((await firstResult).statusCode).toBe(200);
+    expect((await secondResult).statusCode).toBe(200);
   });
 
   it('reads the full aligned window once and trims it to each lookback', async () => {

@@ -17,7 +17,7 @@ const clock = new Intl.DateTimeFormat('en-US', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
-  hour12: false,
+  hourCycle: 'h23',
 });
 const resetClock = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Los_Angeles',
@@ -174,7 +174,11 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
         <div className={styles.filters}>
           <label>
             <span className={styles.srOnly}>{t('tenor')}</span>
-            <select value={tenor} onChange={(e) => setTenor(e.target.value)}>
+            <select
+              aria-label={t('tenor')}
+              value={tenor}
+              onChange={(e) => setTenor(e.target.value)}
+            >
               <option value="all">{t('allTenors')}</option>
               {PREMIUM_SPIKE_TENORS.map((value) => (
                 <option key={value}>{value}</option>
@@ -183,7 +187,7 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
           </label>
           <label>
             <span className={styles.srOnly}>{t('side')}</span>
-            <select value={side} onChange={(e) => setSide(e.target.value)}>
+            <select aria-label={t('side')} value={side} onChange={(e) => setSide(e.target.value)}>
               <option value="all">{t('allSides')}</option>
               <option value="put">{t('put')}</option>
               <option value="call">{t('call')}</option>

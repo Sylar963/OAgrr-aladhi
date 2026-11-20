@@ -84,6 +84,7 @@ function ivPoint(contract: NormalizedOptionContract, now: number, expiryTs: numb
     settlement !== expiryTs ||
     settlement <= now ||
     ts == null ||
+    !Number.isFinite(ts) ||
     ts > now ||
     now - ts > PREMIUM_SPIKE_MAX_AGE_MS ||
     g.delta == null ||

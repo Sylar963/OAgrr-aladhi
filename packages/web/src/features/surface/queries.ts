@@ -1,22 +1,22 @@
+import { useExpiries } from '@features/chain';
+import { fetchJson } from '@lib/http';
+import { tradfiFetchJson } from '@lib/tradfi-http';
+import { VENUE_IDS } from '@lib/venue-meta';
 import {
+  CALL_PUT_FLOW_MAX_DAYS,
   type CallPutFlowResponse,
   CallPutFlowResponseSchema,
   type TradfiVolHistoryResponse,
   TradfiVolHistoryResponseSchema,
 } from '@oggregator/protocol';
-import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
-
-import { useExpiries } from '@features/chain';
-import { VENUE_IDS } from '@lib/venue-meta';
-import { fetchJson } from '@lib/http';
-import { tradfiFetchJson } from '@lib/tradfi-http';
 import type {
   EnrichedChainResponse,
   IvHistoryResponse,
   IvSurfaceResponse,
   IvTenor,
 } from '@shared/enriched';
+import { useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import type { SurfaceMarket } from './surface-market';
 
 export type IvHistoryWindow = '30d' | '90d';
@@ -37,7 +37,9 @@ export function useSurface(underlying: string, venues: string[], market: Surface
     queryKey: tradfi ? ['tradfi-surface', underlying] : surfaceKeys.surface(underlying, venues),
     queryFn: () =>
       tradfi
-        ? tradfiFetchJson<IvSurfaceResponse>(`/surface?underlying=${encodeURIComponent(underlying)}`)
+        ? tradfiFetchJson<IvSurfaceResponse>(
+            `/surface?underlying=${encodeURIComponent(underlying)}`,
+          )
         : fetchJson<IvSurfaceResponse>(`/surface?underlying=${underlying}${venueParam}`),
     enabled: Boolean(underlying),
     staleTime: 4_000,
@@ -62,9 +64,16 @@ export function useIvHistory(
   const tenorParam = tenor ? `&tenor=${tenor}` : '';
   const path = `/iv-history?underlying=${encodeURIComponent(underlying)}&window=${window}&resolution=${IV_HISTORY_RESOLUTION[window]}${tenorParam}`;
   return useQuery({
-    queryKey: [market === 'tradfi' ? 'tradfi-iv-history' : 'iv-history', underlying, window, tenor ?? 'all'] as const,
+    queryKey: [
+      market === 'tradfi' ? 'tradfi-iv-history' : 'iv-history',
+      underlying,
+      window,
+      tenor ?? 'all',
+    ] as const,
     queryFn: () =>
-      market === 'tradfi' ? tradfiFetchJson<IvHistoryResponse>(path) : fetchJson<IvHistoryResponse>(path),
+      market === 'tradfi'
+        ? tradfiFetchJson<IvHistoryResponse>(path)
+        : fetchJson<IvHistoryResponse>(path),
     enabled: enabled && Boolean(underlying),
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -96,8 +105,9 @@ export function useTradfiIvHistoryUnderlyings(enabled = true) {
   return useQuery({
     queryKey: ['tradfi-iv-history-underlyings'] as const,
     queryFn: async () =>
-      TradfiIvHistoryUnderlyingsSchema.parse(await tradfiFetchJson<unknown>('/iv-history/underlyings'))
-        .underlyings,
+      TradfiIvHistoryUnderlyingsSchema.parse(
+        await tradfiFetchJson<unknown>('/iv-history/underlyings'),
+      ).underlyings,
     enabled,
     staleTime: 10 * 60_000,
   });
@@ -105,18 +115,52 @@ export function useTradfiIvHistoryUnderlyings(enabled = true) {
 
 export const CALL_PUT_FLOW_RESOLUTION_SEC = 3600;
 
+const SkewSpotHistorySchema = z.object({
+  currency: z.string(),
+  resolution: z.number(),
+  candles: z.array(
+    z.object({
+      timestamp: z.number().finite(),
+      close: z.number().positive().finite(),
+    }),
+  ),
+});
+
+export function useSkewSpotHistory(underlying: string, window: IvHistoryWindow) {
+  const buckets = (window === '90d' ? 90 : 30) * 24 + 1;
+  return useQuery({
+    queryKey: ['skew-spot-history', underlying, window] as const,
+    queryFn: async () =>
+      SkewSpotHistorySchema.parse(
+        await fetchJson<unknown>(
+          `/spot-candles?currency=${encodeURIComponent(underlying)}&resolution=3600&buckets=${buckets}`,
+        ),
+      ),
+    enabled: underlying === 'BTC' || underlying === 'ETH',
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+}
+
 export function useCallPutFlow(underlying: string, days: number, enabled: boolean) {
   return useQuery({
-    queryKey: ['call-put-flow', underlying, days] as const,
+    queryKey: ['call-put-flow', underlying, CALL_PUT_FLOW_MAX_DAYS] as const,
     queryFn: async () =>
       CallPutFlowResponseSchema.parse(
         await fetchJson<unknown>(
-          `/flow/call-put-buckets?underlying=${underlying}&resolution=${CALL_PUT_FLOW_RESOLUTION_SEC}&days=${days}`,
+          `/flow/call-put-buckets?underlying=${encodeURIComponent(underlying)}&resolution=${CALL_PUT_FLOW_RESOLUTION_SEC}&days=${CALL_PUT_FLOW_MAX_DAYS}`,
         ),
       ),
     enabled: enabled && Boolean(underlying),
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: (query) =>
+      query.state.data?.stale ? 5_000 : query.state.status === 'error' ? 15_000 : 5 * 60_000,
+    retry: 1,
+    select: (data: CallPutFlowResponse): CallPutFlowResponse => {
+      const start = Math.max(data.start, data.end - days * 86_400);
+      return { ...data, start, buckets: data.buckets.filter((bucket) => bucket.ts >= start) };
+    },
     placeholderData: (prev: CallPutFlowResponse | undefined) =>
       prev?.underlying === underlying ? prev : undefined,
   });
@@ -132,7 +176,9 @@ export function useAllExpiriesSmile(underlying: string, enabled: boolean) {
     queryFn: async (): Promise<EnrichedChainResponse[]> =>
       Promise.all(
         expiries.map((exp) =>
-          fetchJson<EnrichedChainResponse>(`/chains?underlying=${underlying}&expiry=${exp}${venueParam}`),
+          fetchJson<EnrichedChainResponse>(
+            `/chains?underlying=${underlying}&expiry=${exp}${venueParam}`,
+          ),
         ),
       ),
     enabled: Boolean(underlying && expiries.length > 0 && enabled),

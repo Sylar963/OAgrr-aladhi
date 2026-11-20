@@ -1,4 +1,3 @@
-import type { FastifyInstance } from 'fastify';
 import { normalizeTradeUnderlying } from '@oggregator/core';
 import type { CallPutBucket } from '@oggregator/db';
 import {
@@ -7,6 +6,7 @@ import {
   type CallPutFlowBucket,
   type CallPutFlowResponse,
 } from '@oggregator/protocol';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { tradeStore } from '../services.js';
@@ -90,7 +90,10 @@ async function cachedFullWindow(
     }
   }
   const current = entry;
-  const fresh = current.snapshot != null && current.refreshAt > now && current.snapshot.endSec === endSec;
+  const fresh =
+    current.snapshot != null &&
+    current.snapshot.updatedAt + CACHE_TTL_MS > now &&
+    current.snapshot.endSec === endSec;
   if (!fresh && !current.pending && current.refreshAt <= now) {
     current.pending = load()
       .then((buckets) => {
@@ -104,12 +107,14 @@ async function cachedFullWindow(
         onError(error);
         throw error;
       })
-      .finally(() => { current.pending = undefined; });
+      .finally(() => {
+        delete current.pending;
+      });
     void current.pending.catch(() => {});
   }
   if (current.snapshot) return { ...current.snapshot, stale: !fresh };
   if (!current.pending) throw new Error('Flow history temporarily unavailable');
-  return { ...await current.pending, stale: false };
+  return { ...(await current.pending), stale: false };
 }
 
 export function clearCallPutFlowCache(): void {
@@ -140,16 +145,19 @@ export async function callPutFlowRoute(app: FastifyInstance) {
     }
 
     const fullStartSec = endSec - CALL_PUT_FLOW_MAX_DAYS * 86_400;
-    const snapshot = await cachedFullWindow(`${underlying}|${resolution}`, endSec, async () =>
-      toCallPutFlowBuckets(
-        await tradeStore.bucketCallPut({
-          mode: 'live',
-          underlying,
-          startTs: new Date(fullStartSec * 1000),
-          endTs: new Date(endSec * 1000),
-          resolutionSec: resolution,
-        }),
-      ),
+    const snapshot = await cachedFullWindow(
+      `${underlying}|${resolution}`,
+      endSec,
+      async () =>
+        toCallPutFlowBuckets(
+          await tradeStore.bucketCallPut({
+            mode: 'live',
+            underlying,
+            startTs: new Date(fullStartSec * 1000),
+            endTs: new Date(endSec * 1000),
+            resolutionSec: resolution,
+          }),
+        ),
       (err) => req.log.warn({ err, underlying, resolution }, 'flow history refresh failed'),
     );
     return {

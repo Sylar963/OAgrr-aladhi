@@ -1,0 +1,75 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.legend,
+.readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.readout {
+  min-height: 16px;
+  font-size: 11px;
+}
+.wrap svg {
+  overflow: visible;
+  touch-action: pan-y;
+}
+.wrap text {
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.grid {
+  stroke: var(--border-subtle);
+  stroke-opacity: 0.65;
+}
+.zero {
+  stroke: var(--text-dim);
+  stroke-dasharray: 3 4;
+  stroke-opacity: 0.6;
+}
+.axis {
+  fill: var(--text-dim);
+}
+.crosshair {
+  stroke: var(--text-secondary);
+  stroke-opacity: 0.5;
+  stroke-dasharray: 2 3;
+}
+.status {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.status button {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  padding: 3px 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+}
+.caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
+}
+@container widget (max-width: 420px) {
+  .readout,
+  .legend {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

@@ -6,10 +6,10 @@ import { getHistoryCoverage } from './history-coverage';
 import { skewMessages } from './i18n';
 import { type IvHistoryWindow, useIvHistory } from './queries';
 import styles from './SkewHistory.module.css';
+import SkewPriceChart from './SkewPriceChart';
 import SkewRegime from './SkewRegime';
 import SkewSmileChart from './SkewSmileChart';
 import SkewTimeline from './SkewTimeline';
-import type { SurfaceMarket } from './surface-market';
 import {
   buildSkewLineData,
   describeSkew,
@@ -18,6 +18,7 @@ import {
   reconstructSmile,
   shortPercentile,
 } from './skew-history-utils';
+import type { SurfaceMarket } from './surface-market';
 
 const TENORS: IvTenor[] = ['7d', '30d', '60d', '90d'];
 const LOOKBACKS: { key: IvHistoryWindow; label: 'lb30' | 'lb90' }[] = [
@@ -27,6 +28,7 @@ const LOOKBACKS: { key: IvHistoryWindow; label: 'lb30' | 'lb90' }[] = [
 const MODELS = [
   { key: 'v1', label: 'v1', title: 'modelV1Title' },
   { key: 'v2', label: 'v2', title: 'modelV2Title' },
+  { key: 'price', label: 'Price', title: 'modelPriceTitle' },
 ] as const;
 type SkewModel = (typeof MODELS)[number]['key'];
 const RR_COLOR = '#50d2c1';
@@ -131,8 +133,16 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
   const [tenor, setTenor] = useState<IvTenor>('30d');
   const [vsKey, setVsKey] = useState<string>('7d');
   const [model, setModel] = useState<SkewModel>('v1');
+  const hasSpot = market === 'crypto' && (underlying === 'BTC' || underlying === 'ETH');
+  const activeModel = model === 'price' && !hasSpot ? 'v1' : model;
 
-  const { data, isPlaceholderData, isLoading } = useIvHistory(underlying, window, tenor, true, market);
+  const { data, isPlaceholderData, isLoading, isError, refetch } = useIvHistory(
+    underlying,
+    window,
+    tenor,
+    activeModel !== 'v2',
+    market,
+  );
   const result = data?.tenors[tenor];
   const series = result?.series ?? [];
   const current = result?.current;
@@ -166,16 +176,16 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
         <div className={styles.toggles}>
           <span className={styles.toggleLabel}>{t('model')}</span>
           <div className={styles.toggleGroup}>
-            {MODELS.map((m) => (
+            {MODELS.filter((m) => m.key !== 'price' || hasSpot).map((m) => (
               <button
                 key={m.key}
                 type="button"
                 title={t(m.title)}
                 className={styles.toggleBtn}
-                data-active={model === m.key ? 'true' : undefined}
+                data-active={activeModel === m.key ? 'true' : undefined}
                 onClick={() => setModel(m.key)}
               >
-                {m.label}
+                {m.key === 'price' ? t('price') : m.label}
               </button>
             ))}
           </div>
@@ -211,7 +221,7 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
               </button>
             ))}
           </div>
-          {model === 'v1' && (
+          {activeModel === 'v1' && (
             <>
               <span className={styles.toggleLabel} title={t('vsTitle')}>
                 {t('vs')}
@@ -234,9 +244,23 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
         </div>
       </div>
 
-      {model === 'v2' && <SkewRegime underlying={underlying} tenor={tenor} lookback={window} market={market} />}
+      {activeModel === 'v2' && (
+        <SkewRegime underlying={underlying} tenor={tenor} lookback={window} market={market} />
+      )}
 
-      {model === 'v1' && (
+      {activeModel === 'price' && (
+        <SkewPriceChart
+          underlying={underlying}
+          tenor={tenor}
+          window={window}
+          series={series}
+          loading={loading}
+          failed={isError}
+          retry={() => void refetch()}
+        />
+      )}
+
+      {activeModel === 'v1' && (
         <>
           <SkewTimeline
             label="25Δ RR"
@@ -277,7 +301,9 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
             <span className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
               {coverage.label}
             </span>
-            <span className={styles.takeaway}>{describeSkew(rrNow, rrPct, flyNow, flyPct, locale)}</span>
+            <span className={styles.takeaway}>
+              {describeSkew(rrNow, rrPct, flyNow, flyPct, locale)}
+            </span>
           </div>
         </>
       )}

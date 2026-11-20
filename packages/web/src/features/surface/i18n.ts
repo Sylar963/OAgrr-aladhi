@@ -27,6 +27,16 @@ export const skewMessages = defineMessages(
   {
     modelV1Title: 'Skew levels, percentiles, smile',
     modelV2Title: 'Segmented rolling regime (calls vs puts)',
+    modelPriceTitle: '25Δ risk reversal alongside underlying spot price',
+    price: 'Price',
+    priceAria: '{underlying} 25Δ skew and spot price',
+    priceLegend: '{underlying} spot · USD · right axis',
+    skewLegend: '{tenor} 25Δ RR · vol pts · left axis',
+    priceCaption:
+      'Call IV − put IV. Independent axes; price is overlaid, skew is unadjusted. Gaps remain visible.',
+    priceFailed: 'spot price history failed to load',
+    skewFailed: 'skew history failed to load',
+    priceLoading: 'loading spot price…',
     lb30: '1M',
     lb90: '3M',
     vs1d: '1d ago',
@@ -48,9 +58,11 @@ export const skewMessages = defineMessages(
     putsBid: 'puts bid',
     wingsRich: 'wings rich',
     wingsCheap: 'wings cheap',
-    rrTip1: 'Negative: puts richer than calls → downside fear (usual in BTC/ETH and equity indices).',
+    rrTip1:
+      'Negative: puts richer than calls → downside fear (usual in BTC/ETH and equity indices).',
     rrTip2: 'Positive: calls richer → upside FOMO. Near zero = balanced.',
-    chartTip: 'Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.',
+    chartTip:
+      'Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.',
     flyTip1: 'High: wings expensive (fat-tail / event premium).',
     flyTip2: 'Low/negative: wings cheap vs body.',
 
@@ -83,6 +95,7 @@ export const skewMessages = defineMessages(
     storeUnavailable: 'trade history store unavailable',
     loadingFlow: 'loading flow history…',
     flowFailed: 'flow history failed to load',
+    flowCached: 'cached flow · updated {time} · retrying',
     forDuration: 'for {d}',
     source: 'SOURCE',
     zones: 'ZONES',
@@ -100,6 +113,16 @@ export const skewMessages = defineMessages(
   {
     modelV1Title: 'Niveles de skew, percentiles, smile',
     modelV2Title: 'Régimen móvil segmentado (calls vs puts)',
+    modelPriceTitle: 'Risk reversal 25Δ junto al precio spot del subyacente',
+    price: 'Precio',
+    priceAria: 'Skew 25Δ y precio spot de {underlying}',
+    priceLegend: 'Spot {underlying} · USD · eje derecho',
+    skewLegend: 'RR 25Δ {tenor} · pts vol · eje izquierdo',
+    priceCaption:
+      'IV call − IV put. Ejes independientes; precio superpuesto, skew sin ajustar. Los huecos permanecen visibles.',
+    priceFailed: 'no se pudo cargar el historial del precio spot',
+    skewFailed: 'no se pudo cargar el historial de skew',
+    priceLoading: 'cargando precio spot…',
     lb30: '1M',
     lb90: '3M',
     vs1d: 'hace 1d',
@@ -158,6 +181,7 @@ export const skewMessages = defineMessages(
     storeUnavailable: 'almacén de historial de operaciones no disponible',
     loadingFlow: 'cargando historial de flujo…',
     flowFailed: 'no se pudo cargar el historial de flujo',
+    flowCached: 'flujo en caché · actualizado {time} · reintentando',
     forDuration: 'desde hace {d}',
     source: 'FUENTE',
     zones: 'ZONAS',
@@ -204,9 +228,12 @@ export const ivRankMessages = defineMessages(
     richTipBody:
       'Rank and pct compare IV with its own past. This row compares it with what BTC is likely to realize over the same horizon.',
     richTipFormula: 'excess = IV − forecast RV − usual (IV − later RV)',
-    richFcst: ': excess premium in vol points. Negative: cheap; positive: rich; ±2 pts fair (our band, untested on BTC).',
-    richHist: ': z-score of IV − forecast against its own daily history (overlapping, so descriptive only).',
-    rich24h: ': z-score of IV against the last 24h of 5-minute samples. Shows whether vol was just bid or offered.',
+    richFcst:
+      ': excess premium in vol points. Negative: cheap; positive: rich; ±2 pts fair (our band, untested on BTC).',
+    richHist:
+      ': z-score of IV − forecast against its own daily history (overlapping, so descriptive only).',
+    rich24h:
+      ': z-score of IV against the last 24h of 5-minute samples. Shows whether vol was just bid or offered.',
     richTenors: '7D and 30D only: the usual-premium baselines exist for those tenors.',
 
     samplesTitle: 'Samples',
@@ -227,7 +254,8 @@ export const ivRankMessages = defineMessages(
     coneTipTitle: 'Vol cone',
     coneTipBody:
       'Grey bands: distribution of realized vol over every rolling window of each horizon, from ~2 years of Deribit perpetual daily closes (Sinclair vol cone).',
-    coneTipBands: 'Darkest band 25–75th pct, then 10–90th, then min–max. Dashed line is the median.',
+    coneTipBands:
+      'Darkest band 25–75th pct, then 10–90th, then min–max. Dashed line is the median.',
     coneTipTeal: 'Teal',
     coneTipTealBody:
       ': current ATM IV term structure. Label is its percentile inside the cone (≈ when interpolated from the bands).',
@@ -264,15 +292,16 @@ export const ivRankMessages = defineMessages(
     ivrMid: ': rango medio; sin ventaja clara.',
     ivrRich: ': IV cara vs la ventana — favorece a vendedores de vol.',
     perTenorSource: 'Fuente por plazo',
-    src30: ' (BTC/ETH): DVOL de Deribit — ~1 año de cierres diarios, actualizado en vivo por el push de DVOL.',
-    srcOther:
-      ': promedios ATM entre exchanges interpolados al plazo, con snapshot cada 5 min.',
+    src30:
+      ' (BTC/ETH): DVOL de Deribit — ~1 año de cierres diarios, actualizado en vivo por el push de DVOL.',
+    srcOther: ': promedios ATM entre exchanges interpolados al plazo, con snapshot cada 5 min.',
     srcFreshA: 'Tras un reinicio del servidor, 7d/60d/90d tienen pocos datos — revisa ',
     srcFreshB: ' en cada tarjeta.',
 
     rankTipTitle: 'IV Rank',
     rankTipBody: 'Posición de la IV ATM actual en la banda mín→máx de la ventana.',
-    rankTip0: '0 = en el mínimo de la ventana (lo más barato visto). 100 = en el máximo (lo más caro visto).',
+    rankTip0:
+      '0 = en el mínimo de la ventana (lo más barato visto). 100 = en el máximo (lo más caro visto).',
     rankTipRich: ': prima históricamente cara — conviene vender vol.',
     rankTipMid: ': mitad del rango; sin ventaja clara.',
     rankTipCheap: ': prima históricamente barata — conviene comprar vol.',
@@ -282,7 +311,8 @@ export const ivRankMessages = defineMessages(
     pctTip1: 'Robusto ante valores atípicos — un dato extremo no mueve la aguja.',
     pctTip2:
       '50% = la mitad del historial fue menor. 90% = solo el 10% de la ventana ha sido más caro.',
-    pctTip3: 'Compáralo con el rank: una gran divergencia indica distribuciones distorsionadas por atípicos.',
+    pctTip3:
+      'Compáralo con el rank: una gran divergencia indica distribuciones distorsionadas por atípicos.',
 
     richTipTitle: 'IV vs pronóstico',
     richTipBody:
@@ -298,7 +328,8 @@ export const ivRankMessages = defineMessages(
 
     samplesTitle: 'Muestras',
     samplesBody: 'Lecturas válidas de IV ATM dentro de la ventana seleccionada.',
-    samples1: '30d BTC/ETH se inicializa con ~1 año de velas diarias de DVOL de Deribit al arrancar.',
+    samples1:
+      '30d BTC/ETH se inicializa con ~1 año de velas diarias de DVOL de Deribit al arrancar.',
     samples2: 'Los demás plazos suman un punto nuevo cada 5 min desde la superficie en vivo.',
     samples3: 'Rank / pct muestran “–” hasta que n ≥ 2 con un rango distinto de cero.',
 
@@ -336,7 +367,8 @@ export const ivRankMessages = defineMessages(
     tfTipRv:
       ': vol realizada cierre a cierre de los últimos 21 días hábiles, anualizada sobre 252 días hábiles.',
     tfTipLookbacks: '6M = 126 días hábiles, 1A = 252.',
-    tfSamplesBody: 'Días hábiles con valor dentro de la ventana seleccionada, a partir de velas diarias.',
+    tfSamplesBody:
+      'Días hábiles con valor dentro de la ventana seleccionada, a partir de velas diarias.',
     tfConeBody:
       'Bandas grises: distribución de la vol realizada en cada ventana móvil de cada horizonte, a partir de ~3 años de cierres diarios. Los horizontes de 7/14/30/60/90 días calendario usan ventanas de 5/10/21/42/63 días hábiles.',
     tfConeTealBody:

@@ -46,6 +46,9 @@ vi.mock('@features/analytics', () => ({
 }));
 vi.mock('@features/gex', () => ({ GexView: () => <div>view:gex</div> }));
 vi.mock('@features/news', () => ({ NewsView: () => <div>view:news</div> }));
+vi.mock('@features/premium-spikes', () => ({
+  PremiumSpikesPanel: () => <div>card:premium-spikes</div>,
+}));
 vi.mock('@features/expected-move', () => ({
   ExpectedMovePanel: () => <div>card:expected-move</div>,
 }));
@@ -115,8 +118,8 @@ describe('card widgets', () => {
     (kind) => !TABS.some((tab) => tab.id === kind),
   );
 
-  it('lists nineteen cards', () => {
-    expect(cardKinds).toHaveLength(19);
+  it('lists twenty cards', () => {
+    expect(cardKinds).toHaveLength(20);
   });
 
   it.each(cardKinds)('renders the %s card without needing an account', async (kind) => {

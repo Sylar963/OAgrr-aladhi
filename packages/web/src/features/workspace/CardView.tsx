@@ -3,7 +3,12 @@ import type { CardKind } from '@lib/tabs';
 import { type ComponentType, lazy } from 'react';
 
 const CARD_VIEWS: Record<CardKind, ComponentType<{ underlying?: string }>> = {
-  'expected-move': lazy(() => import('@features/expected-move').then((m) => ({ default: m.ExpectedMovePanel }))),
+  'premium-spikes': lazy(() =>
+    import('@features/premium-spikes').then((m) => ({ default: m.PremiumSpikesPanel })),
+  ),
+  'expected-move': lazy(() =>
+    import('@features/expected-move').then((m) => ({ default: m.ExpectedMovePanel })),
+  ),
   'chain-table': ChainTableWidget,
   'chain-venues': ChainVenuesWidget,
   'oi-summary': lazy(() =>

@@ -23,6 +23,7 @@ const cardMessages = defineMessages(
     'iv-rank': 'IV rank',
     'skew-history': 'Skew history',
     'expected-move': 'Expected move',
+    'premium-spikes': 'Spike Premium Alerts',
   } satisfies Record<CardKind, string>,
   {
     'chain-table': 'Tabla de la cadena',
@@ -44,6 +45,7 @@ const cardMessages = defineMessages(
     'iv-rank': 'Rango de IV',
     'skew-history': 'Historial de skew',
     'expected-move': 'Movimiento esperado',
+    'premium-spikes': 'Alertas de picos de prima',
   },
 );
 

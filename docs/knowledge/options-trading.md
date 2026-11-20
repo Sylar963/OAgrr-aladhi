@@ -1115,3 +1115,24 @@ leg tables now display structure, execution side, instruments, and quantities wi
 opening/closing labels or unknown position-effect placeholders. Expanded evidence retains the
 observed OI samples and timestamps as market context. Automatic OI-refresh sockets for row
 labels were removed; opening evidence still fetches the recorded metadata and sample context.
+
+## Observed daily skew records (2026-11-20)
+
+Engineering definition for the additive Spike Premium Alerts widget; no new book passages,
+exchange execution rules or strategy-performance evidence were reviewed. At matched 25-delta
+put/call IV, synthetic put-rich bid = P_bid_IV − C_ask_IV and ask = P_ask_IV − C_bid_IV;
+call-rich bid = −put-rich ask and ask = −put-rich bid. These are quoted IV differences,
+not executable combo prices, realized premiums or a demonstrated trading edge. General IV
+level changes and relative skew changes are distinct. Spot direction does not gate records.
+
+The runtime tracks independent earlier observed bid/ask maxima per actual expiry and tenor.
+Both must be exceeded in one valid sample to alert; the first sample only seeds. Samples are
+10 seconds apart, restricted to fresh sized two-sided quotes with matching settlement and
+25-delta interpolation inside 15–35 delta, without extrapolation. Exact displayed expiries
+are nearest listed 30/90/180/365-day proxies, pinned for each Pacific calendar session.
+Local history preserves the observed daily baseline across process restarts; it cannot
+reconstruct earlier intraday records or missed ticks during downtime. Pacific midnight follows
+America/Los_Angeles daylight saving rules. Tests cover reciprocal quote signs, interpolation,
+one-sided/stale/invalid inputs, independent high-water marks, first-sample/restart behavior,
+midnight requests and 23/25-hour DST sessions. This feature establishes descriptive quote
+records and does not estimate subsequent returns, transaction costs or execution probability.

@@ -13,6 +13,7 @@ import { tradeStore } from '../services.js';
 
 const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 32;
+const RETRY_DELAY_MS = 30_000;
 
 const QuerySchema = z.object({
   underlying: z.string().min(1).default('BTC'),
@@ -57,25 +58,58 @@ export function toCallPutFlowBuckets(rows: readonly CallPutBucket[]): CallPutFlo
   return [...byTs.values()].sort((a, b) => a.ts - b.ts);
 }
 
-const cache = new Map<string, { expiresAt: number; value: Promise<CallPutFlowBucket[]> }>();
+interface CachedWindow {
+  buckets: CallPutFlowBucket[];
+  endSec: number;
+  updatedAt: number;
+}
+
+interface CacheEntry {
+  refreshAt: number;
+  snapshot?: CachedWindow;
+  pending?: Promise<CachedWindow>;
+}
+
+const cache = new Map<string, CacheEntry>();
 
 // Every lookback reads the full window so the store's per-flush remote cache is shared by all.
-function cachedFullWindow(
+async function cachedFullWindow(
   key: string,
+  endSec: number,
   load: () => Promise<CallPutFlowBucket[]>,
-): Promise<CallPutFlowBucket[]> {
+  onError: (error: unknown) => void,
+): Promise<CachedWindow & { stale: boolean }> {
   const now = Date.now();
-  const hit = cache.get(key);
-  if (hit && hit.expiresAt > now) return hit.value;
-
-  for (const [k, entry] of cache) {
-    if (entry.expiresAt <= now || cache.size >= CACHE_MAX_ENTRIES) cache.delete(k);
+  let entry = cache.get(key);
+  if (!entry) {
+    entry = { refreshAt: 0 };
+    cache.set(key, entry);
+    for (const [k, candidate] of cache) {
+      if (cache.size <= CACHE_MAX_ENTRIES) break;
+      if (k !== key && !candidate.pending) cache.delete(k);
+    }
   }
-
-  const value = load();
-  cache.set(key, { expiresAt: now + CACHE_TTL_MS, value });
-  value.catch(() => cache.delete(key));
-  return value;
+  const current = entry;
+  const fresh = current.snapshot != null && current.refreshAt > now && current.snapshot.endSec === endSec;
+  if (!fresh && !current.pending && current.refreshAt <= now) {
+    current.pending = load()
+      .then((buckets) => {
+        const snapshot = { buckets, endSec, updatedAt: Date.now() };
+        current.snapshot = snapshot;
+        current.refreshAt = Date.now() + CACHE_TTL_MS;
+        return snapshot;
+      })
+      .catch((error: unknown) => {
+        current.refreshAt = Date.now() + RETRY_DELAY_MS;
+        onError(error);
+        throw error;
+      })
+      .finally(() => { current.pending = undefined; });
+    void current.pending.catch(() => {});
+  }
+  if (current.snapshot) return { ...current.snapshot, stale: !fresh };
+  if (!current.pending) throw new Error('Flow history temporarily unavailable');
+  return { ...await current.pending, stale: false };
 }
 
 export function clearCallPutFlowCache(): void {
@@ -106,7 +140,7 @@ export async function callPutFlowRoute(app: FastifyInstance) {
     }
 
     const fullStartSec = endSec - CALL_PUT_FLOW_MAX_DAYS * 86_400;
-    const buckets = await cachedFullWindow(`${underlying}|${resolution}|${endSec}`, async () =>
+    const snapshot = await cachedFullWindow(`${underlying}|${resolution}`, endSec, async () =>
       toCallPutFlowBuckets(
         await tradeStore.bucketCallPut({
           mode: 'live',
@@ -116,14 +150,17 @@ export async function callPutFlowRoute(app: FastifyInstance) {
           resolutionSec: resolution,
         }),
       ),
+      (err) => req.log.warn({ err, underlying, resolution }, 'flow history refresh failed'),
     );
     return {
       available: true,
       underlying,
       resolution,
-      start: startSec,
-      end: endSec,
-      buckets: buckets.filter((bucket) => bucket.ts >= startSec),
+      start: snapshot.endSec - days * 86_400,
+      end: snapshot.endSec,
+      buckets: snapshot.buckets.filter((bucket) => bucket.ts >= snapshot.endSec - days * 86_400),
+      stale: snapshot.stale,
+      updatedAt: snapshot.updatedAt,
     } satisfies CallPutFlowResponse;
   });
 }

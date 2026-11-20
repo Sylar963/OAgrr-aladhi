@@ -52,6 +52,7 @@ export const CARD_KINDS = [
   'iv-rank',
   'skew-history',
   'expected-move',
+  'premium-spikes',
 ] as const;
 
 /** Single cards from Chain, Analytics and Volatility, which only exist as widgets inside custom tabs. */

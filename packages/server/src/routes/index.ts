@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { premiumSpikesRoute } from './premium-spikes.js';
 import { isReady } from '../app.js';
 import { alphaIronFlyScannerRoute } from './alpha-iron-fly-scanner.js';
 import { alphaMarketContextRoute } from './alpha-market-context.js';
@@ -101,6 +102,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(surfaceRoute, { prefix: '/api' });
   app.register(statsRoute, { prefix: '/api' });
   app.register(flowRoute, { prefix: '/api' });
+  app.register(premiumSpikesRoute, { prefix: '/api' });
   app.register(flowStrikeMapRoute, { prefix: '/api' });
   app.register(flowEvidenceRoute, { prefix: '/api' });
   app.register(blockFlowRoute, { prefix: '/api' });

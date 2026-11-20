@@ -698,3 +698,5 @@ export * from './alpha-evaluation.js';
 export * from './alpha-strategy-context.js';
 export * from './expected-move.js';
 export * from './tradfi-analytics.js';
+
+export * from './premium-spikes.js';

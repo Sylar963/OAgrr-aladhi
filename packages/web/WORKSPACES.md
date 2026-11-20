@@ -277,3 +277,39 @@ The final production entry is 362,102 bytes gzip, 2,786 bytes above the original
 Dockview and its window controls remain lazy-loaded. The focused regression suite passes 41 tests.
 The final `VITEST_MAX_WORKERS=1 npm_config_workspace_concurrency=1 pnpm precommit` gate passed all
 typechecks and 4,576 tests across 560 files. `pnpm --filter @oggregator/web build` also passed.
+
+## Spike Premium Alerts panel
+
+Use **+ Widget → Spike Premium Alerts** in any desktop workspace. The lazy-loaded panel
+follows the workspace's BTC/ETH asset or can be pinned to either, and selects one crypto
+venue at a time. It adds no browser WebSocket subscription. Tenor and put/call filters only
+filter the feed; optional sound applies to newly received matching alerts while mounted.
+
+The backend samples every ten seconds after an asset/venue pair is first opened and keeps
+monitoring when the panel closes. At most eight pairs run per backend. Registered monitors,
+daily independent bid/ask highs, and the latest 500 alerts per pair survive restarts through
+`PREMIUM_SPIKE_CACHE_PATH` (default `.cache/premium-spikes.json`); keep that file on persistent
+storage. It records observed samples, not every exchange tick or earlier intraday history.
+There is no historical backfill for downtime. The API is `GET /api/premium-spikes` with
+`underlying=BTC|ETH` and a crypto `venue` (default Deribit).
+
+Each Pacific calendar session chooses the closest listed expiries to 30, 90, 180 and 365
+calendar days and pins those actual expiries until the next session. The panel shows the
+actual date and remaining days; sparse catalogs can map multiple labels to the same expiry.
+The session resets at midnight `America/Los_Angeles`, including 23/25-hour DST days.
+The first valid observation seeds both sides without firing. Tracking-since labels disclose
+partial-day coverage; quote/source failures retain the observed highs without emitting alerts.
+
+Put-rich skew bid = put bid IV − call ask IV, ask = put ask IV − call bid IV. Call-rich skew
+reverses the legs. The two option rights are interpolated separately at |delta| = 0.25 from
+fresh two-sided quotes between 15 and 35 delta, without extrapolation. This is a synthetic IV
+quote indication, not a guaranteed executable risk reversal. A side alerts only when its bid
+and ask both strictly exceed their respective earlier session maxima in the same sample.
+A bid-only record still updates that bid's high; subsequent ask-only catch-up does not alert.
+A small 1e-10 IV tolerance suppresses floating-point noise, not economically small records.
+
+Inputs require uncrossed positive premiums/IVs and displayed sizes, age at most 60 seconds,
+compatible settlement timestamps and quote timestamps within 15 seconds across all interpolation
+points. Marks never replace missing bid/ask IV. Skew is stored in IV fractions and displayed
+in volatility points. Spot direction is context, not a trigger gate. No profitability or trade
+approval is inferred from a daily skew record. The existing Alpha view is preserved.

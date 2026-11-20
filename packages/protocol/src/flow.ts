@@ -139,6 +139,8 @@ export const CallPutFlowResponseSchema = z.object({
   start: z.number(),
   end: z.number(),
   buckets: z.array(CallPutFlowBucketSchema),
+  stale: z.boolean().optional(),
+  updatedAt: z.number().optional(),
 });
 
 export type CallPutFlowResponse = z.infer<typeof CallPutFlowResponseSchema>;

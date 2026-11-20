@@ -630,3 +630,15 @@ export {
   STRADDLE_MAD_FACTOR,
   type ExpectedMoveSessionInput,
 } from './services/expected-move.js';
+
+export {
+  PremiumSpikeRuntime,
+  type PremiumSpikeSource,
+  type PremiumSpikeHistory,
+} from './runtime/premium-spikes/runtime.js';
+export {
+  premiumSpikeSample,
+  premiumSpikeSession,
+  selectPremiumSpikeExpiries,
+  PREMIUM_SPIKE_MAX_AGE_MS,
+} from './runtime/premium-spikes/model.js';

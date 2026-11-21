@@ -194,10 +194,10 @@ describe('ordinal', () => {
 describe('describeSkew', () => {
   it('reads put skew and tail pricing in plain language', () => {
     expect(describeSkew(-0.8, 72, 0.9, 44)).toBe(
-      'Puts over calls by 0.8vp: typical for the lookback (72nd pct). Tails typical for the lookback (44th pct).',
+      'Puts over calls by 0.8vp: typical for the lookback (72nd pct). Wing IV premium vs ATM: typical for the lookback (44th pct).',
     );
     expect(describeSkew(1.2, 92, 2, 8)).toBe(
-      'Calls over puts by 1.2vp: calls unusually bid (92nd pct). Tails unusually cheap (8th pct).',
+      'Calls over puts by 1.2vp: calls unusually bid (92nd pct). Wing IV premium vs ATM: unusually low for the lookback (8th pct).',
     );
   });
 });

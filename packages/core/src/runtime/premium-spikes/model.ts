@@ -75,6 +75,8 @@ interface Point {
   bid: number;
   ask: number;
   ts: number;
+  premium: { bid: number; ask: number } | null;
+  referencePriceUsd: number | null;
 }
 function ivPoint(contract: NormalizedOptionContract, now: number, expiryTs: number): Point | null {
   const { quote: q, greeks: g } = contract;
@@ -111,13 +113,47 @@ function ivPoint(contract: NormalizedOptionContract, now: number, expiryTs: numb
     q.askSize <= 0
   )
     return null;
-  return { delta: Math.abs(g.delta), bid: g.bidIv, ask: g.askIv, ts };
+  const bid = q.bid.usdPerBase;
+  const ask = q.ask.usdPerBase;
+  const reference = q.indexPriceUsd;
+  const premium =
+    bid != null &&
+    ask != null &&
+    Number.isFinite(bid) &&
+    Number.isFinite(ask) &&
+    bid > 0 &&
+    ask >= bid
+      ? { bid, ask }
+      : null;
+  return {
+    delta: Math.abs(g.delta),
+    bid: g.bidIv,
+    ask: g.askIv,
+    ts,
+    premium,
+    referencePriceUsd:
+      reference != null && Number.isFinite(reference) && reference > 0 ? reference : null,
+  };
 }
 
-function at25Delta(points: Point[]): { bid: number; ask: number; times: number[] } | null {
+interface DeltaQuote {
+  bid: number;
+  ask: number;
+  times: number[];
+  premium: { bid: number; ask: number } | null;
+  references: Array<number | null>;
+}
+function at25Delta(points: Point[]): DeltaQuote | null {
   const sorted = points.sort((a, b) => a.delta - b.delta || b.ts - a.ts);
   const exact = sorted.find((p) => Math.abs(p.delta - 0.25) < 1e-8);
-  if (exact) return { bid: exact.bid, ask: exact.ask, times: [exact.ts] };
+  if (exact)
+    return {
+      bid: exact.bid,
+      ask: exact.ask,
+      times: [exact.ts],
+      premium: exact.premium,
+      references: [exact.referencePriceUsd],
+    };
   const lo = sorted.filter((p) => p.delta < 0.25).at(-1);
   const hi = sorted.find((p) => p.delta > 0.25);
   if (!lo || !hi || lo.delta < 0.15 || hi.delta > 0.35) return null;
@@ -126,6 +162,14 @@ function at25Delta(points: Point[]): { bid: number; ask: number; times: number[]
     bid: lo.bid + weight * (hi.bid - lo.bid),
     ask: lo.ask + weight * (hi.ask - lo.ask),
     times: [lo.ts, hi.ts],
+    premium:
+      lo.premium && hi.premium
+        ? {
+            bid: lo.premium.bid + weight * (hi.premium.bid - lo.premium.bid),
+            ask: lo.premium.ask + weight * (hi.premium.ask - lo.premium.ask),
+          }
+        : null,
+    references: [lo.referencePriceUsd, hi.referencePriceUsd],
   };
 }
 
@@ -149,6 +193,15 @@ export function premiumSpikeSample(
   if (!put || !call) return null;
   const times = [...put.times, ...call.times];
   if (Math.max(...times) - Math.min(...times) > 15_000) return null;
+  const references = [...put.references, ...call.references];
+  const completeReferences = references.every((value): value is number => value != null);
+  const sortedReferences = completeReferences ? [...references].sort((a, b) => a - b) : [];
+  const middle = Math.floor(sortedReferences.length / 2);
+  const referencePriceUsd = completeReferences
+    ? sortedReferences.length % 2 === 0
+      ? sortedReferences[middle - 1]! / 2 + sortedReferences[middle]! / 2
+      : sortedReferences[middle]!
+    : null;
   return {
     observedAt: now,
     quoteAt: Math.min(...times),
@@ -156,5 +209,10 @@ export function premiumSpikeSample(
     callIv: { bid: call.bid, ask: call.ask },
     putSkew: { bid: put.bid - call.ask, ask: put.ask - call.bid },
     callSkew: { bid: call.bid - put.ask, ask: call.ask - put.bid },
+    money: {
+      referencePriceUsd,
+      putPremiumUsdPerBase: put.premium,
+      callPremiumUsdPerBase: call.premium,
+    },
   };
 }

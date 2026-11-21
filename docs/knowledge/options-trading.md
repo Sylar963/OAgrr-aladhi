@@ -1136,3 +1136,17 @@ America/Los_Angeles daylight saving rules. Tests cover reciprocal quote signs, i
 one-sided/stale/invalid inputs, independent high-water marks, first-sample/restart behavior,
 midnight requests and 23/25-hour DST sessions. This feature establishes descriptive quote
 records and does not estimate subsequent returns, transaction costs or execution probability.
+
+Dollar context for observed skew records (2026-11-20): the user requested money amounts in
+addition to IV. Engineering units: reference underlying notional = chosen BTC/ETH base size
+× median venue index price of all supporting quote observations; per-side premium indication
+= chosen size × explicit normalized `usdPerBase`, interpolated with the same delta weights as
+IV. Underlying notional and option premium are distinct from executed flow or liquidity
+available for that size. Do not multiply by contract size a second time or substitute the
+legacy `usd` field when its normalization is unknown. Missing index/normalization withholds
+only the affected dollar readout. Old saved observations keep their existing skew baseline
+and have unavailable money context; no backward reconstruction from current prices.
+Quantity changes are presentation only and do not change the trigger. Flow-style sound uses
+the shared preference and cue family, with tier intensity based on this reference quantity,
+not a claim about actual trade size. These are UI/normalization derivations with regression
+checks; no new external sources, book passages, execution rules or performance evidence.

@@ -12,6 +12,12 @@ const IvPairSchema = z.object({
   bid: z.number().finite().positive(),
   ask: z.number().finite().positive(),
 });
+const MoneyPairSchema = IvPairSchema.refine((pair) => pair.bid <= pair.ask);
+export const PremiumSpikeMoneySchema = z.object({
+  referencePriceUsd: z.number().finite().positive().nullable(),
+  putPremiumUsdPerBase: MoneyPairSchema.nullable(),
+  callPremiumUsdPerBase: MoneyPairSchema.nullable(),
+});
 export const PremiumSpikeSampleSchema = z.object({
   observedAt: z.number().int().nonnegative(),
   quoteAt: z.number().int().nonnegative(),
@@ -19,6 +25,7 @@ export const PremiumSpikeSampleSchema = z.object({
   callIv: IvPairSchema,
   putSkew: PairSchema,
   callSkew: PairSchema,
+  money: PremiumSpikeMoneySchema.nullable().default(null),
 });
 export const PremiumSpikeTenorStateSchema = z.object({
   tenor: PremiumSpikeTenorSchema,

@@ -7,6 +7,7 @@ import { skewMessages } from './i18n';
 import { type IvHistoryWindow, useIvHistory } from './queries';
 import styles from './SkewHistory.module.css';
 import SkewPriceChart from './SkewPriceChart';
+import SkewReadout from './SkewReadout';
 import SkewRegime from './SkewRegime';
 import SkewSmileChart from './SkewSmileChart';
 import SkewTimeline from './SkewTimeline';
@@ -262,6 +263,10 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
 
       {activeModel === 'v1' && (
         <>
+          {!loading && current && (
+            <SkewReadout point={current} percentile={flyPct} tenor={tenor}
+              historyDays={window === '90d' ? 90 : 30} />
+          )}
           <SkewTimeline
             label="25Δ RR"
             title={t('rrTitle')}

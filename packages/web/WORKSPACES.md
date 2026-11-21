@@ -323,3 +323,29 @@ page errors. Web and server typechecks also passed in the concurrent shared chec
 The first gate attempt encountered an existing nondeterministic vault tampering fixture
 (its replacement character can equal the original); the complete rerun passed without
 changing that fixture. Validation did not publish live bundles or restart the backend.
+
+The alert panel's **🔊 / 🔇** button now shares Flow's persisted `tapeSoundEnabled` preference
+and the same upward/downward cue family. It plays at most three fresh matching records per
+update, suppresses historical replays and filtered-out rows, and retains a basic cue below
+Flow's $10K notional threshold so small ETH quote alerts are still audible. Cue tiers use the
+selected quote-size reference notional, not actual traded size.
+
+**Quote size** is measured in BTC/ETH base units and defaults to 1. The tenor cards and feed
+show USD put/call premium bid/ask indications for that size and **underlying notional** = size
+× the median venue index price across the sample's supporting quotes. Premiums use the
+adapter's explicit `usdPerBase` normalization, with the same 25-delta interpolation weights
+as IV. Never apply the contract multiplier again or assume the legacy `usd` field has the
+same unit. These amounts are before fees and are quote-size comparisons, not traded volume,
+book-depth commitments or guaranteed fills. Editing size changes presentation and cue tiers;
+it does not change skew highs or generate an alert. Invalid size withholds the amounts.
+
+Missing normalized premiums or index references remain unavailable independently, while valid
+IV/skew observations continue. Legacy saved observations receive `money: null` on parsing,
+preserving their daily highs and alerts without inventing old USD prices from live quotes.
+
+Sound/USD follow-up validation (2026-11-21): the complete shared-workspace `pnpm precommit`
+gate passed 4,948 tests across 607 files with two Vitest workers and sequential workspace
+execution. The production build, lint and whitespace checks passed. Chromium verified both
+development and production bundles, including real AudioContext oscillator cues, Flow's
+persisted sound preference, no historical replay, quantity-based USD scaling, filtering,
+narrow-panel layout, restored layouts and Spanish labels. Live deployment remains pending.

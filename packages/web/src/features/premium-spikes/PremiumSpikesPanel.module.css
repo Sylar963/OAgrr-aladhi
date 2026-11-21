@@ -49,7 +49,7 @@
   color: var(--text-tertiary);
   font-size: 9px;
 }
-.panel :is(button, select) {
+.panel :is(button, select, input) {
   min-height: 32px;
   border: 1px solid var(--border-default);
   border-radius: 4px;
@@ -65,7 +65,7 @@
   color: var(--accent-primary);
   border-color: var(--accent-primary);
 }
-.panel :is(button, select, summary):focus-visible {
+.panel :is(button, select, input, summary):focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 3px;
 }
@@ -259,6 +259,72 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .eventTop > span {
+    margin-left: 0;
+  }
+}
+
+.cardNotional {
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+.cardNotional b {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.reading .premiumValue {
+  color: var(--text-primary);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.money {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.money > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.money small {
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+.money strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.sizeControl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.sizeControl input {
+  width: 105px;
+  min-width: 0;
+}
+.sizeError {
+  margin: 0;
+  color: var(--color-warning);
+  font-size: 10px;
+}
+.moneyNote {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.7;
+}
+@container widget (max-width: 440px) {
+  .sizeControl {
     margin-left: 0;
   }
 }

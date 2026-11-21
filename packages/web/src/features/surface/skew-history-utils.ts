@@ -13,9 +13,9 @@ const messages = defineMessages(
     putsBid: 'puts unusually bid',
     callsBid: 'calls unusually bid',
     rrLine: '{level}: {rel}.',
-    tails: 'Tails {rel}.',
-    cheap: 'unusually cheap',
-    rich: 'unusually rich',
+    tails: 'Wing IV premium vs ATM: {rel}.',
+    cheap: 'unusually low for the lookback',
+    rich: 'unusually high for the lookback',
   },
   {
     pct: 'p{n}',
@@ -28,9 +28,9 @@ const messages = defineMessages(
     putsBid: 'puts inusualmente demandados',
     callsBid: 'calls inusualmente demandados',
     rrLine: '{level}: {rel}.',
-    tails: 'Colas: {rel}.',
-    cheap: 'inusualmente baratas',
-    rich: 'inusualmente caras',
+    tails: 'Prima de IV de alas frente a ATM: {rel}.',
+    cheap: 'inusualmente baja para el periodo',
+    rich: 'inusualmente alta para el periodo',
   },
 );
 

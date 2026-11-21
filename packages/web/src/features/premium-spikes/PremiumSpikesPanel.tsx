@@ -3,13 +3,15 @@ import {
   PREMIUM_SPIKE_TENORS,
   type PremiumSpikeQuery,
   type PremiumSpikeResponse,
+  type PremiumSpikeSample,
 } from '@oggregator/protocol';
-import { useMarket } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { VENUES, VENUE_LIST } from '@lib/venue-meta';
 import { useT } from '@lib/i18n';
-import { playTradeCue } from '@lib/audio';
+import { playTradeCue, tierForNotional } from '@lib/audio';
 import { usePremiumSpikes } from './queries';
 import { messages } from './i18n';
+import { premiumSpikeSize, premiumSpikeNotional, premiumSpikePremium } from './money';
 import styles from './PremiumSpikesPanel.module.css';
 
 const clock = new Intl.DateTimeFormat('en-US', {
@@ -29,6 +31,43 @@ const resetClock = new Intl.DateTimeFormat('en-US', {
 });
 function pair(value: { bid: number; ask: number } | null): string {
   return value ? `${(value.bid * 100).toFixed(2)} / ${(value.ask * 100).toFixed(2)}` : '— / —';
+}
+
+const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+function usd(value: number | null): string {
+  return value == null ? '—' : dollars.format(value);
+}
+function usdPair(value: { bid: number; ask: number } | null): string {
+  return value ? `${usd(value.bid)} / ${usd(value.ask)}` : '—';
+}
+function Money({
+  sample,
+  size,
+  underlying,
+}: {
+  sample: PremiumSpikeSample;
+  size: number | null;
+  underlying: string;
+}) {
+  const t = useT(messages);
+  return (
+    <div className={styles.money}>
+      <div>
+        <small>
+          {t('notional')} · {size ?? '—'} {underlying}
+        </small>
+        <strong>{usd(premiumSpikeNotional(sample, size))}</strong>
+      </div>
+      <div>
+        <small>{t('putPremium')}</small>
+        <strong>{usdPair(premiumSpikePremium(sample, 'put', size))}</strong>
+      </div>
+      <div>
+        <small>{t('callPremium')}</small>
+        <strong>{usdPair(premiumSpikePremium(sample, 'call', size))}</strong>
+      </div>
+    </div>
+  );
 }
 
 export default function PremiumSpikesPanel() {
@@ -97,7 +136,10 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
   const t = useT(messages);
   const [tenor, setTenor] = useState('all');
   const [side, setSide] = useState('all');
-  const [sound, setSound] = useState(false);
+  const sound = useAppStore((s) => s.soundEnabled);
+  const setSound = useAppStore((s) => s.setSoundEnabled);
+  const [sizeInput, setSizeInput] = useState('1');
+  const size = premiumSpikeSize(sizeInput);
   const seen = useRef<{ session: number; count: number } | null>(null);
   const now = Date.now();
   const sameSession = now >= report.sessionStartMs && now < report.sessionEndMs;
@@ -111,14 +153,27 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
       previous?.session === report.sessionStartMs &&
       report.alertCount > previous.count
     ) {
-      const latest = report.alerts
+      const freshAlerts = report.alerts
         .slice(0, report.alertCount - previous.count)
-        .find((a) => (tenor === 'all' || a.tenor === tenor) && (side === 'all' || a.side === side));
-      if (latest && latest.timestamp >= Date.now() - 30_000)
-        playTradeCue(latest.side === 'put' ? 'sell' : 'buy', 'whale');
+        .filter(
+          (a) =>
+            (tenor === 'all' || a.tenor === tenor) &&
+            (side === 'all' || a.side === side) &&
+            a.timestamp >= Date.now() - 30_000,
+        )
+        .sort(
+          (a, b) =>
+            (premiumSpikeNotional(b.sample, size) ?? 0) -
+            (premiumSpikeNotional(a.sample, size) ?? 0),
+        )
+        .slice(0, 3);
+      for (const alert of freshAlerts) {
+        const tier = tierForNotional(premiumSpikeNotional(alert.sample, size) ?? 0) ?? 'shark';
+        playTradeCue(alert.side === 'put' ? 'sell' : 'buy', tier);
+      }
     }
     seen.current = { session: report.sessionStartMs, count: report.alertCount };
-  }, [report, sound, fresh, tenor, side]);
+  }, [report, sound, fresh, tenor, side, size]);
   const alerts = sameSession
     ? report.alerts.filter(
         (a) => (tenor === 'all' || a.tenor === tenor) && (side === 'all' || a.side === side),
@@ -149,12 +204,19 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
                   : '—'}{' '}
                 · 25Δ
               </div>
+              <div className={styles.cardNotional}>
+                {t('notional')}: <b>{usd(premiumSpikeNotional(sample, size))}</b>
+              </div>
               {(['put', 'call'] as const).map((right) => (
                 <div className={styles.reading} key={right} data-side={right}>
                   <span>{t(right)}</span>
                   <strong>
                     {pair(sample ? (right === 'put' ? sample.putSkew : sample.callSkew) : null)}
                   </strong>
+                  <small>{t('premium')}</small>
+                  <small className={styles.premiumValue}>
+                    {usdPair(premiumSpikePremium(sample, right, size))}
+                  </small>
                   <small>{t('dailyHigh')}</small>
                   <small>
                     {pair(sameSession ? (right === 'put' ? row.putHigh : row.callHigh) : null)}
@@ -194,17 +256,40 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
             </select>
           </label>
         </div>
+        <label className={styles.sizeControl}>
+          {t('quoteSize')} ({report.underlying})
+          <input
+            type="number"
+            aria-label={t('quoteSize')}
+            value={sizeInput}
+            min="0.00000001"
+            max="1000000"
+            step="any"
+            aria-invalid={size == null}
+            onChange={(e) => setSizeInput(e.target.value)}
+          />
+        </label>
         <button
           type="button"
+          aria-label={sound ? t('muteSounds') : t('enableSounds')}
+          title={`${sound ? t('muteSounds') : t('enableSounds')} · ${t('soundShared')}`}
           aria-pressed={sound}
           onClick={() => {
             if (!sound) playTradeCue('buy', 'shark', 0.08);
             setSound(!sound);
           }}
         >
-          {t('sound')} {sound ? '●' : '○'}
+          {sound ? '🔊' : '🔇'}
         </button>
       </div>
+      {size == null ? (
+        <p className={styles.sizeError} role="alert">
+          {t('invalidSize')}
+        </p>
+      ) : null}
+      <p className={styles.moneyNote}>
+        {t('moneyBasis', { size: size ?? '—', asset: report.underlying })}
+      </p>
       <div className={styles.counter}>
         {t('count', { count: sameSession ? report.alertCount : 0 })} · {t('skew')} (vp)
       </div>
@@ -246,6 +331,7 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
                     {t('expiry')}: {alert.expiry}
                   </span>
                 </div>
+                <Money sample={alert.sample} size={size} underlying={report.underlying} />
                 <div className={styles.ivs}>
                   <span>
                     PUT {t('iv')}: {pair(alert.sample.putIv)}%
@@ -262,6 +348,7 @@ function Feed({ report }: { report: PremiumSpikeResponse }) {
       <details className={styles.method}>
         <summary>{t('details')}</summary>
         <p>{t('method')}</p>
+        <p>{t('moneyMethod')}</p>
         <p>{t('coverage')}</p>
         <p>{t('durability')}</p>
       </details>

@@ -56,15 +56,15 @@ export const skewMessages = defineMessages(
     flyTitle: '25Δ Butterfly',
     callsBid: 'calls bid',
     putsBid: 'puts bid',
-    wingsRich: 'wings rich',
-    wingsCheap: 'wings cheap',
+    wingsRich: 'higher wing IV premium',
+    wingsCheap: 'lower wing IV premium',
     rrTip1:
       'Negative: puts richer than calls → downside fear (usual in BTC/ETH and equity indices).',
     rrTip2: 'Positive: calls richer → upside FOMO. Near zero = balanced.',
     chartTip:
       'Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.',
-    flyTip1: 'High: wings expensive (fat-tail / event premium).',
-    flyTip2: 'Low/negative: wings cheap vs body.',
+    flyTip1: 'Positive: average wing IV is above ATM; negative: below ATM.',
+    flyTip2: 'History percentile measures how unusual that IV gap is, not fair value.',
 
     pctNone: '– pct',
     pctTitle: 'Share of lookback samples at or below the current value',
@@ -142,15 +142,15 @@ export const skewMessages = defineMessages(
     flyTitle: 'Butterfly 25Δ',
     callsBid: 'calls demandados',
     putsBid: 'puts demandados',
-    wingsRich: 'alas caras',
-    wingsCheap: 'alas baratas',
+    wingsRich: 'mayor prima de IV en alas',
+    wingsCheap: 'menor prima de IV en alas',
     rrTip1:
       'Negativo: puts más caros que calls → miedo a la baja (habitual en BTC/ETH e índices bursátiles).',
     rrTip2: 'Positivo: calls más caros → FOMO alcista. Cerca de cero = equilibrado.',
     chartTip:
       'Gráfico: banda sombreada = percentil 10–90 del periodo, punteada = mediana, vertical = punto VS.',
-    flyTip1: 'Alto: alas caras (colas gruesas / prima por eventos).',
-    flyTip2: 'Bajo/negativo: alas baratas frente al cuerpo.',
+    flyTip1: 'Positivo: IV media de alas sobre ATM; negativo: bajo ATM.',
+    flyTip2: 'El percentil mide lo inusual de esa diferencia de IV, no su valor justo.',
 
     pctNone: 'p–',
     pctTitle: 'Proporción de muestras del periodo iguales o menores al valor actual',

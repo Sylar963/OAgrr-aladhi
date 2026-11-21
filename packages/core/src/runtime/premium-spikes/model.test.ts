@@ -95,3 +95,60 @@ describe('matched 25-delta skew quote', () => {
     expect(premiumSpikeSample(input, TEST_EXPIRY_TS, TEST_NOW)).toBeNull();
   });
 });
+
+describe('skew quote dollar context', () => {
+  it('uses normalized per-base premiums without multiplying or dividing by contract size again', () => {
+    const input = chain();
+    input.contracts.put!.contractMultiplierBase = 0.01;
+    input.contracts.put!.contractSize = 0.01;
+    input.contracts.put!.quote.bid.usd = 10;
+    input.contracts.put!.quote.ask.usd = 11;
+    const sample = premiumSpikeSample(input, TEST_EXPIRY_TS, TEST_NOW)!;
+    expect(sample.money).toEqual({
+      referencePriceUsd: 100000,
+      putPremiumUsdPerBase: { bid: 1000, ask: 1100 },
+      callPremiumUsdPerBase: { bid: 1000, ask: 1100 },
+    });
+  });
+  it('interpolates USD premium with the same delta weights as IV and uses only supporting index observations', () => {
+    const input = chain();
+    const low = contract('put');
+    low.greeks.delta = -0.2;
+    low.quote.bid.usdPerBase = 1000;
+    low.quote.ask.usdPerBase = 1200;
+    low.quote.indexPriceUsd = 99000;
+    const high = contract('put');
+    high.greeks.delta = -0.3;
+    high.quote.bid.usdPerBase = 2000;
+    high.quote.ask.usdPerBase = 2400;
+    high.quote.indexPriceUsd = 105000;
+    input.contracts = { low, high, call: contract('call') };
+    const sample = premiumSpikeSample(input, TEST_EXPIRY_TS, TEST_NOW)!;
+    expect(sample.money!.referencePriceUsd).toBe(100000);
+    expect(sample.money!.putPremiumUsdPerBase!.bid).toBeCloseTo(1500);
+    expect(sample.money!.putPremiumUsdPerBase!.ask).toBeCloseTo(1800);
+    expect(sample.putSkew.bid).toBeCloseTo(0.08);
+  });
+  it.each([
+    'missing-normalization',
+    'crossed-normalization',
+    'invalid-normalization',
+    'missing-index',
+    'invalid-index',
+  ])('withholds %s money without suppressing a valid IV observation or inventing a conversion', (kind) => {
+    const input = chain();
+    const quote = input.contracts.put!.quote;
+    if (kind === 'missing-normalization') delete quote.bid.usdPerBase;
+    if (kind === 'crossed-normalization') quote.bid.usdPerBase = 1200;
+    if (kind === 'invalid-normalization') quote.ask.usdPerBase = Infinity;
+    if (kind === 'missing-index') quote.indexPriceUsd = null;
+    if (kind === 'invalid-index') quote.indexPriceUsd = NaN;
+    const sample = premiumSpikeSample(input, TEST_EXPIRY_TS, TEST_NOW)!;
+    expect(sample.putSkew.bid).toBeCloseTo(0.08);
+    if (kind.endsWith('normalization')) expect(sample.money!.putPremiumUsdPerBase).toBeNull();
+    else {
+      expect(sample.money!.referencePriceUsd).toBeNull();
+      expect(sample.money!.putPremiumUsdPerBase).toEqual({ bid: 1000, ask: 1100 });
+    }
+  });
+});

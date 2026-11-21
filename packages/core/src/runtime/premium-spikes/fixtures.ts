@@ -31,8 +31,8 @@ export function contract(
     takerFee: null,
     greeks: { ...EMPTY_GREEKS, delta: right === 'put' ? -0.25 : 0.25, bidIv, askIv },
     quote: {
-      bid: { raw: 0.01, rawCurrency: 'BTC', usd: 1000 },
-      ask: { raw: 0.011, rawCurrency: 'BTC', usd: 1100 },
+      bid: { raw: 0.01, rawCurrency: 'BTC', usd: 1000, usdPerBase: 1000 },
+      ask: { raw: 0.011, rawCurrency: 'BTC', usd: 1100, usdPerBase: 1100 },
       mark: { raw: 0.0105, rawCurrency: 'BTC', usd: 1050 },
       last: null,
       bidSize: 1,

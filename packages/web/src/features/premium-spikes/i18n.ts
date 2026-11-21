@@ -14,6 +14,19 @@ export const messages = defineMessages(
     tenor: 'Tenor',
     side: 'Side',
     sound: 'Sound',
+    enableSounds: 'Enable alert sounds',
+    muteSounds: 'Mute alert sounds',
+    soundShared: 'Shared with Flow',
+    quoteSize: 'Quote size',
+    notional: 'Underlying notional',
+    premium: 'Premium USD',
+    putPremium: 'PUT premium bid / ask',
+    callPremium: 'CALL premium bid / ask',
+    invalidSize: 'Enter a size greater than 0 and no more than 1,000,000.',
+    moneyBasis: 'USD amounts for {size} {asset} · indicative 25Δ quotes · before fees',
+    moneyMethod:
+      'Underlying notional = selected base-asset size × the median venue index price of the quotes used in this sample. Put/call premium = size × the venue-normalized USD premium per base unit, interpolated at the same 25Δ as IV. These are quote indications, not traded volume or guaranteed fills for that size. Missing normalization or historical money data stays unavailable. Sound uses Flow’s shared preference and tones, with up to three fresh matching alerts per update; small or unavailable notionals still receive a basic cue. Tone intensity follows this quote-size reference, not actual traded size.',
+
     reset: 'Resets {time} · midnight Pacific',
     description:
       '25Δ put/call IV skew · both bid and ask must beat their own observed daily highs.',
@@ -62,6 +75,20 @@ export const messages = defineMessages(
     tenor: 'Plazo',
     side: 'Lado',
     sound: 'Sonido',
+    enableSounds: 'Activar sonidos de alertas',
+    muteSounds: 'Silenciar sonidos de alertas',
+    soundShared: 'Compartido con Flujo',
+    quoteSize: 'Tamaño de referencia',
+    notional: 'Nocional subyacente',
+    premium: 'Prima USD',
+    putPremium: 'Prima PUT bid / ask',
+    callPremium: 'Prima CALL bid / ask',
+    invalidSize: 'Ingresa un tamaño mayor a 0 y no superior a 1,000,000.',
+    moneyBasis:
+      'Importes USD para {size} {asset} · cotizaciones 25Δ indicativas · antes de comisiones',
+    moneyMethod:
+      'Nocional subyacente = tamaño seleccionado en activo base × mediana del índice del exchange en las cotizaciones de la muestra. Prima put/call = tamaño × prima USD normalizada por unidad base, interpolada al mismo 25Δ que la IV. Son cotizaciones indicativas, no volumen negociado ni fills garantizados para ese tamaño. La normalización o datos monetarios históricos faltantes quedan no disponibles. El sonido comparte preferencia y tonos con Flujo, con hasta tres alertas nuevas por actualización; nocionales pequeños o no disponibles también reciben un tono básico. La intensidad sigue este tamaño de referencia, no el tamaño de trades reales.',
+
     reset: 'Reinicio {time} · medianoche del Pacífico',
     description:
       'Skew de IV put/call 25Δ · bid y ask deben superar sus propios máximos diarios observados.',

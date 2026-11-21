@@ -167,7 +167,7 @@ export class ChainRuntime {
     this.activeRequest = request;
     this.projection = new ChainProjection(request.underlying, request.expiry, options.bookLookup);
     this.coordinator = options.coordinator ?? new VenueSubscriptionCoordinator();
-    this.venueHealth = options.venueHealth ?? new VenueHealthManager();
+    this.venueHealth = options.venueHealth ?? new VenueHealthManager(request.underlying);
     this.log = options.log ?? { warn: () => {} };
     this.venueListener = {
       onDelta: (deltas) => {
@@ -238,6 +238,10 @@ export class ChainRuntime {
 
   getHealth(): VenueStatus[] {
     return this.venueHealth.list();
+  }
+
+  getHealthDetails() {
+    return this.venueHealth.details();
   }
 
   async fetchSnapshotData(): Promise<EnrichedChainResponse> {

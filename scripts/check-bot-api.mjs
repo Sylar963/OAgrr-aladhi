@@ -1,5 +1,7 @@
 import {
   BotMarketResponseSchema,
+  BotDepthResponseSchema,
+  NewsMacroResponseSchema,
   NewsEventsResponseSchema,
   NewsStreamMessageSchema,
   ServerWsMessageSchema,
@@ -64,7 +66,13 @@ function stream(path, schema, subscription, accept) {
 await check('readiness', async () => request('/api/ready'));
 await check('schemas', async () => {
   const schemas = await request('/api/bot/schema');
-  if (!schemas.market || !schemas.newsEvents || !schemas.newsWebSocket)
+  if (
+    !schemas.market ||
+    !schemas.newsEvents ||
+    !schemas.newsWebSocket ||
+    !schemas.depth ||
+    !schemas.macroHeadlines
+  )
     throw new Error('Missing bot schemas');
   return Object.keys(schemas);
 });
@@ -98,6 +106,17 @@ await check('news websocket', async () => {
   );
   return { type: frame.type };
 });
+await check('reported macro headlines', async () => {
+  const data = NewsMacroResponseSchema.parse(await request('/api/news/macro?limit=200'));
+  return {
+    mode: data.mode,
+    scanned: data.scanned,
+    headlines: data.items.length,
+    figures: data.items.reduce((sum, item) => sum + item.figures.length, 0),
+    scheduledCalendarAvailable: data.scheduledCalendarAvailable,
+  };
+});
+const marketData = new Map();
 let requests = [];
 await check('expiry discovery', async () => {
   const expiries = await request('/api/expiries?underlying=BTC');
@@ -120,19 +139,63 @@ for (const market of requests) {
     });
     const result = BotMarketResponseSchema.parse(await request(`/api/bot/market?${params}`));
     if (result.venues[0]?.quotes === 0) throw new Error('No option quotes returned');
-    return { dataReady: result.dataReady, ...result.venues[0], failedVenues: result.failedVenues };
+    if (!Array.isArray(result.venueHealth)) throw new Error('Missing scoped venue diagnostics');
+    marketData.set(market.venue, result);
+    return {
+      dataReady: result.dataReady,
+      ...result.venues[0],
+      failedVenues: result.failedVenues,
+      venueHealth: result.venueHealth,
+    };
+  });
+}
+for (const market of requests) {
+  await check(`depth ${market.venue}`, async () => {
+    const chain = marketData.get(market.venue)?.chain;
+    if (!chain) throw new Error('Market metadata unavailable for depth verification');
+    const reference = chain.stats.indexPriceUsd ?? chain.stats.forwardPriceUsd ?? 0;
+    const quotes = chain.strikes
+      .slice()
+      .sort((a, b) => Math.abs(a.strike - reference) - Math.abs(b.strike - reference))
+      .flatMap((row) => [row.call.venues[market.venue], row.put.venues[market.venue]]);
+    const quote =
+      quotes.find((quote) => quote?.execution?.bidUsd && quote.execution.askUsd) ??
+      quotes.find((quote) => quote?.execution);
+    if (!quote?.execution) throw new Error('No canonical depth instrument');
+    const params = new URLSearchParams({
+      venue: market.venue,
+      underlying: 'BTC',
+      expiry: market.expiry,
+      instrument: quote.execution.exchangeSymbol,
+    });
+    const data = BotDepthResponseSchema.parse(await request(`/api/bot/depth?${params}`));
+    return {
+      dataReady: data.dataReady,
+      bookState: data.bookState,
+      source: data.source,
+      access: data.access,
+      bidLevels: data.bids.length,
+      askLevels: data.asks.length,
+      reasons: data.reasons,
+      warnings: data.warnings,
+    };
   });
 }
 if (requests[0])
   await check('chain websocket', async () => {
     const request = { underlying: 'BTC', expiry: requests[0].expiry, venues: [requests[0].venue] };
+    let initialHealth;
     const frame = await stream(
       '/ws/chain',
       ServerWsMessageSchema,
       { type: 'subscribe', subscriptionId: 'api-readiness-check', request },
-      (frame) => frame.type === 'snapshot',
+      (frame) => {
+        if (frame.type === 'subscribed') initialHealth = frame.venueHealth;
+        return frame.type === 'snapshot';
+      },
     );
-    return { type: frame.type, seq: frame.seq, meta: frame.meta };
+    if (!Array.isArray(initialHealth)) throw new Error('Missing initial WebSocket venue health');
+    return { type: frame.type, seq: frame.seq, meta: frame.meta, venueHealth: initialHealth };
   });
 process.stdout.write(
   `${JSON.stringify({ base, checkedAt: new Date().toISOString(), checks }, null, 2)}\n`,

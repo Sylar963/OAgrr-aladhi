@@ -38,7 +38,11 @@ function serializeBody(body: object): SerializedBody {
   return cached;
 }
 
-function serializeWithBody(envelope: object, key: string, body: object): { payload: string; bytes: number } {
+function serializeWithBody(
+  envelope: object,
+  key: string,
+  body: object,
+): { payload: string; bytes: number } {
   const head = JSON.stringify(envelope);
   const serialized = serializeBody(body);
   return {
@@ -77,6 +81,7 @@ interface SessionRuntime {
   getSnapshot: () => ChainRuntimeSnapshotEvent | null;
   getActiveRequest: () => WsSubscriptionRequest;
   getFailedVenues: () => VenueFailure[];
+  getHealthDetails: () => import('@oggregator/protocol').VenueHealthDetails[];
 }
 
 export type ChainPatchFormat = 'strikes' | 'diff';
@@ -129,8 +134,11 @@ export class ChainStreamSession {
       subscriptionId: this.subscriptionId,
       request: acquired.runtime.getActiveRequest(),
       serverTime: Date.now(),
+      venueHealth: acquired.runtime.getHealthDetails(),
       failedVenues:
-        acquired.runtime.getFailedVenues().length > 0 ? acquired.runtime.getFailedVenues() : undefined,
+        acquired.runtime.getFailedVenues().length > 0
+          ? acquired.runtime.getFailedVenues()
+          : undefined,
     });
 
     const snapshot = acquired.runtime.getSnapshot();
@@ -175,6 +183,7 @@ export class ChainStreamSession {
       subscriptionId: this.subscriptionId,
       request: this.runtime?.getActiveRequest() ?? this.request,
       serverTime: Date.now(),
+      venueHealth: this.runtime?.getHealthDetails(),
       failedVenues:
         this.runtime != null && this.runtime.getFailedVenues().length > 0
           ? this.runtime.getFailedVenues()
@@ -283,6 +292,9 @@ export class ChainStreamSession {
           state: event.status.state,
           ts: event.status.ts,
           message: event.status.message,
+          health: this.runtime
+            ?.getHealthDetails()
+            .find((health) => health.venue === event.status.venue),
         });
         this.trackBackpressure(now, 'status');
         return;

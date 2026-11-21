@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDeribitPlatformState,
+  applyDeribitPublicStatus,
   createDeribitHealthState,
   deriveDeribitPlatformHealth,
   deriveDeribitPublicStatusHealth,
@@ -12,7 +13,7 @@ describe('Deribit health', () => {
 
     applyDeribitPlatformState(state, { maintenance: true });
 
-    expect(deriveDeribitPlatformHealth(state)).toEqual({
+    expect(deriveDeribitPlatformHealth(state)).toMatchObject({
       status: 'degraded',
       message: 'platform maintenance',
     });
@@ -22,13 +23,13 @@ describe('Deribit health', () => {
     const state = createDeribitHealthState();
 
     applyDeribitPlatformState(state, { price_index: 'btc_usd', locked: true });
-    expect(deriveDeribitPlatformHealth(state)).toEqual({
+    expect(deriveDeribitPlatformHealth(state)).toMatchObject({
       status: 'degraded',
       message: 'locked indices: btc_usd',
     });
 
     applyDeribitPlatformState(state, { price_index: 'btc_usd', locked: false });
-    expect(deriveDeribitPlatformHealth(state)).toEqual({
+    expect(deriveDeribitPlatformHealth(state)).toMatchObject({
       status: 'connected',
       message: 'platform healthy',
     });
@@ -42,7 +43,7 @@ describe('Deribit health', () => {
       locked_indices: ['eth_usd'],
     });
 
-    expect(health).toEqual({
+    expect(health).toMatchObject({
       status: 'degraded',
       message: 'public status locked: eth_usd',
     });
@@ -56,7 +57,7 @@ describe('Deribit health', () => {
       locked_currencies: ['BTC', 'ETH'],
     });
 
-    expect(health).toEqual({
+    expect(health).toMatchObject({
       status: 'degraded',
       message: 'public status locked: BTC, ETH',
     });
@@ -66,9 +67,43 @@ describe('Deribit health', () => {
     const state = createDeribitHealthState();
     const health = deriveDeribitPublicStatusHealth(state, null, new Error('timeout'));
 
-    expect(health).toEqual({
+    expect(health).toMatchObject({
       status: 'degraded',
       message: 'public status probe failed: Error: timeout',
     });
+  });
+});
+
+describe('Deribit warning scope and persistence', () => {
+  it('preserves a partial public lock across healthy platform updates', () => {
+    const state = createDeribitHealthState();
+    applyDeribitPublicStatus(state, { locked: 'partial', locked_indices: ['sol_eth'] });
+    applyDeribitPlatformState(state, { maintenance: false });
+    expect(deriveDeribitPlatformHealth(state)).toMatchObject({
+      status: 'degraded',
+      health: { scope: 'indices', affectedIndices: ['sol_eth'], code: 'index-lock' },
+    });
+    applyDeribitPublicStatus(state, { locked: false });
+    expect(deriveDeribitPlatformHealth(state).status).toBe('connected');
+  });
+
+  it('fails closed for unknown scope, full lock, maintenance and failed probes', () => {
+    const state = createDeribitHealthState();
+    expect(deriveDeribitPublicStatusHealth(state, { locked: 'partial' }).health.scope).toBe(
+      'venue',
+    );
+    expect(
+      deriveDeribitPublicStatusHealth(state, { locked: true, locked_indices: ['sol_eth'] }).health
+        .scope,
+    ).toBe('venue');
+    applyDeribitPublicStatus(state, { locked: 'partial', locked_indices: ['sol_eth'] });
+    applyDeribitPublicStatus(state, null, new Error('timeout'));
+    applyDeribitPlatformState(state, { maintenance: false });
+    expect(deriveDeribitPlatformHealth(state)).toMatchObject({
+      status: 'degraded',
+      health: { code: 'status-probe', scope: 'venue' },
+    });
+    applyDeribitPlatformState(state, { maintenance: true });
+    expect(deriveDeribitPlatformHealth(state).health.code).toBe('maintenance');
   });
 });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EnrichedChainResponseSchema, VenueIdSchema } from './ws.js';
+import { EnrichedChainResponseSchema, VenueHealthDetailsSchema, VenueIdSchema } from './ws.js';
 
 export const BotMarketQuerySchema = z.object({
   underlying: z.string().regex(/^[A-Z0-9_]{2,20}$/),
@@ -54,6 +54,7 @@ export const BotMarketResponseSchema = z.object({
       state: z.string(),
     }),
   ),
+  venueHealth: z.array(VenueHealthDetailsSchema).optional(),
   failedVenues: z.array(z.object({ venue: VenueIdSchema, reason: z.string() })),
 });
 export type BotMarketResponse = z.infer<typeof BotMarketResponseSchema>;

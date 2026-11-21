@@ -33,6 +33,7 @@ import {
   dvolService,
   volHeatmapRuntime,
   orderBookRuntime,
+  publicDepthRuntime,
   flowService,
   flowOiRecorder,
   flowOiStore,
@@ -223,6 +224,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await bootstrap.catch(() => {});
     // Stop the dealer-book timer before its flow dependencies so no new tick
     // can start (and read flow/block-flow) during the rest of teardown.
+    await publicDepthRuntime.dispose();
     await dealerBookService.dispose();
     // Stop runtimes first: dispose() flips shouldReconnect=false, clears
     // timers, and closes sockets. If we did this after disposeAdapters(),

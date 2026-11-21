@@ -703,3 +703,7 @@ export * from './premium-spikes.js';
 export * from './bot-news.js';
 export * from './bot-market.js';
 export { botDataJsonSchemas } from './bot-contracts.js';
+
+export { VenueHealthContextSchema, VenueHealthDetailsSchema, type VenueHealthContext, type VenueHealthDetails } from './ws.js';
+export * from './bot-depth.js';
+export * from './news-macro.js';

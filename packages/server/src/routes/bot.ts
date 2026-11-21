@@ -32,8 +32,10 @@ export async function botRoute(app: FastifyInstance) {
       endpoints: {
         schemas: '/api/bot/schema',
         news: '/api/news/events',
+        macroHeadlines: '/api/news/macro',
         newsStream: '/ws/news',
         market: '/api/bot/market',
+        depth: '/api/bot/depth',
         chainStream: '/ws/chain',
         historicalNews: '/api/news/archive',
         historicalTrades: '/api/flow/history',
@@ -51,9 +53,12 @@ export async function botRoute(app: FastifyInstance) {
         rawClassifications: true,
         quoteQuality: true,
         macroCalendar: false,
+        reportedMacroHeadlineFigures: true,
         completeHistoricalQuoteReplay: false,
         verifiedAccountFees: false,
-        genericMultiVenueDepth: false,
+        genericMultiVenueDepth: true,
+        depthMode: 'public-snapshots',
+        continuousDepth: false,
         thalexDepth: 'requires-available-book-session',
       },
     };
@@ -94,6 +99,7 @@ export async function botRoute(app: FastifyInstance) {
           },
           chain,
           failedVenues: acquired.runtime.getFailedVenues(),
+          venueHealth: acquired.runtime.getHealthDetails(),
         });
       } finally {
         await acquired.release();

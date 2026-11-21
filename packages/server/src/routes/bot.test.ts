@@ -42,6 +42,7 @@ beforeEach(() => {
     runtime: {
       fetchSnapshotData: mocks.fetch,
       getHealth: () => [],
+      getHealthDetails: () => [],
       getFailedVenues: () => [{ venue: 'okx', reason: 'not available' }],
     },
   });

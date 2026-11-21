@@ -74,6 +74,9 @@ export class NewsDeliveryJournal {
         receivedAt,
         firstReceivedAt: previous?.event.firstReceivedAt ?? receivedAt,
         revision: (previous?.event.revision ?? 0) + 1,
+        changedFields: (Object.keys(observation) as Array<keyof NewsObservation>).filter(
+          (key) => !previous || observation[key] !== previous.event.observation[key],
+        ),
         backfill: options.backfill ?? false,
         observation,
       };

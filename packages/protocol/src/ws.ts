@@ -79,6 +79,32 @@ export const VenueConnectionStateSchema = z.enum([
 ]);
 const VenueStateSchema = VenueConnectionStateSchema;
 
+export const VenueHealthContextSchema = z.object({
+  code: z.enum(['healthy', 'maintenance', 'index-lock', 'status-probe']),
+  scope: z.enum(['venue', 'indices']),
+  affectedIndices: z.array(z.string()),
+  exchangeState: z.enum(['connected', 'degraded']),
+  appliesToSubscription: z.boolean().optional(),
+});
+export type VenueHealthContext = z.infer<typeof VenueHealthContextSchema>;
+
+const VenueHealthSignalSchema = z.object({
+  state: VenueConnectionStateSchema,
+  ts: z.number(),
+  message: z.string().optional(),
+  health: VenueHealthContextSchema.optional(),
+});
+export const VenueHealthDetailsSchema = z.object({
+  venue: VenueIdSchema,
+  underlying: z.string().nullable(),
+  state: VenueConnectionStateSchema,
+  transport: VenueHealthSignalSchema.nullable(),
+  exchange: VenueHealthSignalSchema.nullable(),
+  activity: z.object({ lastDataAt: z.number().nullable(), ageMs: z.number().nullable(), staleAfterMs: z.number() }),
+});
+export type VenueHealthDetails = z.infer<typeof VenueHealthDetailsSchema>;
+
+
 const NullableNumberSchema = z.number().nullable();
 
 export interface EstimatedFees {
@@ -455,6 +481,7 @@ export const ServerWsMessageSchema = z.discriminatedUnion('type', [
     request: WsSubscriptionRequestSchema,
     serverTime: z.number(),
     failedVenues: z.array(VenueFailureSchema).optional(),
+    venueHealth: z.array(VenueHealthDetailsSchema).optional(),
   }),
   z.object({
     type: z.literal('snapshot'),
@@ -487,6 +514,7 @@ export const ServerWsMessageSchema = z.discriminatedUnion('type', [
     state: VenueStateSchema,
     ts: z.number(),
     message: z.string().optional(),
+    health: VenueHealthDetailsSchema.optional(),
   }),
   z.object({
     type: z.literal('error'),

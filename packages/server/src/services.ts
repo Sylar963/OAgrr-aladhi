@@ -15,6 +15,7 @@ import {
   MarkHistoryBuffer,
   VolHeatmapRuntime,
   OrderBookRuntime,
+  PublicDepthRuntime,
   type RegimeInputs,
   type RegimePersistence,
   RegimeService,
@@ -108,6 +109,7 @@ import { disposeSettlementJob, startSettlementJob } from './settlement-service.j
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
 
 export const dvolService = new DvolService();
+export const publicDepthRuntime = new PublicDepthRuntime();
 // ORDER_BOOK=0 disables on-demand Thalex L2 books (/api/liquidity). The worker and its socket only
 // start on the first request.
 export const orderBookRuntime = process.env['ORDER_BOOK'] === '0' ? null : new OrderBookRuntime();

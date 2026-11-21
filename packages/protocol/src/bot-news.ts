@@ -10,6 +10,7 @@ export const NewsObservationSchema = z.object({
   timestamp: z.number().int().nonnegative(),
   classification: z.enum(['GOOD', 'BAD', 'unclassified']),
   upstreamCreatedAt: z.string().datetime().nullable(),
+  upstreamHeadlineTimestamp: z.string().nullable().optional(),
 });
 export type NewsObservation = z.infer<typeof NewsObservationSchema>;
 
@@ -19,6 +20,7 @@ export const NewsDeliveryEventSchema = z.object({
   receivedAt: z.number().int().nonnegative(),
   firstReceivedAt: z.number().int().nonnegative(),
   revision: z.number().int().positive(),
+  changedFields: z.array(z.string()).optional(),
   backfill: z.boolean().default(false),
   observation: NewsObservationSchema,
 });

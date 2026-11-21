@@ -348,7 +348,8 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   private matchingInstruments(underlying: string, expiry: string): CachedInstrument[] {
     return this.instruments.filter(
       (instrument) =>
-        this.matchesRequestedUnderlying(underlying, instrument.base) && instrument.expiry === expiry,
+        this.matchesRequestedUnderlying(underlying, instrument.base) &&
+        instrument.expiry === expiry,
     );
   }
 
@@ -569,9 +570,14 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   /** Broadcast venue connection state to all registered handlers. */
-  protected emitStatus(state: VenueConnectionState, message?: string): void {
+  protected emitStatus(
+    state: VenueConnectionState,
+    message?: string,
+    health?: VenueStatus['health'],
+  ): void {
     const status: VenueStatus = { venue: this.venue, state, ts: Date.now() };
     if (message != null) status.message = message;
+    if (health != null) status.health = health;
     for (const h of this.deltaHandlers) {
       h.onStatus(status);
     }
@@ -607,7 +613,11 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           markPrice: update.quote.markPrice,
         };
         const instrument = this.instrumentMap.get(update.exchangeSymbol);
-        if (instrument && update.quote.openInterest != null && update.quote.openInterestTimestamp != null) {
+        if (
+          instrument &&
+          update.quote.openInterest != null &&
+          update.quote.openInterestTimestamp != null
+        ) {
           event.openInterest = {
             value: update.quote.openInterest * (instrument.contractSize ?? 1),
             timestamp: update.quote.openInterestTimestamp,
@@ -744,10 +754,16 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   // expected to keep streaming; an idle adapter with nothing subscribed is legitimately silent.
   private expectsQuoteFlow(): boolean {
     if (this.lastQuoteAt <= 0) return false;
-    return this.requestRefCounts.size > 0 || this.pinnedChainKeys.size > 0 || this.eagerExpiryCount > 0;
+    return (
+      this.requestRefCounts.size > 0 || this.pinnedChainKeys.size > 0 || this.eagerExpiryCount > 0
+    );
   }
 
-  private freshQuote(exchangeSymbol: string, now: number, staleAtOrBefore: number): LiveQuote | null {
+  private freshQuote(
+    exchangeSymbol: string,
+    now: number,
+    staleAtOrBefore: number,
+  ): LiveQuote | null {
     const quote = this.quoteStore.get(exchangeSymbol);
     if (quote == null) return null;
     if (quote.timestamp <= 0 || now - quote.timestamp > this.quoteFreshnessMs) return null;

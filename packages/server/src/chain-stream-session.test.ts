@@ -15,6 +15,7 @@ vi.mock('./chain-engines.js', () => ({
         getSnapshot: getSnapshotMock,
         getActiveRequest: getActiveRequestMock,
         getFailedVenues: getFailedVenuesMock,
+        getHealthDetails: () => [],
       },
       release: releaseMock,
     })),

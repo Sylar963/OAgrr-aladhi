@@ -1,4 +1,5 @@
 import type { VenueConnectionState, VenueStatus } from '../../core/types.js';
+import type { VenueHealthDetails } from '@oggregator/protocol';
 import type { VenueId } from '../../types/common.js';
 
 interface VenueHealthSources {
@@ -29,7 +30,11 @@ function normalizeStatusMessage(message?: string): string {
 }
 
 function sameStatus(left: VenueStatus | null, right: VenueStatus): boolean {
-  return left?.state === right.state && normalizeStatusMessage(left?.message) === normalizeStatusMessage(right.message);
+  return (
+    left?.state === right.state &&
+    normalizeStatusMessage(left?.message) === normalizeStatusMessage(right.message) &&
+    JSON.stringify(left?.health) === JSON.stringify(right.health)
+  );
 }
 
 const STALE_AFTER_MS = 3 * 60 * 1000;
@@ -43,13 +48,38 @@ function staleStatus(venue: VenueId, ts: number, now: number): VenueStatus {
   };
 }
 
+function scopedHealth(status: VenueStatus | null, underlying: string | null): VenueStatus | null {
+  if (status == null || status.health == null) return status;
+  const context = status.health;
+  const base = underlying?.toUpperCase().split('_')[0];
+  const knownIndices =
+    context.affectedIndices.length > 0 &&
+    context.affectedIndices.every((index) => /^[a-z0-9]+(?:_[a-z0-9]+)?$/i.test(index));
+  const affected =
+    context.scope !== 'indices' ||
+    !base ||
+    !knownIndices ||
+    context.affectedIndices.some((index) => index.toUpperCase().split('_')[0] === base);
+  return {
+    ...status,
+    state: status.state === 'degraded' && !affected ? 'connected' : status.state,
+    ...(status.state === 'degraded' && !affected
+      ? {
+          message: `Exchange index restriction outside ${underlying}: ${context.affectedIndices.join(', ')}`,
+        }
+      : {}),
+    health: { ...context, appliesToSubscription: affected },
+  };
+}
+
 function effectiveStatus(
   sources: VenueHealthSources,
   venue: VenueId,
   now: number,
+  underlying: string | null,
 ): VenueStatus | null {
   const transport = sources.transport;
-  const health = sources.health;
+  const health = scopedHealth(sources.health, underlying);
 
   if (transport?.state === 'down') return transport;
   if (transport?.state === 'reconnecting') return transport;
@@ -79,6 +109,8 @@ function effectiveStatus(
 export class VenueHealthManager {
   private readonly venues = new Map<VenueId, VenueHealthSources>();
 
+  constructor(private readonly underlying: string | null = null) {}
+
   ingest(status: VenueStatus): VenueStatus | null {
     const current = this.venues.get(status.venue) ?? {
       transport: null,
@@ -90,7 +122,7 @@ export class VenueHealthManager {
     const source = classifySource(status);
     current[source] = status;
 
-    const next = effectiveStatus(current, status.venue, Date.now());
+    const next = effectiveStatus(current, status.venue, Date.now(), this.underlying);
     this.venues.set(status.venue, {
       ...current,
       effective: next,
@@ -112,7 +144,7 @@ export class VenueHealthManager {
     };
 
     current.lastActivityTs = ts;
-    const next = effectiveStatus(current, venue, Date.now());
+    const next = effectiveStatus(current, venue, Date.now(), this.underlying);
     this.venues.set(venue, {
       ...current,
       effective: next,
@@ -129,7 +161,7 @@ export class VenueHealthManager {
     const current = this.venues.get(venue);
     if (current == null) return null;
 
-    const next = effectiveStatus(current, venue, Date.now());
+    const next = effectiveStatus(current, venue, Date.now(), this.underlying);
     current.effective = next;
     this.venues.set(venue, current);
     return next;
@@ -138,12 +170,38 @@ export class VenueHealthManager {
   list(): VenueStatus[] {
     return [...this.venues.entries()]
       .map(([venue, entry]) => {
-        const next = effectiveStatus(entry, venue, Date.now());
+        const next = effectiveStatus(entry, venue, Date.now(), this.underlying);
         entry.effective = next;
         this.venues.set(venue, entry);
         return next;
       })
       .filter((status): status is VenueStatus => status != null);
+  }
+
+  details(): VenueHealthDetails[] {
+    const now = Date.now();
+    return [...this.venues.entries()].map(([venue, sources]) => {
+      const scoped = scopedHealth(sources.health, this.underlying);
+      const exchange =
+        sources.health == null
+          ? null
+          : {
+              ...sources.health,
+              ...(scoped?.health ? { health: scoped.health } : {}),
+            };
+      return {
+        venue,
+        underlying: this.underlying,
+        state: effectiveStatus(sources, venue, now, this.underlying)?.state ?? 'down',
+        transport: sources.transport,
+        exchange,
+        activity: {
+          lastDataAt: sources.lastActivityTs,
+          ageMs: sources.lastActivityTs == null ? null : Math.max(0, now - sources.lastActivityTs),
+          staleAfterMs: STALE_AFTER_MS,
+        },
+      };
+    });
   }
 
   reset(): void {

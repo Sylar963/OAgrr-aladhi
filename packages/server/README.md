@@ -134,8 +134,9 @@ publication timestamps are not used as delivery watermarks. The upstream latest 
 are overlapped on every poll; the existing `/api/news` dashboard endpoint keeps its GOOD filter.
 GOOD/BAD are upstream filter labels, not directional sentiment or source verification. The journal
 records observed edits/classification changes; the upstream does not provide a verified retraction
-or correction lifecycle. Missing affected-asset, sentiment/confidence, macro-calendar actual/
-consensus/revision and verification data are explicitly advertised as unavailable by status.
+or correction lifecycle. Missing affected-asset, sentiment/confidence, structured macro-calendar
+and verification data are explicitly advertised as unavailable by status. Literal macro figures
+reported in headline text are available separately through `/api/news/macro`, described below.
 
 `NEWS_POLL_INTERVAL_MS` controls provider polling (1000–60000ms; default 15000). Lower values
 increase provider requests and can affect provider quota/cost. WebSocket delivery adds up to one
@@ -167,8 +168,86 @@ node scripts/check-bot-api.mjs https://api.oggregator.xyz
 
 This read-only check discovers BTC expiries, checks each registered venue's bot market response,
 validates news replay/schema endpoints, and verifies public WebSocket delivery. It submits no orders.
-Instrument-specific depth remains the existing Thalex `/api/liquidity` surface; the venue's code 53
-means its anonymous WebSocket connection cap is exhausted and needs an available authenticated
-market-data session. Do not treat an unavailable depth service, a mark, a synthetic candle, or a
-model estimate as observed executable liquidity. Continuous historical quote/depth replay and
-account-specific execution data are not supplied by these public bot endpoints.
+The checker also validates public depth snapshots and reported macro headlines. The existing
+Thalex `/api/liquidity` WebSocket surface remains separate from the public REST snapshots below;
+its code 53 means its anonymous WebSocket connection cap is exhausted. Do not treat an unavailable
+depth service, a mark, a synthetic candle, or a model estimate as observed executable liquidity.
+Continuous historical quote/depth replay and account-specific execution data are not supplied
+by these public bot endpoints.
+
+
+### Scoped exchange health and public depth snapshots
+
+`/api/bot/market` now includes `venueHealth`. Its `transport` reports connection state;
+`exchange` retains the exchange-wide warning and affected indices; `state` is evaluated for
+the requested underlying. `exchange.health.appliesToSubscription` states whether an explicit
+index restriction affects this subscription. A Deribit `sol_eth` partial lock stays visible
+while BTC can remain connected. SOL remains affected. Full or unknown lock scope, maintenance,
+failed probes, disconnects and stale data remain blocking. A healthy platform push cannot erase
+a retained public-status lock. Initial `/ws/chain` subscription acknowledgements and live status
+frames expose the same details. Quote freshness is still checked per instrument.
+
+`GET /api/bot/depth?venue=okx&underlying=BTC&expiry=YYYY-MM-DD&instrument=NATIVE_SYMBOL`
+provides public depth snapshots across the nine registered venues. Choose `levels=1..20`,
+`maxAgeMs=100..60000` and, for Paradex only, `access=api|interactive` (default `api`).
+The symbol must resolve to the requested venue/underlying/expiry in canonical market metadata.
+API and interactive liquidity are never substituted for one another.
+
+Each level retains `nativePrice`, `nativeQuantity`, normalized `priceUsdPerBase` and
+`quantityBase`. Contract multipliers, minimums, steps, native price tick, native premium currency,
+conversion reference and its timestamp remain explicit. Stablecoin/USD parity is labeled as an
+assumption. Inverse prices without a fresh conversion reference remain raw with a null USD value
+and fail readiness. Empty/one-sided/crossed books and stale data are exposed with reasons; marks
+and model prices never become depth. Scoped venue health also gates depth readiness.
+
+Snapshots include exchange and local timestamps, timestamp meaning, provider sequence when
+supplied, source level limits and access mode. `sequenceContinuityVerified=false` and
+`depthLimited=true` are deliberate: these observations are not a certified sequenced execution
+book or a fill guarantee. Coincall does not supply an exchange timestamp in its public book.
+Thalex REST provides at most five levels and is cached for 30 seconds for occasional reads;
+its original receive time is preserved and can fail a stricter requested freshness threshold.
+Derive uses grouped ten-level full snapshots on a shared JSON-RPC socket, with a 40-instrument
+cap and idle unsubscribe after 30 seconds. Other source snapshots are cached for one second.
+
+Depth requests allow 30/minute/IP. Identical requests coalesce; the runtime allows at most eight
+provider fetches in flight and 200 cached books. Capacity errors return 429; unavailable or invalid
+provider books return 503. Snapshot success and execution eligibility are distinct: an empty
+Paradex API book is valid market data and does not become interactive liquidity automatically.
+
+
+The raw news observation also preserves `upstreamHeadlineTimestamp`, the additional timestamp
+supplied by the existing feed. It remains a source string because its semantics are upstream-owned;
+it does not replace publication or local arrival time. New delivery events include `changedFields`
+so consumers can distinguish text/classification changes from metadata-only revisions.
+
+
+### Prospective external-host recording
+
+```bash
+node scripts/record-bot-data.mjs https://api.oggregator.xyz BTC 2026-11-27 deribit,okx .cache/btc-events.ndjson
+```
+
+The collector records the exact public news and chain frames received by the external host, with
+local receive time, connection session IDs and gap markers. It reconnects with backoff; news resumes
+from its last durable cursor and chain connections start from a new snapshot. Each frame is fsynced
+before advancing the atomic news checkpoint. An expired news cursor, invalid frame, write failure,
+or more than 8 MiB of pending writes stops capture instead of silently dropping data. The default
+file limit is 1 GiB (`BOT_CAPTURE_MAX_BYTES`); rotate to another output file when it is reached.
+Stop with SIGINT/SIGTERM to drain writes. This is prospective capture, not a reconstructed historical
+quote/depth archive. Keep gap markers and evaluate only observations available to the bot at its
+recorded receive time. The existing historical candles/trades remain separate APIs.
+
+
+### Macro figures already present in the news feed
+
+`GET /api/news/macro?limit=200&after=CURSOR` exposes economic headlines and literal labeled
+actual/forecast/consensus/previous/revised figures already present in their text. Numeric values
+retain their explicit units and exact evidence spans. Missing values stay null. Each item carries
+publication and local receive time, source URL, observation cursor and revision. Pagination advances
+through raw observations, including pages with no macro items; follow `hasMore` and `nextCursor`.
+
+This uses the existing news feed without another provider or paid calls. It is explicitly
+`reported-headline-figures`, not a scheduled economic calendar or official verification. It does
+not invent consensus, release schedules or revisions, and it does not turn GOOD/BAD into market
+sentiment. Finnhub entitlement and a structured upstream calendar endpoint remain unverified;
+`macroCalendar=false` stays truthful until that source is connected.

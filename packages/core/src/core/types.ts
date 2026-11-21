@@ -1,5 +1,8 @@
 import type { DataSource, OptionRight, VenueId } from '../types/common.js';
-import type { VenueConnectionState as ProtocolVenueConnectionState } from '@oggregator/protocol';
+import type {
+  VenueConnectionState as ProtocolVenueConnectionState,
+  VenueHealthContext,
+} from '@oggregator/protocol';
 
 // ── Greeks ────────────────────────────────────────────────────────
 
@@ -130,6 +133,7 @@ export interface VenueStatus {
   state: VenueConnectionState;
   ts: number;
   message?: string;
+  health?: VenueHealthContext;
 }
 
 // ── WS protocol types — re-exported from @oggregator/protocol ─────

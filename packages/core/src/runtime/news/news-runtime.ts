@@ -11,6 +11,7 @@ const RawTweetSchema = z.object({
   timestamp: z.number().int().nonnegative(),
   classification: z.enum(['GOOD', 'BAD']).optional(),
   createdAt: z.string().datetime().optional(),
+  headlineTimestamp: z.string().optional(),
 });
 const RawNewsResponseSchema = z.object({
   count: z.number().int().nonnegative(),
@@ -193,6 +194,7 @@ export class NewsRuntime {
           timestamp: t.timestamp,
           classification: t.classification ?? 'unclassified',
           upstreamCreatedAt: t.createdAt ?? null,
+          upstreamHeadlineTimestamp: t.headlineTimestamp ?? null,
         })),
         { backfill: this.lastSuccessAt === null },
       );

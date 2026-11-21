@@ -109,3 +109,55 @@ describe('VenueHealthManager', () => {
     vi.useRealTimers();
   });
 });
+
+describe('subscription-scoped health', () => {
+  const lock = {
+    venue: 'deribit' as const,
+    state: 'degraded' as const,
+    ts: Date.now(),
+    message: 'public status locked: sol_eth',
+    health: {
+      code: 'index-lock' as const,
+      scope: 'indices' as const,
+      affectedIndices: ['sol_eth'],
+      exchangeState: 'degraded' as const,
+    },
+  };
+
+  it('keeps BTC connected while retaining the SOL index warning', () => {
+    const manager = new VenueHealthManager('BTC');
+    manager.ingest({ venue: 'deribit', state: 'connected', ts: Date.now() });
+    manager.touch('deribit', Date.now());
+    manager.ingest(lock);
+    expect(manager.get('deribit')?.state).toBe('connected');
+    expect(manager.details()[0]).toMatchObject({
+      state: 'connected',
+      transport: { state: 'connected' },
+      exchange: {
+        state: 'degraded',
+        health: { appliesToSubscription: false, affectedIndices: ['sol_eth'] },
+      },
+    });
+  });
+
+  it('keeps affected SOL, unknown scope and unscoped subscriptions degraded', () => {
+    for (const underlying of ['SOL', null]) {
+      const manager = new VenueHealthManager(underlying);
+      manager.ingest(lock);
+      expect(manager.get('deribit')?.state).toBe('degraded');
+    }
+    const manager = new VenueHealthManager('BTC');
+    manager.ingest({ ...lock, health: { ...lock.health, affectedIndices: [] } });
+    expect(manager.get('deribit')?.state).toBe('degraded');
+  });
+
+  it('never lets an unrelated index warning hide a disconnect or stale feed', () => {
+    const manager = new VenueHealthManager('BTC');
+    manager.ingest(lock);
+    manager.ingest({ venue: 'deribit', state: 'reconnecting', ts: Date.now() });
+    expect(manager.get('deribit')?.state).toBe('reconnecting');
+    manager.ingest({ venue: 'deribit', state: 'connected', ts: Date.now() - 180001 });
+    manager.touch('deribit', Date.now() - 180001);
+    expect(manager.get('deribit')?.state).toBe('degraded');
+  });
+});

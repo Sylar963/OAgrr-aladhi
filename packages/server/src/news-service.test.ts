@@ -224,7 +224,7 @@ describe('bot news ingestion', () => {
       fetchImpl: mockFetch({
         count: 3,
         tweets: [
-          makeTweet(),
+          makeTweet({ headlineTimestamp: '2026-11-21T03:00:00Z' }),
           makeTweet({ id: 'bad', classification: 'BAD' }),
           makeTweet({ id: 'unknown', classification: undefined }),
         ],
@@ -235,6 +235,9 @@ describe('bot news ingestion', () => {
     expect(
       record.mock.calls[0]?.[0].map((item: { classification: string }) => item.classification),
     ).toEqual(['GOOD', 'BAD', 'unclassified']);
+    expect(record.mock.calls[0]?.[0][0]).toMatchObject({
+      upstreamHeadlineTimestamp: '2026-11-21T03:00:00Z',
+    });
     expect(runtime.getItems()).toHaveLength(1);
   });
 

@@ -13,7 +13,7 @@ import {
   applyDeribitPlatformState,
   createDeribitHealthState,
   deriveDeribitPlatformHealth,
-  deriveDeribitPublicStatusHealth,
+  applyDeribitPublicStatus,
 } from './health.js';
 import {
   buildDeribitSubscriptionPlan,
@@ -898,7 +898,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
   private emitPlatformHealth(): void {
     const health = deriveDeribitPlatformHealth(this.health);
-    this.emitStatus(health.status, health.message);
+    this.emitStatus(health.status, health.message, health.health);
   }
 
   private checkSubscribedTickerStaleness(): void {
@@ -1024,11 +1024,13 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
           DERIBIT_PUBLIC_STATUS_TIMEOUT_MS,
         );
         const parsed = parseDeribitPublicStatus(raw);
-        const health = deriveDeribitPublicStatusHealth(this.health, parsed);
-        this.emitStatus(health.status, health.message);
+        applyDeribitPublicStatus(this.health, parsed);
+        const health = deriveDeribitPlatformHealth(this.health);
+        this.emitStatus(health.status, health.message, health.health);
       } catch (error: unknown) {
-        const health = deriveDeribitPublicStatusHealth(this.health, null, error);
-        this.emitStatus(health.status, health.message);
+        applyDeribitPublicStatus(this.health, null, error);
+        const health = deriveDeribitPlatformHealth(this.health);
+        this.emitStatus(health.status, health.message, health.health);
 
         if (isDeribitPublicStatusTimeout(error) && this.rpc.isConnected) {
           const lastSubscriptionAt = this.rpc.lastSubscriptionAtMs;

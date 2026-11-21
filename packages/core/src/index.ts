@@ -646,3 +646,7 @@ export {
 export { NewsRuntime, type NewsItem, type NewsArchiveSink, type NewsRuntimeOptions } from './runtime/news/news-runtime.js';
 export { NewsDeliveryJournal, NewsCursorError, type NewsDeliveryStore } from './runtime/news/delivery-journal.js';
 export { assessBotMarket } from './core/bot-market.js';
+
+export { PublicDepthRuntime, normalizePublicDepth, type DepthContractContext } from './runtime/public-depth/runtime.js';
+export { PublicDepthError } from './feeds/shared/public-depth.js';
+export { reportedMacroHeadline } from './runtime/news/macro-figures.js';

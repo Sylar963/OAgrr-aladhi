@@ -700,3 +700,6 @@ export * from './expected-move.js';
 export * from './tradfi-analytics.js';
 
 export * from './premium-spikes.js';
+export * from './bot-news.js';
+export * from './bot-market.js';
+export { botDataJsonSchemas } from './bot-contracts.js';

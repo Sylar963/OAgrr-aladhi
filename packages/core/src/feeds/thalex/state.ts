@@ -1,12 +1,8 @@
 import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
 import type { OptionRight } from '../../types/common.js';
 import { THALEX_OPTION_FEE_RATE } from '../../core/fees.js';
-import {
-  THALEX_OPTION_SYMBOL_RE,
-  type ThalexInstrument,
-  type ThalexTicker,
-} from './types.js';
-import { solveIv, thetaPerDay, yearsToExpiry } from './bs-solver.js';
+import { THALEX_OPTION_SYMBOL_RE, type ThalexInstrument, type ThalexTicker } from './types.js';
+import { gamma76, vega76, solveIv, thetaPerDay, yearsToExpiry } from './bs-solver.js';
 
 function mergeNumber(next: number | undefined | null, previous: number | null): number | null {
   return next ?? previous;
@@ -46,6 +42,8 @@ export function mergeThalexTicker(
   let bidIv = base.greeks.bidIv;
   let askIv = base.greeks.askIv;
   let theta = base.greeks.theta;
+  let gamma = base.greeks.gamma;
+  let vega = base.greeks.vega;
 
   if (instrument != null) {
     const forward = ticker.forward ?? ticker.index ?? base.underlyingPrice;
@@ -57,9 +55,18 @@ export function mergeThalexTicker(
       right: instrument.right,
       seed: markIv,
     };
-    bidIv = solveIv({ ...common, price: bidPrice }) ?? bidIv;
-    askIv = solveIv({ ...common, price: askPrice }) ?? askIv;
-    theta = thetaPerDay(forward, instrument.strike, markIv, tYears) ?? theta;
+    bidIv = solveIv({ ...common, price: bidPrice });
+    askIv = solveIv({ ...common, price: askPrice });
+    theta = thetaPerDay(forward, instrument.strike, markIv, tYears);
+    const inputs = [forward, instrument.strike, markIv, tYears];
+    if (inputs.every((value) => value != null && Number.isFinite(value) && value > 0)) {
+      gamma = gamma76(forward!, instrument.strike, markIv!, tYears!);
+      // Public-chain vega is USD per one volatility percentage point.
+      vega = vega76(forward!, instrument.strike, markIv!, tYears!) / 100;
+    } else {
+      gamma = null;
+      vega = null;
+    }
   }
 
   return {
@@ -88,9 +95,9 @@ export function mergeThalexTicker(
     volume24hUsd: base.volume24hUsd,
     greeks: {
       delta: mergeNumber(ticker.delta, base.greeks.delta),
-      gamma: base.greeks.gamma,
+      gamma,
       theta,
-      vega: base.greeks.vega,
+      vega,
       rho: base.greeks.rho,
       markIv,
       bidIv,

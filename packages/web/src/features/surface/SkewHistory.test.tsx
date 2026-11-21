@@ -89,7 +89,7 @@ describe('SkewHistory', () => {
     expect(screen.getByText('25Δ RR')).toBeTruthy();
     expect(screen.getByText('25Δ Fly')).toBeTruthy();
     expect(screen.getByText('56th pct')).toBeTruthy();
-    expect(screen.getByText('60th pct')).toBeTruthy();
+    expect(screen.getAllByText('60th pct')).toHaveLength(2);
     expect(screen.getByText('-3.1 · 12th')).toBeTruthy();
     expect(screen.getByText('puts bid ↓')).toBeTruthy();
     expect(screen.getByText('10Δp')).toBeTruthy();
@@ -105,6 +105,18 @@ describe('SkewHistory', () => {
     expect(screen.getByText(/dashed = 1d ago/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '30d ago' }));
     expect(screen.getByText(/no history for 30d ago/)).toBeTruthy();
+  });
+
+  it('keeps the visual readout scoped to the selected tenor and lookback', () => {
+    render(<SkewHistory underlying="BTC" />);
+    expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('60');
+    fireEvent.click(screen.getByRole('button', { name: '7d' }));
+    expect(screen.getByText('7d options · 30-day lookback')).toBeTruthy();
+    expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('40');
+    fireEvent.click(screen.getByRole('button', { name: '3M' }));
+    expect(screen.getByText('7d options · 90-day lookback')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '60d' }));
+    expect(screen.queryByRole('meter')).toBeNull();
   });
 
   it('switches to the v2 regime model with flow sources', () => {

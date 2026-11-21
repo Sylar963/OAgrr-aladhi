@@ -56,7 +56,7 @@ export async function newsRoute(app: FastifyInstance) {
     }
 
     const limit = req.query.limit !== undefined ? Number(req.query.limit) : 50;
-    if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
       return reply.status(400).send({ error: 'limit must be an integer in [1, 200]' });
     }
 

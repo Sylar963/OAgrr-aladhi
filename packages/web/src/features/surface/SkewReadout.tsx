@@ -5,21 +5,21 @@ import { formatPercentile } from './skew-history-utils';
 
 const messages = defineMessages(
   {
-    scope: '{tenor} options · {days}-day history',
+    scope: '{tenor} options · {days}-day lookback',
     comparison: '25Δ IV vs ATM',
     atm: 'ATM IV {iv}%',
     put: 'Put wing',
     call: 'Call wing',
     average: 'Average',
-    lower: 'Lower IV',
-    higher: 'Higher IV',
+    lower: 'Lower',
+    higher: 'Higher',
     baseline: 'ATM = 0',
     derivation: 'Wing gaps implied by ATM, RR & Fly · vol points',
     low: 'Low wing premium vs history',
     typical: 'Typical wing premium vs history',
     high: 'High wing premium vs history',
     unknown: 'Wing history unavailable',
-    gauge: 'Wing premium percentile: {tenor} options, {days}-day history',
+    gauge: 'Wing premium percentile: {tenor} options, {days}-day lookback',
     lowLabel: 'Low',
     typicalLabel: 'Typical',
     highLabel: 'High',
@@ -28,21 +28,21 @@ const messages = defineMessages(
     averageEqual: 'Average wings at ATM IV',
   },
   {
-    scope: 'Opciones {tenor} · historial de {days} días',
+    scope: 'Opciones {tenor} · periodo de {days} días',
     comparison: 'IV 25Δ frente a ATM',
     atm: 'IV ATM {iv}%',
     put: 'Ala put',
     call: 'Ala call',
     average: 'Promedio',
-    lower: 'Menor IV',
-    higher: 'Mayor IV',
+    lower: 'Menor',
+    higher: 'Mayor',
     baseline: 'ATM = 0',
     derivation: 'Diferencias implícitas en ATM, RR y Fly · puntos de vol',
     low: 'Prima de alas baja frente al historial',
     typical: 'Prima de alas típica frente al historial',
     high: 'Prima de alas alta frente al historial',
     unknown: 'Sin historial de alas',
-    gauge: 'Percentil de prima de alas: opciones {tenor}, historial de {days} días',
+    gauge: 'Percentil de prima de alas: opciones {tenor}, periodo de {days} días',
     lowLabel: 'Baja',
     typicalLabel: 'Típica',
     highLabel: 'Alta',
@@ -97,7 +97,7 @@ export default function SkewReadout({ point, percentile, tenor, historyDays }: P
     <section className={styles.wrap} aria-label={t('scope', { tenor, days: historyDays })}>
       <div className={styles.scope}>{t('scope', { tenor, days: historyDays })}</div>
       <div className={styles.panels}>
-        <div className={styles.comparison}>
+        <div>
           <div className={styles.heading}>
             <strong>{t('comparison')}</strong>
             <span>{t('atm', { iv: (atmIv * 100).toFixed(1) })}</span>

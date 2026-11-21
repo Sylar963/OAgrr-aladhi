@@ -99,6 +99,7 @@ import { GEX_WALL_RETENTION_MS, GexWallHistoryService } from './gex-wall-history
 import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';
 import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
 import { createVolRichnessSource } from './vol-richness-source.js';
+import { createNewsDeliveryJournal } from './news-delivery-store.js';
 import { NewsArchive } from './news-archive.js';
 import { NewsPinStore } from './news-pins.js';
 import { NewsRelevanceEngine } from './news-relevance.js';
@@ -436,6 +437,7 @@ export const breakEvenService = new BreakEvenService({
 });
 
 export const newsArchive = createNewsArchive(databaseUrl);
+export const newsDelivery = createNewsDeliveryJournal();
 export const newsPins = new NewsPinStore(
   process.env['NEWS_PINS_PATH'] ?? '.cache/news-pins.ndjson',
   console,
@@ -595,7 +597,7 @@ export function isRegimeReady(): boolean {
   return serviceHealth.regime;
 }
 export function isNewsReady(): boolean {
-  return serviceHealth.news && (newsService?.isClassifying() ?? false);
+  return serviceHealth.news && (newsService?.isReady() ?? false) && (newsService?.isClassifying() ?? false);
 }
 
 // Two years of daily closes so the 60D/90D vol cone has several independent windows.
@@ -760,7 +762,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);
 
-  newsService = createNewsRuntimeFromEnv(process.env, log, newsArchive);
+  newsService = createNewsRuntimeFromEnv(process.env, log, newsArchive, newsDelivery);
   if (newsService) {
     try {
       await newsService.start();

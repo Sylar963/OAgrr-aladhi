@@ -642,3 +642,7 @@ export {
   selectPremiumSpikeExpiries,
   PREMIUM_SPIKE_MAX_AGE_MS,
 } from './runtime/premium-spikes/model.js';
+
+export { NewsRuntime, type NewsItem, type NewsArchiveSink, type NewsRuntimeOptions } from './runtime/news/news-runtime.js';
+export { NewsDeliveryJournal, NewsCursorError, type NewsDeliveryStore } from './runtime/news/delivery-journal.js';
+export { assessBotMarket } from './core/bot-market.js';

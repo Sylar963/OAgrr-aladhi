@@ -16,6 +16,9 @@ vi.mock('../../derive-position-store.js', () => ({
 vi.mock('../../thalex-position-store.js', () => ({
   thalexPositionStore: { disconnect: vi.fn(async () => {}) },
 }));
+vi.mock('../../paradex-position-store.js', () => ({
+  paradexPositionStore: { disconnect: vi.fn(async () => {}) },
+}));
 
 beforeEach(() => {
   vi.resetModules();

@@ -28,6 +28,8 @@ import { healthRoute } from './health.js';
 import { instrumentCandlesRoute } from './instrument-candles.js';
 import { ivHistoryRoute } from './iv-history.js';
 import { leadsRoute } from './leads.js';
+import { botRoute } from './bot.js';
+import { newsEventsRoute, wsNewsEventsRoute } from './news-events.js';
 import { newsRoute } from './news.js';
 import { paperAuthRoute } from './paper/auth.js';
 import { paperRoutes, paperWsRoute } from './paper/index.js';
@@ -117,6 +119,9 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(ivHistoryRoute, { prefix: '/api' });
   app.register(regimeRoute, { prefix: '/api' });
   app.register(newsRoute, { prefix: '/api' });
+  app.register(newsEventsRoute, { prefix: '/api' });
+  app.register(botRoute, { prefix: '/api' });
+  app.register(wsNewsEventsRoute);
   app.register(spotsRoute, { prefix: '/api' });
   app.register(leadsRoute, { prefix: '/api' });
   app.register(paperRoutes, { prefix: '/api' });

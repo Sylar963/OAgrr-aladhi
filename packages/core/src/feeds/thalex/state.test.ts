@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_GREEKS } from '../../core/types.js';
 import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
+import { price76 } from './bs-solver.js';
 import { buildThalexInstrument, mergeThalexTicker } from './state.js';
 import type { ThalexInstrument, ThalexTicker } from './types.js';
 
@@ -109,7 +110,11 @@ describe('buildThalexInstrument', () => {
 describe('mergeThalexTicker', () => {
   it('clears explicitly withdrawn quotes while preserving omitted fields', () => {
     const previous = { ...emptyQuote(), bidPrice: 100, askPrice: 120, bidSize: 1, askSize: 2 };
-    const q = mergeThalexTicker({ mark_timestamp: 1, best_bid_price: null, best_bid_amount: null }, previous, emptyQuote());
+    const q = mergeThalexTicker(
+      { mark_timestamp: 1, best_bid_price: null, best_bid_amount: null },
+      previous,
+      emptyQuote(),
+    );
     expect(q.bidPrice).toBeNull();
     expect(q.bidSize).toBeNull();
     expect(q.askPrice).toBe(120);
@@ -156,11 +161,7 @@ describe('mergeThalexTicker', () => {
   it('preserves gamma/theta/vega from previous (Thalex never sets them)', () => {
     const prev = emptyQuote();
     prev.greeks = { ...prev.greeks, gamma: 0.01, theta: -12.5, vega: 42 };
-    const q = mergeThalexTicker(
-      { mark_timestamp: 1, iv: 0.5, delta: 0.5 },
-      prev,
-      emptyQuote(),
-    );
+    const q = mergeThalexTicker({ mark_timestamp: 1, iv: 0.5, delta: 0.5 }, prev, emptyQuote());
     expect(q.greeks.gamma).toBe(0.01);
     expect(q.greeks.theta).toBe(-12.5);
     expect(q.greeks.vega).toBe(42);
@@ -210,6 +211,23 @@ describe('mergeThalexTicker', () => {
     // Theta must be negative (USD/day decay).
     expect(q.greeks.theta).not.toBeNull();
     expect(q.greeks.theta!).toBeLessThan(0);
+    const tYears = 7 / 365;
+    const price = (forward: number, iv: number) =>
+      price76(forward, instrument.strike, iv, tYears, 'call');
+    const gamma = price(76_277, 0.55) - 2 * price(76_276, 0.55) + price(76_275, 0.55);
+    const vega = (price(76_276, 0.55001) - price(76_276, 0.54999)) / 0.00002 / 100;
+    expect(Math.abs(q.greeks.gamma! / gamma - 1)).toBeLessThan(0.002);
+    expect(q.greeks.vega).toBeCloseTo(vega, 3);
+    const expired = mergeThalexTicker(
+      t,
+      q,
+      emptyQuote(),
+      instrument,
+      instrument.expirationTimestamp! + 1,
+    );
+    expect(expired.greeks.gamma).toBeNull();
+    expect(expired.greeks.vega).toBeNull();
+    expect(expired.greeks.theta).toBeNull();
   });
 
   it('preserves bidIv/askIv/theta when instrument is omitted (back-compat)', () => {
@@ -229,11 +247,7 @@ describe('mergeThalexTicker', () => {
     const prev = emptyQuote();
     prev.bidPrice = 10;
     prev.askPrice = 12;
-    const q = mergeThalexTicker(
-      { mark_timestamp: 2, mark_price: 11 },
-      prev,
-      emptyQuote(),
-    );
+    const q = mergeThalexTicker({ mark_timestamp: 2, mark_price: 11 }, prev, emptyQuote());
     expect(q.bidPrice).toBe(10);
     expect(q.askPrice).toBe(12);
     expect(q.markPrice).toBe(11);

@@ -17,11 +17,12 @@ function makeTweet(overrides: Record<string, unknown> = {}) {
 }
 
 function mockFetch(payload: unknown, status = 200): typeof fetch {
-  return vi.fn(async () =>
-    new Response(JSON.stringify(payload), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    }),
+  return vi.fn(
+    async () =>
+      new Response(JSON.stringify(payload), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
   ) as unknown as typeof fetch;
 }
 
@@ -69,14 +70,17 @@ describe('NewsRuntime', () => {
     expect(called).not.toContain('since=');
   });
 
-  it('passes since on subsequent calls', async () => {
+  it('requests the overlapping upstream window without a publication watermark', async () => {
     let call = 0;
     const fetchImpl = vi.fn(async () => {
       call++;
       if (call === 1) {
-        return new Response(JSON.stringify({ count: 1, tweets: [makeTweet({ timestamp: 1_700_000_500_000 })] }), {
-          status: 200,
-        });
+        return new Response(
+          JSON.stringify({ count: 1, tweets: [makeTweet({ timestamp: 1_700_000_500_000 })] }),
+          {
+            status: 200,
+          },
+        );
       }
       return new Response(JSON.stringify({ count: 0, tweets: [] }), { status: 200 });
     }) as unknown as typeof fetch;
@@ -91,8 +95,10 @@ describe('NewsRuntime', () => {
     await (runtime as unknown as { poll: () => Promise<void> }).poll();
     runtime.dispose();
 
-    const secondCallUrl = (fetchImpl as unknown as { mock: { calls: [string][] } }).mock.calls[1]![0];
-    expect(secondCallUrl).toContain('since=2023-11-14T22%3A21%3A40.000Z');
+    const secondCallUrl = (fetchImpl as unknown as { mock: { calls: [string][] } }).mock
+      .calls[1]![0];
+    expect(secondCallUrl).not.toContain('since=');
+    expect(secondCallUrl).toContain('limit=200');
   });
 
   it('keeps cache on upstream failure and increments errors', async () => {
@@ -100,7 +106,9 @@ describe('NewsRuntime', () => {
     const fetchImpl = vi.fn(async () => {
       call++;
       if (call === 1) {
-        return new Response(JSON.stringify({ count: 1, tweets: [makeTweet({ id: 'g1' })] }), { status: 200 });
+        return new Response(JSON.stringify({ count: 1, tweets: [makeTweet({ id: 'g1' })] }), {
+          status: 200,
+        });
       }
       return new Response('err', { status: 500 });
     }) as unknown as typeof fetch;
@@ -203,5 +211,67 @@ describe('NewsRuntime', () => {
     runtime.dispose();
 
     expect(runtime.isClassifying()).toBe(true);
+  });
+});
+
+describe('bot news ingestion', () => {
+  it('records all classifications before the dashboard GOOD filter', async () => {
+    const record = vi.fn();
+    const runtime = new NewsRuntime({
+      baseUrl: 'https://news.example.com',
+      secret: 'SECRET',
+      delivery: { record },
+      fetchImpl: mockFetch({
+        count: 3,
+        tweets: [
+          makeTweet(),
+          makeTweet({ id: 'bad', classification: 'BAD' }),
+          makeTweet({ id: 'unknown', classification: undefined }),
+        ],
+      }),
+    });
+    await runtime.start();
+    runtime.dispose();
+    expect(
+      record.mock.calls[0]?.[0].map((item: { classification: string }) => item.classification),
+    ).toEqual(['GOOD', 'BAD', 'unclassified']);
+    expect(runtime.getItems()).toHaveLength(1);
+  });
+
+  it('reports stale polls rather than remaining ready forever', async () => {
+    vi.useFakeTimers();
+    const runtime = new NewsRuntime({
+      baseUrl: 'https://news.example.com',
+      secret: 'SECRET',
+      fetchImpl: mockFetch({ count: 0, tweets: [] }),
+    });
+    await runtime.start();
+    runtime.dispose();
+    vi.setSystemTime(Date.now() + 61_000);
+    expect(runtime.getHealth()).toMatchObject({ ready: false, consecutiveErrors: 0 });
+    vi.useRealTimers();
+  });
+
+  it('aborts stalled upstream requests and reports failure without leaking the secret', async () => {
+    vi.useFakeTimers();
+    const log = { warn: vi.fn(), info: vi.fn() };
+    const fetchImpl: typeof fetch = async (_input, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('SECRET upstream URL')));
+      });
+    const runtime = new NewsRuntime({
+      baseUrl: 'https://news.example.com',
+      secret: 'SECRET',
+      fetchImpl,
+      requestTimeoutMs: 100,
+      log,
+    });
+    const start = runtime.start();
+    await vi.advanceTimersByTimeAsync(100);
+    await start;
+    runtime.dispose();
+    expect(runtime.getHealth()).toMatchObject({ ready: false, consecutiveErrors: 1 });
+    expect(JSON.stringify(log.warn.mock.calls)).not.toContain('SECRET');
+    vi.useRealTimers();
   });
 });

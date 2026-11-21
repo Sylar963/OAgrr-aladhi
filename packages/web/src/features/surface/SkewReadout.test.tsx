@@ -23,7 +23,7 @@ describe('SkewReadout', () => {
     expect(screen.getByText('Average wings 0.3vp above ATM')).toBeTruthy();
     expect(screen.getByText('Low wing premium vs history')).toBeTruthy();
     const meter = screen.getByRole('meter', {
-      name: 'Wing premium percentile: 30d options, 30-day history',
+      name: 'Wing premium percentile: 30d options, 30-day lookback',
     });
     expect(meter.getAttribute('aria-valuenow')).toBe('0.2');
   });
@@ -34,7 +34,7 @@ describe('SkewReadout', () => {
     );
     expect(screen.getByText('Low wing premium vs history')).toBeTruthy();
     rerender(<SkewReadout point={point} percentile={72} tenor="7d" historyDays={90} />);
-    expect(screen.getByText('7d options · 90-day history')).toBeTruthy();
+    expect(screen.getByText('7d options · 90-day lookback')).toBeTruthy();
     expect(screen.getByText('Typical wing premium vs history')).toBeTruthy();
     expect(screen.queryByText('Low wing premium vs history')).toBeNull();
     rerender(

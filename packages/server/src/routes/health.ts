@@ -34,6 +34,7 @@ export async function healthRoute(app: FastifyInstance) {
         ivHistory: isIvHistoryReady(),
         news: isNewsReady(),
         newsUnclassifiedSince: newsService?.getUnclassifiedSince() ?? null,
+        newsFeed: newsService?.getHealth() ?? null,
         ivHistoryStorage,
       },
       runtime: getRuntimeMetricsSnapshot(),

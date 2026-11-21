@@ -85,3 +85,90 @@ expiry. The endpoint scans only and never submits an order.
 
 Apply `pnpm db:migrate` before starting the updated backend to create `vol_heatmap_columns`
 (migration `0040`). Preserve the cache file and its `.last-flush` marker on a persistent volume.
+
+
+## External options-news bots
+
+The production API origin is **https://api.oggregator.xyz**. The landing and app hosts are
+separate frontends. Public market/news reads require no bearer token; account endpoints retain
+Clerk authentication. Use HTTPS/WSS from external hosts and validate JSON responses before use.
+
+| Endpoint | Contract and behavior |
+| --- | --- |
+| `GET /api/bot/status` | Feed health, news cursor/retention, endpoint discovery, access limits and explicit capability gaps |
+| `GET /api/bot/schema` | JSON Schemas for bot market responses, news event pages and news WebSocket frames |
+| `GET /api/bot/market?underlying=BTC&expiry=YYYY-MM-DD&venues=deribit,okx` | Shared-runtime chain plus per-quote quality, venue counts, failed venues and canonical execution units; no REST response cache |
+| `GET /api/news/events?after=CURSOR&limit=100` | Durable observations in arrival order, including GOOD, BAD, unclassified and observed content/classification revisions |
+| `WS /ws/news?after=CURSOR` | Replays after a saved cursor, then sends event pages and 15s feed-health heartbeats |
+
+`/api/bot/market` accepts `maxQuoteAgeMs` (100–60000, default 5000), `maxSpreadPct`
+(default 50) and `requireGreeks=true|false` (default true). `dataReady` requires at least
+one eligible quote on **each requested venue**. It is a market-data check, not order approval.
+Inspect the quality entry for the exact instrument you intend to use. Eligibility requires an
+unexpired expiry, known current venue state, a recent non-future quote timestamp, sized two-sided
+non-crossed quotes, contract metadata, spread within the requested threshold and required Greeks.
+Use `execution.bidSize` / `askSize` in base units and `execution.bidUsd` / `askUsd` in USD per
+base unit. Legacy top-level sizes can be native contract counts. Public fees are estimates;
+account fee tiers, margin and live order/fill state must come from the execution venue.
+Thalex gamma/vega/theta are Black-76 r=0 derivatives; vega is USD per one volatility point.
+The market response identifies that model basis. Nulls remain unavailable values.
+
+### Resume without publication-time gaps
+
+1. Fetch `/api/news/events?limit=200`. Without `after`, replay starts at the oldest retained
+   observation. Process events in returned order and continue with `nextCursor` while `hasMore`.
+2. Save each event and its cursor durably before acknowledging it in your consumer. A cursor is
+   journal-specific and includes an epoch; do not construct it from a headline timestamp.
+3. Connect `wss://api.oggregator.xyz/ws/news?after=YOUR_SAVED_CURSOR`. WebSocket reconnects resume
+   from that cursor. Without `after`, the socket starts at the current tail for live-only delivery.
+4. Expect at-least-once consumption around disconnects. Deduplicate by event cursor, not only
+   headline ID: the same headline ID can have a later observed revision.
+5. HTTP 409 / WebSocket `news_resync_required` means the cursor expired or belongs to another
+   journal. Stop decisions, record the gap, and explicitly replay from the returned `oldestCursor`.
+   Never silently replace an expired cursor with the current tail.
+
+An observation retains publication `timestamp`, optional upstream `upstreamCreatedAt`, local
+`receivedAt`, `firstReceivedAt` within retained journal history, and `revision`. `backfill=true` identifies observations discovered in the startup window;
+check publication age before using them as fresh events. Historical
+publication timestamps are not used as delivery watermarks. The upstream latest 200 observations
+are overlapped on every poll; the existing `/api/news` dashboard endpoint keeps its GOOD filter.
+GOOD/BAD are upstream filter labels, not directional sentiment or source verification. The journal
+records observed edits/classification changes; the upstream does not provide a verified retraction
+or correction lifecycle. Missing affected-asset, sentiment/confidence, macro-calendar actual/
+consensus/revision and verification data are explicitly advertised as unavailable by status.
+
+`NEWS_POLL_INTERVAL_MS` controls provider polling (1000–60000ms; default 15000). Lower values
+increase provider requests and can affect provider quota/cost. WebSocket delivery adds up to one
+second after the backend receives a batch; it cannot remove upstream collection/classifier delay.
+`health.ready` expires after missed successful polls. Monitor `lastSuccessAgeMs`, consecutive
+errors and saturated windows. The upstream latest-N feed cannot guarantee recovery of observations
+that disappear during downtime or bursts; `completeHistoryGuaranteed` remains false.
+
+The local journal is fsynced before delivery at `NEWS_DELIVERY_PATH` (default
+`.cache/news-delivery.ndjson`), capped by `NEWS_DELIVERY_MAX_EVENTS` (default 50000). Keep it on
+persistent storage and include it in backups. Replay is independent of optional Postgres and
+survives backend restarts; an interrupted final append is repaired, while corrupt completed records
+fail closed. A failed append blocks further journal writes until storage is repaired and the
+backend restarts, preventing a partial write from corrupting the next batch. Keep a single backend writer per journal file. A replica needs shared delivery storage
+and rate limits before it can promise the same cursor namespace. Existing news archives remain
+publication-ordered; their old records have no reconstructed local first-received timestamp.
+
+The existing rate budget is 600 HTTP requests/minute/IP, with `/bot/market` capped at 120/minute
+and `/liquidity` at 60/minute. WebSockets allow 20 connections/IP. A chain socket has one active
+subscription; request only venues/expiries needed and handle replacement snapshots, patches and
+venue-status changes. Snapshot sequence jumps can accompany a replacement snapshot; do not apply
+a patch to an unknown base. Bound client buffers, reconnect with backoff, and validate source ages.
+
+### Validation
+
+```bash
+node scripts/check-bot-api.mjs https://api.oggregator.xyz
+```
+
+This read-only check discovers BTC expiries, checks each registered venue's bot market response,
+validates news replay/schema endpoints, and verifies public WebSocket delivery. It submits no orders.
+Instrument-specific depth remains the existing Thalex `/api/liquidity` surface; the venue's code 53
+means its anonymous WebSocket connection cap is exhausted and needs an available authenticated
+market-data session. Do not treat an unavailable depth service, a mark, a synthetic candle, or a
+model estimate as observed executable liquidity. Continuous historical quote/depth replay and
+account-specific execution data are not supplied by these public bot endpoints.
